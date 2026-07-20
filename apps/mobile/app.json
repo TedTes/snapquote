@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "SnapQuote",
+    "slug": "snapquote",
+    "scheme": "snapquote",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-audio"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "bundleIdentifier": "com.snapquote.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.snapquote.mobile"
+    }
+  }
+}
