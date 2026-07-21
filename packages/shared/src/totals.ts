@@ -15,11 +15,11 @@ export type QuoteTotals = {
 
 export function computeQuoteTotals(input: QuoteTotalsInput): QuoteTotals {
   const subtotalCents = input.lineItems.reduce((sum, item) => {
-    if (item.needsPrice || item.unitPriceCents === null) {
-      throw new Error("Cannot compute quote totals while line items still need prices");
+    if (item.matchState !== "green" || item.unitPriceCents === null) {
+      throw new Error("Cannot compute quote totals while line items are unpriced or unconfirmed");
     }
 
-    return sum + Math.round(item.qty * item.unitPriceCents);
+    return sum + Math.round(item.quantity * item.unitPriceCents);
   }, 0);
 
   const discountCents = computeDiscountCents(subtotalCents, input.discount);

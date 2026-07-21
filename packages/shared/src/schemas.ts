@@ -3,10 +3,14 @@ import {
   customerResponseActions,
   deliveryChannels,
   jobStatuses,
+  lineItemMatchStates,
   lineItemKinds,
   lineItemSources,
+  prepLevels,
   quoteEventTypes,
-  quoteStatuses
+  quoteStatuses,
+  quoteUnits,
+  roomSizes
 } from "./constants.js";
 
 export const idSchema = z.string().uuid();
@@ -22,17 +26,19 @@ export const phoneSchema = z
   .max(32)
   .regex(/^[+()\-\s0-9.]+$/, "Phone contains unsupported characters");
 
-export const nullableUnitSchema = z
-  .enum(["each", "hour", "sqft", "lnft", "day"])
-  .nullable();
+export const quoteUnitSchema = z.enum(quoteUnits);
+export const nullableUnitSchema = quoteUnitSchema.nullable();
 
 export const lineItemKindSchema = z.enum(lineItemKinds);
 export const lineItemSourceSchema = z.enum(lineItemSources);
+export const lineItemMatchStateSchema = z.enum(lineItemMatchStates);
 export const quoteStatusSchema = z.enum(quoteStatuses);
 export const jobStatusSchema = z.enum(jobStatuses);
 export const deliveryChannelSchema = z.enum(deliveryChannels);
 export const customerResponseActionSchema = z.enum(customerResponseActions);
 export const quoteEventTypeSchema = z.enum(quoteEventTypes);
+export const roomSizeSchema = z.enum(roomSizes);
+export const prepLevelSchema = z.enum(prepLevels);
 
 export const healthResponseSchema = z.object({
   ok: z.literal(true),
@@ -44,7 +50,7 @@ export const healthResponseSchema = z.object({
 export const orgProfileSchema = z.object({
   id: idSchema,
   name: z.string().trim().min(1).max(120),
-  trade: z.string().trim().min(1).max(80),
+  trade: z.literal("painting"),
   logoUrl: z.string().url().nullable(),
   defaultTaxRate: z.number().min(0).max(1),
   defaultTerms: z.string().trim().max(4000),
@@ -73,18 +79,40 @@ export const createCustomerSchema = customerSchema.omit({
   id: true,
   orgId: true,
   createdAt: true
+}).extend({
+  email: emailSchema,
+  phone: phoneSchema.nullable().optional()
 });
+
+export const roomSizePricesSchema = z.object({
+  small: moneyCentsSchema,
+  medium: moneyCentsSchema,
+  large: moneyCentsSchema
+});
+
+export const priceBookPricingSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("fixed"),
+    unitPriceCents: moneyCentsSchema
+  }),
+  z.object({
+    type: z.literal("room_size"),
+    prices: roomSizePricesSchema
+  })
+]);
 
 export const priceBookItemSchema = z.object({
   id: idSchema,
   orgId: idSchema,
+  key: z.string().trim().min(1).max(80).nullable(),
   name: z.string().trim().min(1).max(160),
   description: z.string().trim().max(1000),
-  unit: z.enum(["each", "hour", "sqft", "lnft", "day"]),
-  unitPriceCents: moneyCentsSchema,
+  unit: quoteUnitSchema,
+  pricing: priceBookPricingSchema,
   kind: lineItemKindSchema,
+  starter: z.boolean(),
+  confirmedAt: z.string().datetime().nullable(),
   usageCount: z.number().int().min(0),
-  isActive: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });
@@ -93,7 +121,6 @@ export const createPriceBookItemSchema = priceBookItemSchema.omit({
   id: true,
   orgId: true,
   usageCount: true,
-  isActive: true,
   createdAt: true,
   updatedAt: true
 });
@@ -117,7 +144,7 @@ const csvMoneyToCentsSchema = z.union([z.string(), z.number()]).transform((value
 export const priceBookCsvRowSchema = z.object({
   name: z.string().trim().min(1),
   description: z.string().trim().default(""),
-  unit: z.enum(["each", "hour", "sqft", "lnft", "day"]),
+  unit: quoteUnitSchema,
   unit_price: csvMoneyToCentsSchema,
   type: lineItemKindSchema
 });
@@ -150,21 +177,22 @@ export const quoteLineItemSchema = z
     id: idSchema.optional(),
     position: z.number().int().min(0),
     description: z.string().trim().min(1).max(500),
-    qty: z.number().positive(),
+    quantity: z.number().positive(),
     unit: nullableUnitSchema,
     unitPriceCents: moneyCentsSchema.nullable(),
     kind: lineItemKindSchema,
     source: lineItemSourceSchema,
     priceBookItemId: idSchema.nullable(),
+    priceBookItemKey: z.string().trim().min(1).max(80).nullable().optional(),
     matchConfidence: z.number().min(0).max(1).nullable(),
-    needsPrice: z.boolean()
+    matchState: lineItemMatchStateSchema
   })
   .superRefine((item, ctx) => {
-    if (!item.needsPrice && item.unitPriceCents === null) {
+    if (item.matchState === "green" && item.unitPriceCents === null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["unitPriceCents"],
-        message: "Priced lines must include unitPriceCents"
+        message: "Green lines must include unitPriceCents"
       });
     }
 
@@ -173,6 +201,14 @@ export const quoteLineItemSchema = z
         code: z.ZodIssueCode.custom,
         path: ["priceBookItemId"],
         message: "Price-book lines must reference a price book item"
+      });
+    }
+
+    if (item.matchState === "green" && item.source === "price_book" && item.matchConfidence === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["matchConfidence"],
+        message: "Green price-book lines must include match confidence"
       });
     }
   });
@@ -202,7 +238,7 @@ export const quotePatchSchema = z.object({
 });
 
 export const sendQuoteSchema = z.object({
-  channels: z.array(deliveryChannelSchema).min(1).max(2)
+  channels: z.array(deliveryChannelSchema).min(1).max(1)
 });
 
 export const customerQuoteResponseSchema = z.object({
@@ -217,13 +253,48 @@ export const quoteEventSchema = z.object({
   createdAt: z.string().datetime()
 });
 
+export const painterChecklistSchema = z.object({
+  rooms: z.object({
+    small: z.number().int().min(0).max(20),
+    medium: z.number().int().min(0).max(20),
+    large: z.number().int().min(0).max(20)
+  }),
+  surfaces: z.object({
+    walls: z.boolean(),
+    ceilings: z.boolean(),
+    trim: z.boolean()
+  }),
+  doorCount: z.number().int().min(0).max(100),
+  prepLevel: prepLevelSchema,
+  coatCount: z.union([z.literal(1), z.literal(2)]).default(2),
+  customerSuppliesPaint: z.boolean()
+});
+
+export const draftConflictSchema = z.object({
+  field: z.string().trim().min(1),
+  checklistValue: z.string().trim().min(1),
+  transcriptValue: z.string().trim().min(1),
+  message: z.string().trim().min(1)
+});
+
+export const draftQuoteInputSchema = z.object({
+  checklist: painterChecklistSchema,
+  transcript: z.string().trim().max(5000),
+  typedNotes: z.string().trim().max(5000).optional()
+});
+
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type OrgProfile = z.infer<typeof orgProfileSchema>;
 export type Customer = z.infer<typeof customerSchema>;
 export type PriceBookItem = z.infer<typeof priceBookItemSchema>;
+export type PriceBookPricing = z.infer<typeof priceBookPricingSchema>;
 export type PriceBookCsvRow = z.infer<typeof priceBookCsvRowSchema>;
 export type ExtractedTask = z.infer<typeof extractedTaskSchema>;
 export type ExtractionResult = z.infer<typeof extractionResultSchema>;
 export type QuoteLineItem = z.infer<typeof quoteLineItemSchema>;
 export type QuoteDiscount = z.infer<typeof quoteDiscountSchema>;
 export type QuotePatch = z.infer<typeof quotePatchSchema>;
+export type QuoteEvent = z.infer<typeof quoteEventSchema>;
+export type PainterChecklist = z.infer<typeof painterChecklistSchema>;
+export type DraftConflict = z.infer<typeof draftConflictSchema>;
+export type DraftQuoteInput = z.infer<typeof draftQuoteInputSchema>;

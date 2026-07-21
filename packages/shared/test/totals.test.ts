@@ -4,14 +4,15 @@ import { computeQuoteTotals, type QuoteLineItem } from "../src/index.js";
 const baseLine: QuoteLineItem = {
   position: 0,
   description: "Paint walls",
-  qty: 2,
+  quantity: 2,
   unit: "hour",
   unitPriceCents: 12500,
   kind: "labour",
   source: "manual",
   priceBookItemId: null,
+  priceBookItemKey: null,
   matchConfidence: null,
-  needsPrice: false
+  matchState: "green"
 };
 
 describe("computeQuoteTotals", () => {
@@ -40,7 +41,7 @@ describe("computeQuoteTotals", () => {
           {
             ...baseLine,
             unitPriceCents: null,
-            needsPrice: true
+            matchState: "red"
           }
         ],
         discount: {
