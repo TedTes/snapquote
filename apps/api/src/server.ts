@@ -3,11 +3,13 @@ import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { healthResponseSchema } from "@snapquote/shared";
 import { loadConfig, type AppConfig } from "./config.js";
+import { publicRoutes } from "./routes/public.js";
 import { v1Routes } from "./routes/v1.js";
+import { createInMemoryStore, type InMemoryStore } from "./store.js";
 
 const version = "0.1.0";
 
-export async function buildServer(config: AppConfig = loadConfig()) {
+export async function buildServer(config: AppConfig = loadConfig(), store: InMemoryStore = createInMemoryStore()) {
   const app = Fastify({
     logger: config.NODE_ENV !== "test"
   });
@@ -26,7 +28,13 @@ export async function buildServer(config: AppConfig = loadConfig()) {
   );
 
   await app.register(v1Routes, {
-    prefix: "/v1"
+    prefix: "/v1",
+    store
+  });
+
+  await app.register(publicRoutes, {
+    prefix: "/public",
+    store
   });
 
   return app;
