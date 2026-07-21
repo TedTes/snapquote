@@ -1,0 +1,424 @@
+import type { ReactNode } from "react";
+import { router } from "expo-router";
+import {
+  Book,
+  CalendarDays,
+  ChevronRight,
+  CircleHelp,
+  FileText,
+  LogOut,
+  Mail,
+  MessageSquare,
+  Percent,
+  RotateCcw,
+  Shield
+} from "lucide-react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { BottomTabBar } from "../src/ui/BottomTabBar";
+import { Screen } from "../src/ui/components";
+import { colors, radius } from "../src/ui/theme";
+import { initials } from "../src/lib/format";
+import { useMvpStore } from "../src/state/mvp";
+
+export default function SettingsScreen() {
+  const businessName = useMvpStore((state) => state.businessName);
+  const defaultTaxRate = useMvpStore((state) => state.defaultTaxRate);
+  const defaultTerms = useMvpStore((state) => state.defaultTerms);
+  const quoteValidDays = useMvpStore((state) => state.quoteValidDays);
+  const priceBookItems = useMvpStore((state) => state.priceBookItems);
+
+  const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
+  const totalCount = priceBookItems.length;
+
+  return (
+    <Screen edges={["top"]}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>Settings</Text>
+
+        <View style={styles.profileBlock}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/onboarding")}
+            style={styles.profileCard}
+          >
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials(businessName)}</Text>
+            </View>
+            <View style={styles.profileText}>
+              <Text style={styles.businessName}>{businessName}</Text>
+              <Text style={styles.businessMeta}>Painting · Interior</Text>
+            </View>
+            <Text style={styles.editText}>Edit ›</Text>
+          </Pressable>
+          <View style={styles.profileNote}>
+            <CircleHelp color={colors.ink3} size={11} strokeWidth={2} />
+            <Text style={styles.profileNoteText}>This name and logo appear on every quote you send.</Text>
+          </View>
+        </View>
+
+        <SettingsSection label="Quote defaults">
+          <SettingsRow
+            icon={<Percent color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Tax rate"
+            onPress={() => Alert.alert("Tax rate", "Use the edit profile screen to change quote defaults.")}
+            value={`${Math.round(defaultTaxRate * 100)}%`}
+          />
+          <SettingsRow
+            icon={<CalendarDays color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Quote valid for"
+            onPress={() => Alert.alert("Quote validity", "Use the edit profile screen to change quote defaults.")}
+            value={`${quoteValidDays} days`}
+          />
+          <SettingsRow
+            detail={defaultTerms}
+            icon={<FileText color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Default terms"
+            onPress={() => Alert.alert("Default terms", defaultTerms)}
+          />
+          <SettingsRow
+            detail="Hi {name}, just checking in..."
+            icon={<MessageSquare color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Follow-up message"
+            last
+            onPress={() => Alert.alert("Follow-up message", "Follow-up templates are coming next.")}
+          />
+        </SettingsSection>
+
+        <SettingsSection label="Price book">
+          <SettingsRow
+            customValue={<BookStrengthBadge confirmed={confirmedCount} total={totalCount} />}
+            detail={<StrengthDots confirmed={confirmedCount} total={totalCount} />}
+            icon={<Book color={colors.ink2} size={16} strokeWidth={2.1} />}
+            label="Book strength"
+            onPress={() => router.push("/price-book")}
+          />
+          <SettingsRow
+            detail="Review your starter prices"
+            icon={<RotateCcw color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Re-run price setup"
+            last
+            onPress={() => router.push("/onboarding")}
+          />
+        </SettingsSection>
+
+        <SettingsSection label="Sending">
+          <SettingsRow
+            customValue={<VerifiedBadge />}
+            detail="quotes@acepaint.co"
+            icon={<Mail color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Send quotes from"
+            last
+            onPress={() => Alert.alert("Sending email", "Email sender setup is mocked for this MVP.")}
+          />
+        </SettingsSection>
+
+        <SettingsSection label="Account">
+          <SettingsRow
+            customValue={<PlanBadge />}
+            icon={<Shield color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Plan"
+            onPress={() => Alert.alert("Plan", "Solo plan for MVP testing.")}
+          />
+          <SettingsRow
+            icon={<CircleHelp color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Help & feedback"
+            onPress={() => Alert.alert("Help & feedback", "Send feedback from the test channel for now.")}
+          />
+          <SettingsRow
+            icon={<LogOut color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Sign out"
+            last
+            onPress={() => Alert.alert("Sign out", "Authentication is not wired in this local MVP yet.")}
+            showChevron={false}
+          />
+        </SettingsSection>
+
+        <Text style={styles.version}>SnapQuote · v0.4.1</Text>
+      </ScrollView>
+      <BottomTabBar />
+    </Screen>
+  );
+}
+
+function SettingsSection(props: { label: string; children: ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>{props.label}</Text>
+      <View style={styles.sectionCard}>{props.children}</View>
+    </View>
+  );
+}
+
+function SettingsRow(props: {
+  icon: ReactNode;
+  label: string;
+  detail?: ReactNode | undefined;
+  value?: string | undefined;
+  customValue?: ReactNode | undefined;
+  onPress: () => void;
+  showChevron?: boolean | undefined;
+  last?: boolean | undefined;
+}) {
+  return (
+    <Pressable accessibilityRole="button" onPress={props.onPress} style={[styles.row, props.last ? styles.rowLast : null]}>
+      <View style={styles.rowIcon}>{props.icon}</View>
+      <View style={styles.rowText}>
+        <Text style={styles.rowLabel}>{props.label}</Text>
+        {typeof props.detail === "string" ? (
+          <Text style={styles.rowDetail} numberOfLines={1}>
+            {props.detail}
+          </Text>
+        ) : (
+          props.detail
+        )}
+      </View>
+      {props.customValue ?? (props.value ? <Text style={styles.rowValue}>{props.value}</Text> : null)}
+      {props.showChevron === false ? null : (
+        <ChevronRight color={colors.ink3} size={15} strokeWidth={2.2} />
+      )}
+    </Pressable>
+  );
+}
+
+function StrengthDots(props: { confirmed: number; total: number }) {
+  const segments = Array.from({ length: Math.max(props.total, 1) }, (_, index) => index).slice(0, 11);
+
+  return (
+    <View style={styles.strengthDots}>
+      {segments.map((index) => (
+        <View
+          key={index}
+          style={[
+            styles.strengthDot,
+            { backgroundColor: index < props.confirmed ? colors.green : colors.amber }
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+function BookStrengthBadge(props: { confirmed: number; total: number }) {
+  return (
+    <View style={styles.bookBadge}>
+      <Text style={styles.bookBadgeText}>
+        {props.confirmed} of {props.total}
+      </Text>
+    </View>
+  );
+}
+
+function VerifiedBadge() {
+  return (
+    <View style={styles.verifiedBadge}>
+      <Text style={styles.verifiedText}>Verified</Text>
+    </View>
+  );
+}
+
+function PlanBadge() {
+  return (
+    <View style={styles.planBadge}>
+      <Text style={styles.planText}>Solo</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: {
+    gap: 20,
+    padding: 20,
+    paddingBottom: 30
+  },
+  title: {
+    color: colors.ink,
+    fontSize: 26,
+    fontWeight: "900",
+    letterSpacing: 0
+  },
+  profileBlock: {
+    gap: 0
+  },
+  profileCard: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 13,
+    minHeight: 82,
+    padding: 14
+  },
+  avatar: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: 11,
+    height: 51,
+    justifyContent: "center",
+    width: 51
+  },
+  avatarText: {
+    color: colors.onDark,
+    fontSize: 17,
+    fontWeight: "900"
+  },
+  profileText: {
+    flex: 1,
+    gap: 3
+  },
+  businessName: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  businessMeta: {
+    color: colors.ink3,
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  editText: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  profileNote: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderBottomLeftRadius: 11,
+    borderBottomRightRadius: 11,
+    borderColor: colors.border,
+    borderTopWidth: 0,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    minHeight: 37,
+    paddingHorizontal: 16
+  },
+  profileNoteText: {
+    color: colors.ink3,
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  section: {
+    gap: 10
+  },
+  sectionLabel: {
+    color: colors.ink3,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.6,
+    paddingHorizontal: 3,
+    textTransform: "uppercase"
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden"
+  },
+  row: {
+    alignItems: "center",
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 61,
+    paddingHorizontal: 14
+  },
+  rowLast: {
+    borderBottomWidth: 0
+  },
+  rowIcon: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    width: 32
+  },
+  rowText: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  rowLabel: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  rowDetail: {
+    color: colors.ink3,
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  rowValue: {
+    color: colors.ink2,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  strengthDots: {
+    flexDirection: "row",
+    gap: 3,
+    marginTop: 3
+  },
+  strengthDot: {
+    borderRadius: radius.pill,
+    height: 6,
+    width: 6
+  },
+  bookBadge: {
+    backgroundColor: colors.amberBg,
+    borderColor: colors.amberBorder,
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 4
+  },
+  bookBadgeText: {
+    color: colors.amber,
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  verifiedBadge: {
+    backgroundColor: colors.greenBg,
+    borderColor: colors.greenBorder,
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 4
+  },
+  verifiedText: {
+    color: colors.green,
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  planBadge: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 4
+  },
+  planText: {
+    color: colors.ink3,
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  version: {
+    color: colors.ink3,
+    fontSize: 11,
+    fontWeight: "600",
+    paddingBottom: 6,
+    textAlign: "center"
+  }
+});
