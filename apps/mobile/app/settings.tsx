@@ -4,59 +4,46 @@ import {
   Book,
   CalendarDays,
   ChevronRight,
-  CircleHelp,
   FileText,
-  LogOut,
+  Lock,
   Mail,
   MessageSquare,
   Percent,
   RotateCcw,
-  Shield
+  Type
 } from "lucide-react-native";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BottomTabBar } from "../src/ui/BottomTabBar";
 import { Screen } from "../src/ui/components";
+import { QuoteMark } from "../src/ui/QuoteMark";
 import { colors, radius } from "../src/ui/theme";
-import { initials } from "../src/lib/format";
-import { useAuthStore } from "../src/state/auth";
 import { useMvpStore } from "../src/state/mvp";
+import { useAuthStore } from "../src/state/auth";
 
 export default function SettingsScreen() {
-  const businessName = useMvpStore((state) => state.businessName);
   const defaultTaxRate = useMvpStore((state) => state.defaultTaxRate);
   const defaultTerms = useMvpStore((state) => state.defaultTerms);
   const quoteValidDays = useMvpStore((state) => state.quoteValidDays);
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
-  const signOut = useAuthStore((state) => state.signOut);
   const me = useAuthStore((state) => state.me);
 
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const totalCount = priceBookItems.length;
+  const senderEmail = me?.user.email ?? "quotes@sharpedge.co";
 
   return (
     <Screen edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Settings</Text>
-
-        <View style={styles.profileBlock}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Settings</Text>
           <Pressable
+            accessibilityLabel="Open profile"
             accessibilityRole="button"
             onPress={() => router.push("/settings/edit")}
-            style={styles.profileCard}
+            style={styles.headerAvatar}
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials(businessName)}</Text>
-            </View>
-            <View style={styles.profileText}>
-              <Text style={styles.businessName}>{businessName}</Text>
-              <Text style={styles.businessMeta}>Painting · Interior</Text>
-            </View>
-            <Text style={styles.editText}>Edit ›</Text>
+            <QuoteMark boxed size={40} />
           </Pressable>
-          <View style={styles.profileNote}>
-            <CircleHelp color={colors.ink3} size={11} strokeWidth={2} />
-            <Text style={styles.profileNoteText}>This name and logo appear on every quote you send.</Text>
-          </View>
         </View>
 
         <SettingsSection label="Quote defaults">
@@ -99,15 +86,23 @@ export default function SettingsScreen() {
             detail="Review your starter prices"
             icon={<RotateCcw color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Re-run price setup"
-            last
             onPress={() => router.push("/onboarding")}
+          />
+          <SettingsRow
+            customValue={<TradeValue />}
+            detail="More trades coming soon"
+            icon={<Type color={colors.ink2} size={16} strokeWidth={2.1} />}
+            label="Trade"
+            last
+            onPress={() => undefined}
+            showChevron={false}
           />
         </SettingsSection>
 
         <SettingsSection label="Sending">
           <SettingsRow
             customValue={<VerifiedBadge />}
-            detail={me?.user.email ?? "quotes@snapquote.local"}
+            detail={senderEmail}
             icon={<Mail color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Send quotes from"
             last
@@ -115,39 +110,7 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
-        <SettingsSection label="Account">
-          <SettingsRow
-            customValue={<PlanBadge />}
-            icon={<Shield color={colors.ink2} size={15} strokeWidth={2.1} />}
-            label="Plan"
-            onPress={() => Alert.alert("Plan", "Solo plan for MVP testing.")}
-          />
-          <SettingsRow
-            icon={<CircleHelp color={colors.ink2} size={15} strokeWidth={2.1} />}
-            label="Help & feedback"
-            onPress={() => Alert.alert("Help & feedback", "Send feedback from the test channel for now.")}
-          />
-          <SettingsRow
-            icon={<LogOut color={colors.ink2} size={15} strokeWidth={2.1} />}
-            label="Sign out"
-            last
-            onPress={() => {
-              Alert.alert("Sign out", "You will need to sign in again on this phone.", [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Sign out",
-                  style: "destructive",
-                  onPress: () => {
-                    signOut();
-                  }
-                }
-              ]);
-            }}
-            showChevron={false}
-          />
-        </SettingsSection>
-
-        <Text style={styles.version}>SnapQuote · v0.4.1</Text>
+        <Text style={styles.version}>Account & billing live in your profile · v0.4.1</Text>
       </ScrollView>
       <BottomTabBar />
     </Screen>
@@ -230,94 +193,44 @@ function VerifiedBadge() {
   );
 }
 
-function PlanBadge() {
+function TradeValue() {
   return (
-    <View style={styles.planBadge}>
-      <Text style={styles.planText}>Solo</Text>
+    <View style={styles.tradeValue}>
+      <Text style={styles.tradeText}>Painting</Text>
+      <Lock color={colors.ink3} size={11} strokeWidth={2.2} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 20,
-    padding: 20,
-    paddingBottom: 30
+    gap: 22,
+    paddingHorizontal: 19,
+    paddingTop: 12,
+    paddingBottom: 42
+  },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
   },
   title: {
     color: colors.ink,
-    fontSize: 26,
+    fontSize: 27,
     fontWeight: "900",
-    letterSpacing: 0
+    letterSpacing: 0,
+    lineHeight: 32
   },
-  profileBlock: {
-    gap: 0
-  },
-  profileCard: {
+  headerAvatar: {
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 13,
-    minHeight: 82,
-    padding: 14
-  },
-  avatar: {
-    alignItems: "center",
-    backgroundColor: colors.dark,
     borderRadius: 11,
-    height: 51,
+    height: 40,
     justifyContent: "center",
-    width: 51
-  },
-  avatarText: {
-    color: colors.onDark,
-    fontSize: 17,
-    fontWeight: "900"
-  },
-  profileText: {
-    flex: 1,
-    gap: 3
-  },
-  businessName: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "900"
-  },
-  businessMeta: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "600"
-  },
-  editText: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: "900"
-  },
-  profileNote: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderBottomLeftRadius: 11,
-    borderBottomRightRadius: 11,
-    borderColor: colors.border,
-    borderTopWidth: 0,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 7,
-    minHeight: 37,
-    paddingHorizontal: 16
-  },
-  profileNoteText: {
-    color: colors.ink3,
-    flex: 1,
-    fontSize: 11,
-    fontWeight: "600"
+    overflow: "hidden",
+    width: 40
   },
   section: {
-    gap: 10
+    gap: 9
   },
   sectionLabel: {
     color: colors.ink3,
@@ -330,7 +243,7 @@ const styles = StyleSheet.create({
   sectionCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     overflow: "hidden"
   },
@@ -363,7 +276,7 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     color: colors.ink,
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: "800"
   },
   rowDetail: {
@@ -414,25 +327,22 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase"
   },
-  planBadge: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: 7,
-    borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 4
+  tradeValue: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7
   },
-  planText: {
-    color: colors.ink3,
-    fontSize: 9,
-    fontWeight: "900",
-    textTransform: "uppercase"
+  tradeText: {
+    color: colors.ink2,
+    fontSize: 13,
+    fontWeight: "800"
   },
   version: {
     color: colors.ink3,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "600",
-    paddingBottom: 6,
+    paddingBottom: 2,
+    marginTop: -2,
     textAlign: "center"
   }
 });
