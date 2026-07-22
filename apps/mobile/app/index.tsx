@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { ArrowRight, Camera, Check, CircleAlert, Clock3, Lock, Mic, Plus } from "lucide-react-native";
+import { ArrowRight, Check, CircleAlert, Clock3, Mic, Plus } from "lucide-react-native";
 import { router } from "expo-router";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BottomTabBar } from "../src/ui/BottomTabBar";
 import { QuoteCard } from "../src/ui/QuoteCard";
 import { QuoteMark } from "../src/ui/QuoteMark";
@@ -62,13 +62,6 @@ export default function DashboardScreen() {
     router.push("/new-quote");
   }
 
-  function photosComingSoon() {
-    Alert.alert(
-      "Photo capture is coming soon",
-      "For now, snap photos on your camera roll and mention what they show in your voice note."
-    );
-  }
-
   function openQuote(quote: QuoteRecord) {
     router.push({ pathname: "/quote/[id]", params: { id: quote.id } });
   }
@@ -99,7 +92,6 @@ export default function DashboardScreen() {
         {rows.length === 0 ? (
           <EmptyDashboardState
             businessReady
-            onCamera={photosComingSoon}
             onConfirmPrices={() => router.push("/price-book")}
             onNewQuote={startQuote}
             onVoice={startQuote}
@@ -140,29 +132,6 @@ export default function DashboardScreen() {
                 <Legend color={colors.dark} label="Sent" />
                 <Legend color={colors.green} label="Accepted" />
               </View>
-            </View>
-
-            <View style={styles.actionRow}>
-              <Pressable accessibilityRole="button" onPress={startQuote} style={styles.newQuoteButton}>
-                <Plus color={colors.onDark} size={18} strokeWidth={2.7} />
-                <Text style={styles.newQuoteText}>New quote</Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Start with voice"
-                accessibilityRole="button"
-                onPress={startQuote}
-                style={styles.iconButton}
-              >
-                <Mic color={colors.ink} size={18} strokeWidth={2.5} />
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Add job photos"
-                accessibilityRole="button"
-                onPress={photosComingSoon}
-                style={styles.iconButton}
-              >
-                <Camera color={colors.ink} size={18} strokeWidth={2.5} />
-              </Pressable>
             </View>
 
             <Text style={styles.sectionLabel}>Needs you today</Text>
@@ -222,6 +191,16 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
+      {rows.length > 0 ? (
+        <Pressable
+          accessibilityLabel="New quote"
+          accessibilityRole="button"
+          onPress={startQuote}
+          style={styles.fab}
+        >
+          <Plus color={colors.onDark} size={24} strokeWidth={2.6} />
+        </Pressable>
+      ) : null}
       <BottomTabBar />
     </Screen>
   );
@@ -229,7 +208,6 @@ export default function DashboardScreen() {
 
 function EmptyDashboardState(props: {
   businessReady: boolean;
-  onCamera: () => void;
   onConfirmPrices: () => void;
   onNewQuote: () => void;
   onVoice: () => void;
@@ -240,13 +218,10 @@ function EmptyDashboardState(props: {
     <>
       <View style={styles.firstQuoteCard}>
         <View style={styles.emptyIconCard}>
-          <QuoteMark />
+          <QuoteMark boxed size={56} />
         </View>
 
         <Text style={styles.firstQuoteTitle}>Send your first quote</Text>
-        <Text style={styles.firstQuoteCopy}>
-          Walk the job, talk it through, and SnapQuote drafts the scope — priced only from your book.
-        </Text>
 
         <View style={styles.firstQuoteActions}>
           <Pressable accessibilityRole="button" onPress={props.onNewQuote} style={styles.firstQuotePrimary}>
@@ -255,30 +230,17 @@ function EmptyDashboardState(props: {
           </Pressable>
         </View>
 
-        <View style={styles.captureActions}>
+        <View style={styles.voiceInline}>
+          <Text style={styles.voiceInlineMuted}>or start with</Text>
           <Pressable
             accessibilityLabel="Start with voice"
             accessibilityRole="button"
             onPress={props.onVoice}
-            style={styles.captureButton}
+            style={styles.voiceInlineButton}
           >
-            <Mic color={colors.ink2} size={15} strokeWidth={2.4} />
-            <Text style={styles.captureButtonText}>Voice</Text>
+            <Mic color={colors.ink2} size={11} strokeWidth={2.4} />
+            <Text style={styles.voiceInlineText}>Voice</Text>
           </Pressable>
-          <Pressable
-            accessibilityLabel="Add job photos"
-            accessibilityRole="button"
-            onPress={props.onCamera}
-            style={styles.captureButton}
-          >
-            <Camera color={colors.ink2} size={15} strokeWidth={2.4} />
-            <Text style={styles.captureButtonText}>Photos</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.firstQuoteLock}>
-          <Lock color={colors.ink3} size={11} strokeWidth={2.1} />
-          <Text style={styles.firstQuoteLockText}>No guessed prices — ever</Text>
         </View>
       </View>
 
@@ -438,7 +400,7 @@ const styles = StyleSheet.create({
   content: {
     gap: 15,
     padding: 20,
-    paddingBottom: 28
+    paddingBottom: 86
   },
   header: {
     alignItems: "flex-start",
@@ -534,35 +496,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600"
   },
-  actionRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  newQuoteButton: {
-    alignItems: "center",
-    backgroundColor: colors.dark,
-    borderRadius: 13,
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    height: 50,
-    justifyContent: "center"
-  },
-  newQuoteText: {
-    color: colors.onDark,
-    fontSize: 16,
-    fontWeight: "900"
-  },
-  iconButton: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 13,
-    borderWidth: 1,
-    height: 50,
-    justifyContent: "center",
-    width: 54
-  },
   sectionLabel: {
     color: colors.ink2,
     fontSize: 11,
@@ -636,95 +569,83 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    marginTop: 2,
-    paddingBottom: 15,
+    marginTop: 3,
+    paddingBottom: 14,
     paddingHorizontal: 18,
-    paddingTop: 22
+    paddingTop: 20
   },
   emptyIconCard: {
     alignItems: "center",
-    backgroundColor: colors.surfaceRaised,
-    borderColor: colors.border,
-    borderRadius: 20,
-    borderWidth: 1,
-    height: 84,
+    backgroundColor: colors.dark,
+    borderRadius: 14,
+    height: 56,
     justifyContent: "center",
-    width: 84
+    overflow: "hidden",
+    width: 56
   },
   firstQuoteTitle: {
     color: colors.ink,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "900",
-    lineHeight: 21,
-    marginTop: 15,
-    textAlign: "center"
-  },
-  firstQuoteCopy: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 17,
-    marginTop: 7,
-    maxWidth: 260,
+    lineHeight: 22,
+    marginTop: 16,
     textAlign: "center"
   },
   firstQuoteActions: {
     alignItems: "center",
-    marginTop: 19,
+    marginTop: 18,
     width: "100%"
   },
   firstQuotePrimary: {
     alignItems: "center",
     backgroundColor: colors.dark,
     borderRadius: 12,
-    flex: 1,
     flexDirection: "row",
     gap: 8,
-    height: 45,
-    justifyContent: "center"
+    height: 42,
+    justifyContent: "center",
+    width: "100%"
   },
   firstQuotePrimaryText: {
     color: colors.onDark,
     fontSize: 14,
     fontWeight: "900"
   },
-  captureActions: {
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 9,
-    width: "100%"
-  },
-  captureButton: {
+  voiceInline: {
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    flex: 1,
     flexDirection: "row",
-    gap: 6,
-    height: 38,
+    gap: 5,
     justifyContent: "center",
-    minWidth: 0
+    marginTop: 9
   },
-  captureButtonText: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  firstQuoteLock: {
+  voiceInlineButton: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 6,
-    marginTop: 12
+    gap: 4
   },
-  firstQuoteLockText: {
-    color: colors.ink3,
+  voiceInlineMuted: {
+    color: colors.ink2,
     fontSize: 11,
     fontWeight: "600"
   },
+  voiceInlineText: {
+    color: colors.ink2,
+    fontSize: 11,
+    fontWeight: "800"
+  },
   setupLabel: {
     marginTop: 7
+  },
+  fab: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: 17,
+    bottom: 86,
+    height: 56,
+    justifyContent: "center",
+    position: "absolute",
+    right: 20,
+    width: 64
   },
   setupCard: {
     backgroundColor: colors.surface,
