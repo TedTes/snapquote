@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { Screen } from "../src/ui/components";
+import { QuoteMark } from "../src/ui/QuoteMark";
 import { colors } from "../src/ui/theme";
 import { useAuthStore } from "../src/state/auth";
 
@@ -95,7 +96,7 @@ export default function AuthScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.brandBlock}>
             <View style={styles.logoBox}>
-              <MiniQuoteMark />
+              <QuoteMark boxed size={54} />
             </View>
             <Text style={styles.brandName}>SnapQuote</Text>
           </View>
@@ -279,16 +280,6 @@ function SocialButton(props: { brand: "apple" | "google"; label: string; onPress
   );
 }
 
-function MiniQuoteMark() {
-  return (
-    <View style={styles.markBars}>
-      <View style={[styles.markBar, styles.markBarGreen]} />
-      <View style={[styles.markBar, styles.markBarAmber]} />
-      <View style={[styles.markBar, styles.markBarRed]} />
-    </View>
-  );
-}
-
 function AppleMark() {
   return (
     <Text style={styles.appleMark} allowFontScaling={false}>
@@ -325,33 +316,11 @@ const styles = StyleSheet.create({
   },
   logoBox: {
     alignItems: "center",
-    backgroundColor: colors.dark,
     borderRadius: 13,
+    overflow: "hidden",
     height: 54,
     justifyContent: "center",
     width: 54
-  },
-  markBars: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    gap: 4,
-    height: 28
-  },
-  markBar: {
-    borderRadius: 3,
-    width: 5
-  },
-  markBarGreen: {
-    backgroundColor: colors.green,
-    height: 20
-  },
-  markBarAmber: {
-    backgroundColor: colors.amber,
-    height: 25
-  },
-  markBarRed: {
-    backgroundColor: colors.red,
-    height: 22
   },
   brandName: {
     color: colors.ink,

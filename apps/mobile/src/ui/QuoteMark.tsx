@@ -1,94 +1,25 @@
-import { StyleSheet, View } from "react-native";
+import Svg, { Path, Rect } from "react-native-svg";
 import { colors } from "./theme";
 
-export function QuoteMark(props: { size?: number | undefined }) {
-  const scale = (props.size ?? 48) / 48;
+export function QuoteMark(props: { size?: number | undefined; boxed?: boolean | undefined }) {
+  const size = props.size ?? 48;
+  const boxed = props.boxed ?? true;
 
   return (
-    <View style={[styles.wrap, { height: 54 * scale, width: 48 * scale }]}>
-      <View
-        style={[
-          styles.clip,
-          {
-            borderRadius: 7 * scale,
-            borderWidth: 2.5 * scale,
-            height: 46 * scale,
-            left: 5 * scale,
-            top: 6 * scale,
-            width: 38 * scale
-          }
-        ]}
-      >
-        <View
-          style={[
-            styles.tab,
-            {
-              borderRadius: 4 * scale,
-              borderWidth: 2.5 * scale,
-              height: 10 * scale,
-              left: 7.5 * scale,
-              top: -6 * scale,
-              width: 18 * scale
-            }
-          ]}
-        />
-        <View
-          style={[
-            styles.line,
-            {
-              backgroundColor: colors.green,
-              height: 4.5 * scale,
-              left: 7 * scale,
-              top: 10 * scale,
-              width: 20 * scale
-            }
-          ]}
-        />
-        <View
-          style={[
-            styles.line,
-            {
-              backgroundColor: colors.amber,
-              height: 4.5 * scale,
-              left: 7 * scale,
-              top: 19 * scale,
-              width: 20 * scale
-            }
-          ]}
-        />
-        <View
-          style={[
-            styles.line,
-            {
-              backgroundColor: colors.red,
-              height: 4.5 * scale,
-              left: 7 * scale,
-              top: 28 * scale,
-              width: 13 * scale
-            }
-          ]}
-        />
-      </View>
-    </View>
+    <Svg height={size} viewBox="0 0 1024 1024" width={size}>
+      {boxed ? <Rect fill={colors.dark} height="1024" rx="232" width="1024" /> : null}
+      <Path
+        d="M468 682C341 682 238 579 238 452C238 325 341 222 468 222C595 222 698 325 698 452C698 579 595 682 468 682ZM468 588C543 588 604 527 604 452C604 377 543 316 468 316C393 316 332 377 332 452C332 527 393 588 468 588Z"
+        fill={colors.surfaceRaised}
+      />
+      <Path d="M459 560L562 663" stroke={colors.surfaceRaised} strokeLinecap="round" strokeWidth="96" />
+      <Path
+        d="M482 552L578 648L730 454"
+        stroke={colors.green}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="82"
+      />
+    </Svg>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    position: "relative"
-  },
-  clip: {
-    backgroundColor: colors.surface,
-    borderColor: colors.ink,
-    position: "absolute"
-  },
-  tab: {
-    backgroundColor: colors.surface,
-    borderColor: colors.ink,
-    position: "absolute"
-  },
-  line: {
-    borderRadius: 2,
-    position: "absolute"
-  }
-});

@@ -248,21 +248,26 @@ function EmptyDashboardState(props: {
             <Plus color={colors.onDark} size={16} strokeWidth={2.8} />
             <Text style={styles.firstQuotePrimaryText}>New quote</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.captureActions}>
           <Pressable
             accessibilityLabel="Start with voice"
             accessibilityRole="button"
             onPress={props.onVoice}
-            style={styles.firstQuoteIconButton}
+            style={styles.captureButton}
           >
-            <Mic color={colors.ink} size={17} strokeWidth={2.4} />
+            <Mic color={colors.ink2} size={15} strokeWidth={2.4} />
+            <Text style={styles.captureButtonText}>Voice</Text>
           </Pressable>
           <Pressable
             accessibilityLabel="Add job photos"
             accessibilityRole="button"
             onPress={props.onCamera}
-            style={styles.firstQuoteIconButton}
+            style={styles.captureButton}
           >
-            <Camera color={colors.ink} size={17} strokeWidth={2.4} />
+            <Camera color={colors.ink2} size={15} strokeWidth={2.4} />
+            <Text style={styles.captureButtonText}>Photos</Text>
           </Pressable>
         </View>
 
@@ -665,8 +670,6 @@ const styles = StyleSheet.create({
   },
   firstQuoteActions: {
     alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
     marginTop: 19,
     width: "100%"
   },
@@ -685,15 +688,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900"
   },
-  firstQuoteIconButton: {
+  captureActions: {
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 9,
+    width: "100%"
+  },
+  captureButton: {
     alignItems: "center",
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: 12,
     borderWidth: 1,
-    height: 45,
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    height: 38,
     justifyContent: "center",
-    width: 48
+    minWidth: 0
+  },
+  captureButtonText: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "800"
   },
   firstQuoteLock: {
     alignItems: "center",
