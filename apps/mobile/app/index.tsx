@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ArrowRight, BookOpen, Check, CircleAlert, Clock3, Mic, Plus } from "lucide-react-native";
+import { ArrowRight, Check, CircleAlert, Clock3, Mic, Plus } from "lucide-react-native";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BottomTabBar } from "../src/ui/BottomTabBar";
@@ -276,73 +276,7 @@ function EmptyDashboardState(props: {
           </View>
         </>
       )}
-
-      <BookStrengthCard
-        confirmedCount={Math.max(props.totalPriceItems - props.starterPricesToConfirm, 0)}
-        onPress={props.onConfirmPrices}
-        totalCount={props.totalPriceItems}
-        unconfirmedCount={props.starterPricesToConfirm}
-      />
     </View>
-  );
-}
-
-function BookStrengthCard(props: {
-  confirmedCount: number;
-  onPress: () => void;
-  totalCount: number;
-  unconfirmedCount: number;
-}) {
-  const total = Math.max(props.totalCount, 1);
-  const confirmedLabel = `${props.confirmedCount} of ${props.totalCount}`;
-
-  return (
-    <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.bookStrengthCard}>
-      <View style={styles.bookStrengthHeader}>
-        <View style={styles.bookStrengthTitleRow}>
-          <View style={styles.bookStrengthIcon}>
-            <BookOpen color={colors.ink2} size={16} strokeWidth={2.2} />
-          </View>
-          <View>
-            <Text style={styles.bookStrengthTitle}>Book strength</Text>
-            <Text style={styles.bookStrengthSub}>
-              {props.unconfirmedCount > 0 ? `${props.unconfirmedCount} starter prices left` : "Ready to price drafts"}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.bookStrengthBadge}>
-          <Text style={styles.bookStrengthBadgeText}>{confirmedLabel}</Text>
-        </View>
-      </View>
-
-      <View style={styles.bookStrengthTrack}>
-        {Array.from({ length: total }).map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.bookStrengthSegment,
-              {
-                backgroundColor: index < props.confirmedCount ? colors.green : colors.amber
-              }
-            ]}
-          />
-        ))}
-      </View>
-
-      <View style={styles.bookStrengthStats}>
-        <View style={styles.bookStrengthStat}>
-          <Text style={styles.bookStrengthStatValue}>{props.confirmedCount}</Text>
-          <Text style={styles.bookStrengthStatLabel}>Trusted</Text>
-        </View>
-        <View style={styles.bookStrengthStatDivider} />
-        <View style={styles.bookStrengthStat}>
-          <Text style={[styles.bookStrengthStatValue, { color: props.unconfirmedCount > 0 ? colors.amber : colors.green }]}>
-            {props.unconfirmedCount}
-          </Text>
-          <Text style={styles.bookStrengthStatLabel}>To confirm</Text>
-        </View>
-      </View>
-    </Pressable>
   );
 }
 
@@ -779,101 +713,5 @@ const styles = StyleSheet.create({
   setupAction: {
     fontSize: 12,
     fontWeight: "900"
-  },
-  bookStrengthCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: 13,
-    padding: 14
-  },
-  bookStrengthHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  bookStrengthTitleRow: {
-    alignItems: "center",
-    flex: 1,
-    flexDirection: "row",
-    gap: 10
-  },
-  bookStrengthIcon: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceRaised,
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1,
-    height: 34,
-    justifyContent: "center",
-    width: 34
-  },
-  bookStrengthTitle: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  bookStrengthSub: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 2
-  },
-  bookStrengthBadge: {
-    backgroundColor: colors.amberBg,
-    borderColor: colors.amberBorder,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 4
-  },
-  bookStrengthBadgeText: {
-    color: colors.amber,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-    textTransform: "uppercase"
-  },
-  bookStrengthTrack: {
-    flexDirection: "row",
-    gap: 4
-  },
-  bookStrengthSegment: {
-    borderRadius: radius.pill,
-    flex: 1,
-    height: 8
-  },
-  bookStrengthStats: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceRaised,
-    borderColor: colors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    minHeight: 58
-  },
-  bookStrengthStat: {
-    alignItems: "center",
-    flex: 1,
-    gap: 2
-  },
-  bookStrengthStatDivider: {
-    backgroundColor: colors.border,
-    height: 34,
-    width: 1
-  },
-  bookStrengthStatValue: {
-    color: colors.green,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: 0
-  },
-  bookStrengthStatLabel: {
-    color: colors.ink3,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    textTransform: "uppercase"
   }
 });
