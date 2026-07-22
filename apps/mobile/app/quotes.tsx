@@ -8,18 +8,17 @@ import {
   ListFilter,
   Lock,
   Mic,
-  Plus,
   Search
 } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { BottomTabBar } from "../src/ui/BottomTabBar";
-import { QuoteMark } from "../src/ui/QuoteMark";
+import { ClipboardQuoteMark } from "../src/ui/ClipboardQuoteMark";
 import { Screen } from "../src/ui/components";
 import { colors, radius } from "../src/ui/theme";
 import { formatMoney, formatShortDate } from "../src/lib/format";
 import { useQuoteRows, type QuoteRow } from "../src/state/useQuoteRows";
-import { useMvpStore, type QuoteRecord } from "../src/state/mvp";
+import type { QuoteRecord } from "../src/state/mvp";
 
 type FilterKey = "all" | "draft" | "sent" | "viewed" | "accepted" | "stale";
 
@@ -37,7 +36,6 @@ const searchThreshold = 7;
 export default function QuotesScreen() {
   const params = useLocalSearchParams<{ filter?: string }>();
   const rows = useQuoteRows();
-  const startNewQuoteWizard = useMvpStore((state) => state.startNewQuoteWizard);
 
   const initialFilter = filterOptions.some((option) => option.key === params.filter)
     ? (params.filter as FilterKey)
@@ -45,7 +43,8 @@ export default function QuotesScreen() {
 
   const [filter, setFilter] = useState<FilterKey>(initialFilter);
   const [query, setQuery] = useState("");
-  const showSearch = rows.length > searchThreshold;
+  const showListTools = rows.length > searchThreshold;
+  const showSearch = showListTools;
 
   const activeRows = useMemo(
     () => rows.filter((row) => row.status === "draft" || row.status === "sent" || row.status === "viewed"),
@@ -99,13 +98,13 @@ export default function QuotesScreen() {
     };
   }, [filtered]);
 
+  const simpleRows = useMemo(
+    () => [...rows].sort((a, b) => b.quote.updatedAt.localeCompare(a.quote.updatedAt)),
+    [rows]
+  );
+
   function openQuote(quote: QuoteRecord) {
     router.push({ pathname: "/quote/[id]", params: { id: quote.id } });
-  }
-
-  function newQuote() {
-    startNewQuoteWizard();
-    router.push("/new-quote");
   }
 
   if (rows.length === 0) {
@@ -119,7 +118,7 @@ export default function QuotesScreen() {
             </View>
           </View>
 
-          <EmptyQuotesState onNewQuote={newQuote} />
+          <EmptyQuotesState />
         </View>
         <BottomTabBar />
       </Screen>
@@ -135,84 +134,85 @@ export default function QuotesScreen() {
               <Text style={styles.title}>Quotes</Text>
               <Text style={styles.activeCount}>{activeRows.length} active</Text>
             </View>
-            <Pressable accessibilityRole="button" style={styles.filterButton}>
-              <ListFilter color={colors.ink} size={18} strokeWidth={2.4} />
-            </Pressable>
+            {showListTools ? (
+              <Pressable accessibilityRole="button" style={styles.filterButton}>
+                <ListFilter color={colors.ink} size={18} strokeWidth={2.4} />
+              </Pressable>
+            ) : null}
           </View>
 
-          {showSearch ? (
-            <View style={styles.searchBox}>
-              <Search color={colors.ink3} size={15} />
-              <TextInput
-                accessibilityLabel="Search customers or addresses"
-                onChangeText={setQuery}
-                placeholder="Search customers or addresses"
-                placeholderTextColor={colors.ink3}
-                style={styles.searchInput}
-                value={query}
-              />
-            </View>
-          ) : null}
+          {showListTools ? (
+            <>
+              {showSearch ? (
+                <View style={styles.searchBox}>
+                  <Search color={colors.ink3} size={15} />
+                  <TextInput
+                    accessibilityLabel="Search customers or addresses"
+                    onChangeText={setQuery}
+                    placeholder="Search customers or addresses"
+                    placeholderTextColor={colors.ink3}
+                    style={styles.searchInput}
+                    value={query}
+                  />
+                </View>
+              ) : null}
 
-          <ScrollView contentContainerStyle={styles.filterRow} horizontal showsHorizontalScrollIndicator={false}>
-            {filterOptions.map((option) => {
-              const active = option.key === filter;
+              <ScrollView contentContainerStyle={styles.filterRow} horizontal showsHorizontalScrollIndicator={false}>
+                {filterOptions.map((option) => {
+                  const active = option.key === filter;
 
-              return (
-                <Pressable
-                  accessibilityRole="button"
-                  key={option.key}
-                  onPress={() => setFilter(option.key)}
-                  style={[styles.filterChip, active ? styles.filterChipActive : null]}
-                >
-                  {option.key === "stale" ? <View style={styles.staleDot} /> : null}
-                  <Text style={[styles.filterChipText, active ? styles.filterChipTextActive : null]}>
-                    {option.label}
-                  </Text>
-                  <Text style={[styles.filterCountText, active ? styles.filterCountTextActive : null]}>
-                    {filterCounts[option.key]}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={option.key}
+                      onPress={() => setFilter(option.key)}
+                      style={[styles.filterChip, active ? styles.filterChipActive : null]}
+                    >
+                      {option.key === "stale" ? <View style={styles.staleDot} /> : null}
+                      <Text style={[styles.filterChipText, active ? styles.filterChipTextActive : null]}>
+                        {option.label}
+                      </Text>
+                      <Text style={[styles.filterCountText, active ? styles.filterCountTextActive : null]}>
+                        {filterCounts[option.key]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
 
-          {filtered.length === 0 ? <NoMatchesState /> : null}
+              {filtered.length === 0 ? <NoMatchesState /> : null}
 
-          {grouped.needsAttention.length > 0 ? (
-            <QuoteSection label="Needs attention">
-              {grouped.needsAttention.map((row) => (
-                <CompactQuoteCard key={row.quote.id} onPress={() => openQuote(row.quote)} row={row} />
-              ))}
-            </QuoteSection>
-          ) : null}
+              {grouped.needsAttention.length > 0 ? (
+                <QuoteSection label="Needs attention">
+                  {grouped.needsAttention.map((row) => (
+                    <CompactQuoteCard key={row.quote.id} onPress={() => openQuote(row.quote)} row={row} />
+                  ))}
+                </QuoteSection>
+              ) : null}
 
-          {grouped.thisWeek.length > 0 ? (
-            <QuoteSection label={grouped.needsAttention.length > 0 ? "This week" : "All quotes"}>
-              {grouped.thisWeek.map((row) => (
-                <CompactQuoteCard key={row.quote.id} onPress={() => openQuote(row.quote)} row={row} />
-              ))}
-            </QuoteSection>
-          ) : null}
+              {grouped.thisWeek.length > 0 ? (
+                <QuoteSection label={grouped.needsAttention.length > 0 ? "This week" : "All quotes"}>
+                  {grouped.thisWeek.map((row) => (
+                    <CompactQuoteCard key={row.quote.id} onPress={() => openQuote(row.quote)} row={row} />
+                  ))}
+                </QuoteSection>
+              ) : null}
+            </>
+          ) : (
+            <SimpleQuoteList onOpenQuote={openQuote} rows={simpleRows} />
+          )}
         </ScrollView>
-
-        {rows.length > 0 ? (
-          <Pressable accessibilityRole="button" onPress={newQuote} style={styles.fab}>
-            <Plus color={colors.onDark} size={19} strokeWidth={2.6} />
-            <Text style={styles.fabText}>New</Text>
-          </Pressable>
-        ) : null}
       </View>
       <BottomTabBar />
     </Screen>
   );
 }
 
-function EmptyQuotesState(props: { onNewQuote: () => void }) {
+function EmptyQuotesState() {
   return (
     <View style={styles.emptyFull}>
       <View style={styles.emptyIconCard}>
-        <QuoteMark />
+        <ClipboardQuoteMark />
       </View>
 
       <Text style={styles.emptyHeadline}>Your first quote starts here</Text>
@@ -220,10 +220,7 @@ function EmptyQuotesState(props: { onNewQuote: () => void }) {
         Walk the job, talk it through, and SnapQuote drafts the scope — priced only from your book.
       </Text>
 
-      <Pressable accessibilityRole="button" onPress={props.onNewQuote} style={styles.emptyPrimary}>
-        <Plus color={colors.onDark} size={16} strokeWidth={2.8} />
-        <Text style={styles.emptyPrimaryText}>New quote</Text>
-      </Pressable>
+      <Text style={styles.emptyHint}>Tap the + button below to start.</Text>
 
       <View style={styles.emptySteps}>
         <EmptyStep icon="checklist" index="01" label="Checklist" />
@@ -275,11 +272,47 @@ function QuoteSection(props: { label: string; children: React.ReactNode }) {
   );
 }
 
-function CompactQuoteCard(props: { row: QuoteRow; onPress: () => void }) {
+function SimpleQuoteList(props: { onOpenQuote: (quote: QuoteRecord) => void; rows: QuoteRow[] }) {
+  const cardStyle = simpleCardStyle(props.rows.length);
+
+  return (
+    <View style={styles.simpleList}>
+      {props.rows.map((row) => (
+        <CompactQuoteCard
+          cardStyle={cardStyle}
+          key={row.quote.id}
+          onPress={() => props.onOpenQuote(row.quote)}
+          row={row}
+        />
+      ))}
+      <View style={styles.simpleHintRow}>
+        <Text style={styles.simpleHintText}>Tap + to add another quote</Text>
+      </View>
+    </View>
+  );
+}
+
+function simpleCardStyle(count: number): StyleProp<ViewStyle> {
+  if (count <= 1) {
+    return styles.simpleCardOne;
+  }
+
+  if (count === 2) {
+    return styles.simpleCardTwo;
+  }
+
+  if (count === 3) {
+    return styles.simpleCardThree;
+  }
+
+  return styles.simpleCardMany;
+}
+
+function CompactQuoteCard(props: { cardStyle?: StyleProp<ViewStyle> | undefined; row: QuoteRow; onPress: () => void }) {
   const alert = quoteAlert(props.row);
 
   return (
-    <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.quoteCard}>
+    <Pressable accessibilityRole="button" onPress={props.onPress} style={[styles.quoteCard, props.cardStyle]}>
       <View style={[styles.quoteRail, { backgroundColor: alert.color }]} />
       <View style={styles.quoteBody}>
         <View style={styles.quoteTop}>
@@ -404,8 +437,8 @@ const styles = StyleSheet.create({
   emptyScreen: {
     flex: 1,
     paddingBottom: 18,
-    paddingHorizontal: 24,
-    paddingTop: 24
+    paddingHorizontal: 20,
+    paddingTop: 20
   },
   emptyFull: {
     alignItems: "center",
@@ -438,21 +471,12 @@ const styles = StyleSheet.create({
     maxWidth: 275,
     textAlign: "center"
   },
-  emptyPrimary: {
-    alignItems: "center",
-    backgroundColor: colors.dark,
-    borderRadius: 13,
-    flexDirection: "row",
-    gap: 8,
-    height: 47,
-    justifyContent: "center",
-    marginTop: 4,
-    paddingHorizontal: 25
-  },
-  emptyPrimaryText: {
-    color: colors.onDark,
-    fontSize: 15,
-    fontWeight: "900"
+  emptyHint: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 5,
+    textAlign: "center"
   },
   emptySteps: {
     alignItems: "center",
@@ -620,6 +644,34 @@ const styles = StyleSheet.create({
   sectionCards: {
     gap: 8
   },
+  simpleList: {
+    gap: 12,
+    paddingTop: 28
+  },
+  simpleHintRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 18,
+    paddingTop: 8
+  },
+  simpleHintText: {
+    color: colors.ink3,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  simpleCardOne: {
+    minHeight: 116
+  },
+  simpleCardTwo: {
+    minHeight: 104
+  },
+  simpleCardThree: {
+    minHeight: 94
+  },
+  simpleCardMany: {
+    minHeight: 82
+  },
   quoteCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -688,23 +740,5 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     fontWeight: "800"
-  },
-  fab: {
-    alignItems: "center",
-    backgroundColor: colors.dark,
-    borderRadius: 18,
-    bottom: 20,
-    flexDirection: "row",
-    gap: 8,
-    height: 52,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    position: "absolute",
-    right: 18
-  },
-  fabText: {
-    color: colors.onDark,
-    fontSize: 16,
-    fontWeight: "900"
   }
 });

@@ -695,13 +695,13 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: 12,
-    padding: 18,
+    padding: 20,
     paddingBottom: 92,
   },
   emptyScreen: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 22,
+    paddingTop: 20,
   },
   header: {
     alignItems: "center",

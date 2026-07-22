@@ -1,10 +1,9 @@
 import { useMemo } from "react";
-import { ArrowRight, Check, CircleAlert, Clock3, Mic, Plus } from "lucide-react-native";
+import { ArrowRight, Check, CircleAlert, ClipboardCheck, Clock3, Lock } from "lucide-react-native";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BottomTabBar } from "../src/ui/BottomTabBar";
 import { QuoteCard } from "../src/ui/QuoteCard";
-import { QuoteMark } from "../src/ui/QuoteMark";
 import { Screen } from "../src/ui/components";
 import { colors, radius } from "../src/ui/theme";
 import { formatMoney, initials } from "../src/lib/format";
@@ -15,11 +14,7 @@ type QuotesFilter = "draft" | "sent" | "viewed" | "stale" | "accepted";
 
 export default function DashboardScreen() {
   const businessName = useMvpStore((state) => state.businessName);
-  const onboarded = useMvpStore((state) => state.onboarded);
-  const startNewQuoteWizard = useMvpStore((state) => state.startNewQuoteWizard);
-  const priceBookItems = useMvpStore((state) => state.priceBookItems);
   const rows = useQuoteRows();
-  const starterPricesToConfirm = priceBookItems.filter((item) => item.confirmedAt === null).length;
   const displayBusinessName =
     typeof businessName === "string" && businessName.trim().length > 0
       ? businessName
@@ -58,11 +53,6 @@ export default function DashboardScreen() {
     [rows]
   );
 
-  function startQuote() {
-    startNewQuoteWizard();
-    router.push("/new-quote");
-  }
-
   function openQuote(quote: QuoteRecord) {
     router.push({ pathname: "/quote/[id]", params: { id: quote.id } });
   }
@@ -91,14 +81,7 @@ export default function DashboardScreen() {
         </View>
 
         {rows.length === 0 ? (
-          <EmptyDashboardState
-            businessReady={onboarded}
-            onConfirmPrices={() => router.push("/price-book")}
-            onNewQuote={startQuote}
-            onVoice={startQuote}
-            starterPricesToConfirm={starterPricesToConfirm}
-            totalPriceItems={priceBookItems.length}
-          />
+          <EmptyDashboardInfo />
         ) : (
           <>
             <View style={styles.pipelineCard}>
@@ -192,128 +175,28 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
-      {rows.length > 0 ? (
-        <Pressable
-          accessibilityLabel="New quote"
-          accessibilityRole="button"
-          onPress={startQuote}
-          style={styles.fab}
-        >
-          <Plus color={colors.onDark} size={24} strokeWidth={2.6} />
-        </Pressable>
-      ) : null}
       <BottomTabBar />
     </Screen>
   );
 }
 
-function EmptyDashboardState(props: {
-  businessReady: boolean;
-  onConfirmPrices: () => void;
-  onNewQuote: () => void;
-  onVoice: () => void;
-  starterPricesToConfirm: number;
-  totalPriceItems: number;
-}) {
-  const setupDone = props.businessReady && props.starterPricesToConfirm === 0;
-
+function EmptyDashboardInfo() {
   return (
-    <View style={styles.emptyStack}>
-      <View style={styles.firstQuoteCard}>
-        <View style={styles.emptyIconCard}>
-          <QuoteMark boxed size={56} />
-        </View>
-
-        <Text style={styles.firstQuoteTitle}>Send your first quote</Text>
-
-        <View style={styles.firstQuoteActions}>
-          <Pressable accessibilityRole="button" onPress={props.onNewQuote} style={styles.firstQuotePrimary}>
-            <Plus color={colors.onDark} size={16} strokeWidth={2.8} />
-            <Text style={styles.firstQuotePrimaryText}>New quote</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.voiceInline}>
-          <Text style={styles.voiceInlineMuted}>or start with</Text>
-          <Pressable
-            accessibilityLabel="Start with voice"
-            accessibilityRole="button"
-            onPress={props.onVoice}
-            style={styles.voiceInlineButton}
-          >
-            <Mic color={colors.ink2} size={11} strokeWidth={2.4} />
-            <Text style={styles.voiceInlineText}>Voice</Text>
-          </Pressable>
-        </View>
+    <View style={styles.emptyCenter}>
+      <View style={styles.emptyIconCard}>
+        <ClipboardCheck color={colors.green} size={34} strokeWidth={2.15} />
       </View>
 
-      {setupDone ? null : (
-        <>
-          <Text style={styles.sectionLabel}>Finish setting up</Text>
-          <View style={styles.setupCard}>
-            <SetupRow
-              action={props.starterPricesToConfirm > 0 ? "Confirm" : "Done"}
-              done={props.starterPricesToConfirm === 0}
-              icon="book"
-              last={false}
-              onPress={props.onConfirmPrices}
-              subtitle={
-                props.starterPricesToConfirm > 0
-                  ? `${props.starterPricesToConfirm} of ${props.totalPriceItems} still need your ok`
-                  : `${props.totalPriceItems} prices ready to match`
-              }
-              title={props.starterPricesToConfirm > 0 ? "Confirm your starter prices" : "Starter prices confirmed"}
-            />
-            <SetupRow
-              action="Done"
-              done={props.businessReady}
-              icon="check"
-              last
-              onPress={() => router.push("/settings")}
-              subtitle="Name, tax rate, terms"
-              title="Business details added"
-            />
-          </View>
-        </>
-      )}
+      <Text style={styles.emptyInfoTitle}>Send your first quote</Text>
+      <Text style={styles.emptyInfoCopy}>
+        Tap the + below — walk the job, talk it through, and SnapQuote drafts a priced quote from your book.
+      </Text>
+
+      <View style={styles.emptyLock}>
+        <Lock color={colors.ink3} size={11} strokeWidth={2.2} />
+        <Text style={styles.emptyLockText}>No guessed prices — ever</Text>
+      </View>
     </View>
-  );
-}
-
-function SetupRow(props: {
-  action: string;
-  done: boolean;
-  icon: "book" | "check";
-  last: boolean;
-  onPress: () => void;
-  subtitle: string;
-  title: string;
-}) {
-  const color = props.done ? colors.green : colors.amber;
-  const bg = props.done ? colors.greenBg : colors.amberBg;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={props.onPress}
-      style={[styles.setupRow, props.last ? styles.setupRowLast : null]}
-    >
-      <View style={[styles.setupIcon, { backgroundColor: bg }]}>
-        {props.icon === "check" ? (
-          <Check color={color} size={16} strokeWidth={2.7} />
-        ) : (
-          <Text style={[styles.setupBookIcon, { color }]}>B</Text>
-        )}
-      </View>
-      <View style={styles.setupText}>
-        <Text style={styles.setupTitle}>{props.title}</Text>
-        <Text style={styles.setupSub}>{props.subtitle}</Text>
-      </View>
-      <View style={styles.setupActionWrap}>
-        <Text style={[styles.setupAction, { color }]}>{props.action}</Text>
-        {props.done ? null : <ArrowRight color={color} size={13} strokeWidth={2.6} />}
-      </View>
-    </Pressable>
   );
 }
 
@@ -409,10 +292,6 @@ const styles = StyleSheet.create({
     gap: 15,
     padding: 20,
     paddingBottom: 86
-  },
-  emptyStack: {
-    gap: 15,
-    paddingTop: 24
   },
   header: {
     alignItems: "flex-start",
@@ -580,138 +459,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800"
   },
-  firstQuoteCard: {
+  emptyCenter: {
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    marginTop: 3,
-    paddingBottom: 17,
-    paddingHorizontal: 18,
-    paddingTop: 20
+    flex: 1,
+    justifyContent: "center",
+    paddingBottom: 96,
+    paddingHorizontal: 4
   },
   emptyIconCard: {
     alignItems: "center",
     backgroundColor: colors.dark,
-    borderRadius: 14,
-    height: 56,
+    borderRadius: 17,
+    height: 70,
     justifyContent: "center",
-    overflow: "hidden",
-    width: 56
+    width: 70
   },
-  firstQuoteTitle: {
+  emptyInfoTitle: {
     color: colors.ink,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "900",
-    lineHeight: 22,
-    marginTop: 15,
+    marginTop: 17,
     textAlign: "center"
   },
-  firstQuoteActions: {
-    alignItems: "center",
-    marginTop: 20,
-    width: "100%"
-  },
-  firstQuotePrimary: {
-    alignItems: "center",
-    backgroundColor: colors.dark,
-    borderRadius: 12,
-    flexDirection: "row",
-    gap: 8,
-    height: 48,
-    justifyContent: "center",
-    width: "100%"
-  },
-  firstQuotePrimaryText: {
-    color: colors.onDark,
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  voiceInline: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 5,
-    justifyContent: "center",
-    marginTop: 10
-  },
-  voiceInlineButton: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 4
-  },
-  voiceInlineMuted: {
+  emptyInfoCopy: {
     color: colors.ink2,
-    fontSize: 11,
-    fontWeight: "600"
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
+    marginTop: 9,
+    maxWidth: 278,
+    textAlign: "center"
   },
-  voiceInlineText: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontWeight: "800"
-  },
-  fab: {
+  emptyLock: {
     alignItems: "center",
-    backgroundColor: colors.dark,
-    borderRadius: 17,
-    bottom: 86,
-    height: 56,
-    justifyContent: "center",
-    position: "absolute",
-    right: 20,
-    width: 64
-  },
-  setupCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    overflow: "hidden"
-  },
-  setupRow: {
-    alignItems: "center",
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
     flexDirection: "row",
-    gap: 10,
-    minHeight: 58,
-    paddingHorizontal: 13
+    gap: 6,
+    marginTop: 23
   },
-  setupRowLast: {
-    borderBottomWidth: 0
-  },
-  setupIcon: {
-    alignItems: "center",
-    borderRadius: 10,
-    height: 34,
-    justifyContent: "center",
-    width: 34
-  },
-  setupBookIcon: {
-    fontSize: 17,
-    fontWeight: "800"
-  },
-  setupText: {
-    flex: 1,
-    gap: 2
-  },
-  setupTitle: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: "900"
-  },
-  setupSub: {
+  emptyLockText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600"
-  },
-  setupActionWrap: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 3
-  },
-  setupAction: {
-    fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "700"
   }
 });

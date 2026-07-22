@@ -206,8 +206,8 @@ function TradeValue() {
 const styles = StyleSheet.create({
   content: {
     gap: 22,
-    paddingHorizontal: 19,
-    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 42
   },
   header: {

@@ -88,8 +88,8 @@ export function SectionKicker(props: { children: ReactNode }) {
 const styles = StyleSheet.create({
   header: {
     gap: 10,
-    paddingHorizontal: 19,
-    paddingTop: 11
+    paddingHorizontal: 20,
+    paddingTop: 20
   },
   topRow: {
     alignItems: "center",
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   },
   titleBlock: {
     gap: 8,
-    paddingHorizontal: 19
+    paddingHorizontal: 20
   },
   title: {
     color: colors.ink,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    paddingHorizontal: 19,
+    paddingHorizontal: 20,
     paddingTop: 13
   },
   primaryButton: {
