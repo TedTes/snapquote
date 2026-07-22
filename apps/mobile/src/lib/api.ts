@@ -147,15 +147,13 @@ export type ScopeExtraction = {
 export const snapquoteApi = {
   health: () => request<unknown>("/health"),
 
-  signUp: (input: { email: string; password: string; name: string; businessName: string }) =>
-    request<AuthResponse>("/v1/auth/sign-up", {
-      method: "POST",
-      body: input,
-      skipAuth: true
-    }),
-
-  signIn: (input: { email: string; password: string }) =>
-    request<AuthResponse>("/v1/auth/sign-in", {
+  sendEmailLink: (input: {
+    email: string;
+    redirectTo: string;
+    name?: string | undefined;
+    businessName?: string | undefined;
+  }) =>
+    request<{ ok: boolean; email: string }>("/v1/auth/email-link", {
       method: "POST",
       body: input,
       skipAuth: true

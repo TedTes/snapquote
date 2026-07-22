@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { AlertCircle, ArrowRight, Building2, Eye, EyeOff, Lock, Mail } from "lucide-react-native";
+import { AlertCircle, ArrowRight, Mail } from "lucide-react-native";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,219 +8,196 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View
 } from "react-native";
-import Svg, { Path } from "react-native-svg";
+import Animated from "react-native-reanimated";
+import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { Screen } from "../src/ui/components";
 import { QuoteMark } from "../src/ui/QuoteMark";
+import { fadeEnter, useMotionEnabled } from "../src/ui/motion";
 import { colors } from "../src/ui/theme";
 import { useAuthStore } from "../src/state/auth";
 
-type AuthMode = "sign_in" | "sign_up";
+function AuthBackground() {
+  const { width, height } = useWindowDimensions();
+
+  return (
+    <Svg height={height} style={StyleSheet.absoluteFillObject} width={width}>
+      <Defs>
+        <RadialGradient
+          cx={width * 0.5}
+          cy={height * 0.16}
+          gradientUnits="userSpaceOnUse"
+          id="glow"
+          r={height * 0.42}
+        >
+          <Stop offset="0%" stopColor={colors.surface} stopOpacity={1} />
+          <Stop offset="100%" stopColor={colors.bg} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect fill={colors.bg} height={height} width={width} />
+      <Rect fill="url(#glow)" height={height} width={width} />
+      <Circle cx={width * 0.86} cy={height * 0.1} fill="none" opacity={0.5} r={130} stroke={colors.border} strokeWidth={1} />
+      <Circle cx={width * 0.86} cy={height * 0.1} fill="none" opacity={0.35} r={190} stroke={colors.border} strokeWidth={1} />
+      <Circle cx={width * -0.06} cy={height * 0.82} fill="none" opacity={0.4} r={150} stroke={colors.greenBorder} strokeWidth={1} />
+    </Svg>
+  );
+}
 
 export default function AuthScreen() {
-  const [mode, setMode] = useState<AuthMode>("sign_in");
-  const [businessName, setBusinessName] = useState("Sharp Edge Painting");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
+  const [linkSentTo, setLinkSentTo] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const status = useAuthStore((state) => state.status);
   const authError = useAuthStore((state) => state.error);
-  const signIn = useAuthStore((state) => state.signIn);
-  const signUp = useAuthStore((state) => state.signUp);
+  const sendEmailLink = useAuthStore((state) => state.sendEmailLink);
   const startOAuth = useAuthStore((state) => state.startOAuth);
   const busy = status === "loading";
   const error = localError ?? authError;
-  const isRegister = mode === "sign_up";
 
-  async function submit() {
+  async function submitEmailLink() {
     const trimmedEmail = email.trim();
-    const trimmedBusiness = businessName.trim();
-
-    if (isRegister && trimmedBusiness.length === 0) {
-      setLocalError("Enter your business name.");
-      return;
-    }
 
     if (!trimmedEmail.includes("@")) {
       setLocalError("Enter a valid email address.");
       return;
     }
 
-    if (password.length < 8) {
-      setLocalError("Password must be at least 8 characters.");
-      return;
-    }
-
     setLocalError(null);
 
     try {
-      if (isRegister) {
-        await signUp({
-          email: trimmedEmail,
-          password,
-          name: trimmedBusiness,
-          businessName: trimmedBusiness
-        });
-      } else {
-        await signIn(trimmedEmail, password);
-      }
+      await sendEmailLink(trimmedEmail);
+      setLinkSentTo(trimmedEmail);
     } catch {
       // Store already exposes a user-safe message.
     }
-  }
-
-  function switchMode(nextMode: AuthMode) {
-    setMode(nextMode);
-    setLocalError(null);
   }
 
   async function startProvider(provider: "apple" | "google") {
     setLocalError(null);
 
     try {
-      await startOAuth(provider, {
-        businessName: isRegister ? businessName.trim() : undefined,
-        name: isRegister ? businessName.trim() : undefined
-      });
+      await startOAuth(provider);
     } catch {
       // Store already exposes a user-safe message.
     }
   }
 
+  const motionEnabled = useMotionEnabled();
+
   return (
     <Screen edges={["top", "bottom"]}>
+      <AuthBackground />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.brandBlock}>
+          <View style={styles.header}>
             <View style={styles.logoBox}>
-              <QuoteMark boxed size={54} />
+              <QuoteMark size={64} />
             </View>
             <Text style={styles.brandName}>SnapQuote</Text>
+            <Text style={styles.title}>Quote the job before you leave it</Text>
+            <Text style={styles.subtitle}>Every price comes from your book — never guessed.</Text>
           </View>
 
-          <View style={styles.hero}>
-            <Text style={styles.title}>{isRegister ? "Create your account" : "Welcome back"}</Text>
-            <Text style={styles.subtitle}>
-              {isRegister ? "Start sending quotes today." : "Same-day quotes, priced from your book."}
-            </Text>
-          </View>
-
-          <View style={styles.socialStack}>
-            <SocialButton
-              brand="apple"
-              label={isRegister ? "Sign up with Apple" : "Continue with Apple"}
-              onPress={() => {
-                void startProvider("apple");
-              }}
-            />
-            <SocialButton
-              brand="google"
-              label={isRegister ? "Sign up with Google" : "Continue with Google"}
-              onPress={() => {
-                void startProvider("google");
-              }}
-            />
-          </View>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or use email</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <View style={styles.form}>
-            {isRegister ? (
-              <AuthField
-                autoComplete="organization"
-                icon={<Building2 color={colors.ink3} size={15} strokeWidth={2.1} />}
-                label="Business name"
-                onChangeText={setBusinessName}
-                placeholder="Sharp Edge Painting"
-                value={businessName}
+          <View style={styles.actionsPanel}>
+            <View style={styles.socialStack}>
+              <SocialButton
+                brand="apple"
+                disabled={busy}
+                label="Continue with Apple"
+                onPress={() => {
+                  void startProvider("apple");
+                }}
               />
-            ) : null}
+              <SocialButton
+                brand="google"
+                disabled={busy}
+                label="Continue with Google"
+                onPress={() => {
+                  void startProvider("google");
+                }}
+              />
+            </View>
 
-            <AuthField
-              autoCapitalize="none"
-              autoComplete="email"
-              icon={<Mail color={colors.ink3} size={15} strokeWidth={2.1} />}
-              keyboardType="email-address"
-              label="Email"
-              onChangeText={setEmail}
-              placeholder="name@email.com"
-              textContentType="emailAddress"
-              value={email}
-            />
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
 
-            <AuthField
-              autoCapitalize="none"
-              autoComplete={isRegister ? "new-password" : "current-password"}
-              icon={<Lock color={colors.ink3} size={15} strokeWidth={2.1} />}
-              label="Password"
-              onChangeText={setPassword}
-              placeholder={isRegister ? "8+ characters" : "••••••••"}
-              right={
+            {showEmail ? (
+              <Animated.View
+                {...(motionEnabled ? { entering: fadeEnter } : {})}
+                style={styles.emailPanel}
+              >
+                <View style={styles.emailPanelHeader}>
+                  <Text style={styles.emailPanelTitle}>Sign in with email</Text>
+                  <Pressable accessibilityRole="button" hitSlop={10} onPress={() => setShowEmail(false)}>
+                    <Text style={styles.emailPanelClose}>Cancel</Text>
+                  </Pressable>
+                </View>
+
+                <AuthField
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  icon={<Mail color={colors.ink3} size={15} strokeWidth={2.1} />}
+                  keyboardType="email-address"
+                  label="Email address"
+                  onChangeText={(value) => {
+                    setEmail(value);
+                    setLinkSentTo(null);
+                  }}
+                  placeholder="name@email.com"
+                  textContentType="emailAddress"
+                  value={email}
+                />
+
+                {error ? (
+                  <View style={styles.errorRow}>
+                    <AlertCircle color={colors.red} size={14} strokeWidth={2.2} />
+                    <Text style={styles.error}>{error}</Text>
+                  </View>
+                ) : null}
+
+                {linkSentTo ? (
+                  <View style={styles.sentCard}>
+                    <Mail color={colors.green} size={17} strokeWidth={2.2} />
+                    <View style={styles.sentTextWrap}>
+                      <Text style={styles.sentTitle}>Check your email</Text>
+                      <Text style={styles.sentText}>We sent a sign-in link to {linkSentTo}.</Text>
+                    </View>
+                  </View>
+                ) : null}
+
                 <Pressable
-                  accessibilityLabel={passwordVisible ? "Hide password" : "Show password"}
                   accessibilityRole="button"
-                  hitSlop={10}
-                  onPress={() => setPasswordVisible((value) => !value)}
+                  disabled={busy}
+                  onPress={() => {
+                    void submitEmailLink();
+                  }}
+                  style={[styles.emailSubmit, busy ? styles.submitDisabled : null]}
                 >
-                  {passwordVisible ? (
-                    <EyeOff color={colors.ink3} size={15} strokeWidth={2} />
-                  ) : (
-                    <Eye color={colors.ink3} size={15} strokeWidth={2} />
-                  )}
+                  <Text style={styles.emailSubmitText}>{busy ? "Sending..." : "Send sign-in link"}</Text>
+                  <ArrowRight color={colors.onDark} size={15} strokeWidth={2.5} />
                 </Pressable>
-              }
-              secureTextEntry={!passwordVisible}
-              textContentType={isRegister ? "newPassword" : "password"}
-              value={password}
-            />
-
-            {!isRegister ? (
-              <Pressable accessibilityRole="button" onPress={() => Alert.alert("Forgot password", "Password reset is coming next.")}>
-                <Text style={styles.forgotText}>Forgot password?</Text>
+              </Animated.View>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowEmail(true)}
+                style={styles.emailToggle}
+              >
+                <Mail color={colors.ink2} size={16} strokeWidth={2.2} />
+                <Text style={styles.emailToggleText}>Continue with email</Text>
               </Pressable>
-            ) : null}
+            )}
 
-            {error ? (
-              <View style={styles.errorRow}>
-                <AlertCircle color={colors.red} size={14} strokeWidth={2.2} />
-                <Text style={styles.error}>{error}</Text>
-              </View>
-            ) : null}
-
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={() => {
-                void submit();
-              }}
-              style={[styles.submit, busy ? styles.submitDisabled : null]}
-            >
-              <Text style={styles.submitText}>{busy ? "Working..." : isRegister ? "Create account" : "Sign in"}</Text>
-              <ArrowRight color={colors.onDark} size={16} strokeWidth={2.5} />
-            </Pressable>
-          </View>
-
-          {isRegister ? (
-            <>
-              <Text style={styles.legal}>
-                By continuing you agree to the <Text style={styles.legalStrong}>Terms</Text> and{" "}
-                <Text style={styles.legalStrong}>Privacy Policy</Text>.
-              </Text>
-              <Text style={styles.lockCopy}>No guessed prices — ever</Text>
-            </>
-          ) : null}
-
-          <View style={styles.bottomSwitch}>
-            <Text style={styles.switchMuted}>{isRegister ? "Already have an account?" : "New here?"}</Text>
-            <Pressable accessibilityRole="button" onPress={() => switchMode(isRegister ? "sign_in" : "sign_up")}>
-              <Text style={styles.switchLink}>{isRegister ? "Sign in" : "Create account"}</Text>
-            </Pressable>
+            <Text style={styles.legal}>
+              By continuing you agree to our <Text style={styles.legalLink}>Terms</Text> &amp;{" "}
+              <Text style={styles.legalLink}>Privacy Policy</Text>.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -231,15 +207,13 @@ export default function AuthScreen() {
 
 function AuthField(props: {
   autoCapitalize?: "none" | "sentences" | "words" | "characters" | undefined;
-  autoComplete?: "email" | "organization" | "new-password" | "current-password" | undefined;
+  autoComplete?: "email" | undefined;
   icon: React.ReactNode;
   keyboardType?: "default" | "email-address" | undefined;
   label: string;
   onChangeText: (value: string) => void;
   placeholder: string;
-  right?: React.ReactNode;
-  secureTextEntry?: boolean | undefined;
-  textContentType?: "emailAddress" | "password" | "newPassword" | undefined;
+  textContentType?: "emailAddress" | undefined;
   value: string;
 }) {
   return (
@@ -254,25 +228,29 @@ function AuthField(props: {
           onChangeText={props.onChangeText}
           placeholder={props.placeholder}
           placeholderTextColor={colors.ink3}
-          secureTextEntry={props.secureTextEntry ?? false}
           style={styles.input}
           textContentType={props.textContentType}
           value={props.value}
         />
-        {props.right}
       </View>
     </View>
   );
 }
 
-function SocialButton(props: { brand: "apple" | "google"; label: string; onPress: () => void }) {
+function SocialButton(props: {
+  brand: "apple" | "google";
+  disabled?: boolean | undefined;
+  label: string;
+  onPress: () => void;
+}) {
   const apple = props.brand === "apple";
 
   return (
     <Pressable
       accessibilityRole="button"
+      disabled={props.disabled}
       onPress={props.onPress}
-      style={[styles.socialButton, apple ? styles.socialButtonDark : styles.socialButtonLight]}
+      style={[styles.socialButton, apple ? styles.socialButtonDark : styles.socialButtonLight, props.disabled ? styles.disabled : null]}
     >
       {apple ? <AppleMark /> : <GoogleMark />}
       <Text style={[styles.socialText, apple ? styles.socialTextDark : styles.socialTextLight]}>{props.label}</Text>
@@ -305,48 +283,51 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
+    justifyContent: "center",
     paddingHorizontal: 26,
-    paddingTop: 58,
-    paddingBottom: 10
+    paddingVertical: 28
   },
-  brandBlock: {
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 27
+  header: {
+    alignItems: "center"
   },
   logoBox: {
     alignItems: "center",
-    borderRadius: 13,
-    overflow: "hidden",
-    height: 54,
+    borderRadius: 17,
+    height: 64,
     justifyContent: "center",
-    width: 54
+    overflow: "hidden",
+    width: 64
   },
   brandName: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "900"
-  },
-  hero: {
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 26
+    color: colors.ink2,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    marginTop: 12,
+    textTransform: "uppercase"
   },
   title: {
     color: colors.ink,
-    fontSize: 23,
-    fontWeight: "900",
-    letterSpacing: 0,
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: 14,
     textAlign: "center"
   },
   subtitle: {
     color: colors.ink2,
     fontSize: 13,
     fontWeight: "600",
+    lineHeight: 19,
+    marginTop: 8,
+    maxWidth: 300,
     textAlign: "center"
   },
+  actionsPanel: {
+    paddingTop: 32
+  },
   socialStack: {
-    gap: 11
+    gap: 11,
+    marginBottom: 18
   },
   socialButton: {
     alignItems: "center",
@@ -363,6 +344,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1
+  },
+  disabled: {
+    opacity: 0.65
   },
   socialText: {
     fontSize: 15,
@@ -383,8 +367,8 @@ const styles = StyleSheet.create({
   dividerRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 12,
-    marginVertical: 23
+    gap: 10,
+    marginBottom: 16
   },
   dividerLine: {
     backgroundColor: colors.border,
@@ -394,10 +378,50 @@ const styles = StyleSheet.create({
   dividerText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "700"
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
   },
-  form: {
-    gap: 13
+  emailToggle: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    height: 48,
+    justifyContent: "center"
+  },
+  emailToggleText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  emailPanel: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+    padding: 16
+  },
+  emailPanelHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  emailPanelTitle: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  emailPanelClose: {
+    color: colors.ink3,
+    fontSize: 12,
+    fontWeight: "800"
   },
   fieldWrap: {
     gap: 8
@@ -418,24 +442,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     minHeight: 45,
-    paddingHorizontal: 13
+    paddingHorizontal: 14
   },
   input: {
     color: colors.ink,
     flex: 1,
     fontSize: 15,
-    fontWeight: "600",
-    minWidth: 0
-  },
-  forgotText: {
-    alignSelf: "flex-end",
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: -2
+    fontWeight: "700",
+    minHeight: 45,
+    padding: 0
   },
   errorRow: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flexDirection: "row",
     gap: 7
   },
@@ -446,59 +464,59 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 17
   },
-  submit: {
+  sentCard: {
+    alignItems: "flex-start",
+    backgroundColor: colors.greenBg,
+    borderColor: colors.greenBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 12
+  },
+  sentTextWrap: {
+    flex: 1,
+    gap: 2
+  },
+  sentTitle: {
+    color: colors.green,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  sentText: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17
+  },
+  emailSubmit: {
     alignItems: "center",
     backgroundColor: colors.dark,
     borderRadius: 10,
     flexDirection: "row",
-    gap: 10,
+    gap: 9,
     height: 48,
     justifyContent: "center",
-    marginTop: 8
+    marginTop: 2
   },
   submitDisabled: {
     opacity: 0.65
   },
-  submitText: {
+  emailSubmitText: {
     color: colors.onDark,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900"
   },
   legal: {
     color: colors.ink3,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
-    lineHeight: 15,
-    marginTop: 14,
-    textAlign: "center"
-  },
-  legalStrong: {
-    color: colors.ink2,
-    fontWeight: "900"
-  },
-  lockCopy: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "700",
+    lineHeight: 17,
     marginTop: 18,
     textAlign: "center"
   },
-  bottomSwitch: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 4,
-    justifyContent: "center",
-    marginTop: "auto",
-    paddingTop: 28
-  },
-  switchMuted: {
+  legalLink: {
     color: colors.ink2,
-    fontSize: 13,
-    fontWeight: "600"
-  },
-  switchLink: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   }
 });

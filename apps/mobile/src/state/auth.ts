@@ -14,13 +14,6 @@ import { useMvpStore } from "./mvp";
 
 type AuthStatus = "loading" | "signed_out" | "signed_in";
 
-type SignUpInput = {
-  email: string;
-  password: string;
-  name: string;
-  businessName: string;
-};
-
 type AuthState = {
   status: AuthStatus;
   session: AuthSession | null;
@@ -28,8 +21,7 @@ type AuthState = {
   error: string | null;
   initialize: () => Promise<void>;
   completeOAuthRedirect: (url: string) => Promise<boolean>;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (input: SignUpInput) => Promise<void>;
+  sendEmailLink: (email: string) => Promise<void>;
   startOAuth: (provider: OAuthProvider, input?: { businessName?: string | undefined; name?: string | undefined }) => Promise<void>;
   signOut: () => void;
 };
@@ -112,30 +104,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     return true;
   },
 
-  signIn: async (email, password) => {
+  sendEmailLink: async (email) => {
     set({ status: "loading", error: null });
 
     try {
-      const response = await snapquoteApi.signIn({ email: email.trim(), password });
-      await applyAuthResponse(response, set);
-    } catch (error) {
-      const message = userFacingErrorMessage(error);
-      set({ status: "signed_out", session: null, me: null, error: message });
-      throw new Error(message);
-    }
-  },
-
-  signUp: async (input) => {
-    set({ status: "loading", error: null });
-
-    try {
-      const response = await snapquoteApi.signUp({
-        email: input.email.trim(),
-        password: input.password,
-        name: input.name.trim(),
-        businessName: input.businessName.trim()
-      });
-      await applyAuthResponse(response, set);
+      const redirectTo = Linking.createURL("auth/callback");
+      await snapquoteApi.sendEmailLink({ email: email.trim(), redirectTo });
+      set({ status: "signed_out", session: null, me: null, error: null });
     } catch (error) {
       const message = userFacingErrorMessage(error);
       set({ status: "signed_out", session: null, me: null, error: message });

@@ -107,6 +107,13 @@ const authSchema = z.object({
   businessName: z.string().trim().min(1).max(120).optional()
 });
 
+const emailLinkSchema = z.object({
+  email: z.string().trim().email().max(320),
+  redirectTo: z.string().trim().min(1).max(1000),
+  name: z.string().trim().max(120).optional(),
+  businessName: z.string().trim().min(1).max(120).optional()
+});
+
 const oauthProviderSchema = z.enum(["apple", "google"]);
 
 const oauthStartSchema = z.object({
@@ -216,6 +223,10 @@ Deno.serve(async (request) => {
 
     if (route.method === "POST" && route.path === "/v1/auth/sign-in") {
       return json(await signIn(db, request));
+    }
+
+    if (route.method === "POST" && route.path === "/v1/auth/email-link") {
+      return json(await sendEmailLink(db, request));
     }
 
     if (route.method === "POST" && route.path === "/v1/auth/refresh") {
@@ -500,6 +511,27 @@ async function signIn(db: SupabaseClient, request: Request) {
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", member.org_id));
 
   return authResponse(await createAppSession(member), org, member);
+}
+
+async function sendEmailLink(db: SupabaseClient, request: Request) {
+  const input = parse(emailLinkSchema, await request.json());
+  const { error } = await db.auth.signInWithOtp({
+    email: input.email,
+    options: {
+      emailRedirectTo: input.redirectTo,
+      shouldCreateUser: true,
+      data: {
+        name: input.name ?? "",
+        business_name: input.businessName ?? ""
+      }
+    }
+  });
+
+  if (error) {
+    throw new HttpError(400, authFailureMessage(error));
+  }
+
+  return { ok: true, email: input.email };
 }
 
 async function refreshAuthSession(db: SupabaseClient, request: Request) {
