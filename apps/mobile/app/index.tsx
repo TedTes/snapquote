@@ -7,7 +7,7 @@ import { QuoteCard } from "../src/ui/QuoteCard";
 import { QuoteMark } from "../src/ui/QuoteMark";
 import { Screen } from "../src/ui/components";
 import { colors, radius } from "../src/ui/theme";
-import { formatMoney, initials } from "../src/lib/format";
+import { formatMoney } from "../src/lib/format";
 import { useQuoteRows } from "../src/state/useQuoteRows";
 import { useMvpStore, type QuoteRecord } from "../src/state/mvp";
 
@@ -86,9 +86,14 @@ export default function DashboardScreen() {
             <Text style={styles.title}>Today</Text>
             <Text style={styles.date}>{formatToday()}</Text>
           </View>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials(displayBusinessName)}</Text>
-          </View>
+          <Pressable
+            accessibilityLabel="Open profile"
+            accessibilityRole="button"
+            onPress={() => router.push("/settings/edit")}
+            style={styles.avatar}
+          >
+            <QuoteMark boxed size={39} />
+          </Pressable>
         </View>
 
         {rows.length === 0 ? (
@@ -462,16 +467,11 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
-    backgroundColor: colors.dark,
     borderRadius: 11,
     height: 39,
     justifyContent: "center",
+    overflow: "hidden",
     width: 39
-  },
-  avatarText: {
-    color: colors.onDark,
-    fontSize: 14,
-    fontWeight: "900"
   },
   pipelineCard: {
     backgroundColor: colors.surface,
