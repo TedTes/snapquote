@@ -1,14 +1,26 @@
 import { useState } from "react";
 import { Check, Play } from "lucide-react-native";
 import { router } from "expo-router";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import type { PainterChecklist } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../../src/lib/api";
 import { AnimatedScreenContent } from "../../src/ui/AnimatedScreenContent";
 import { Screen } from "../../src/ui/components";
-import { NewQuoteHeader, NewQuoteTitle, StickyAction } from "../../src/ui/NewQuoteScaffold";
+import {
+  NewQuoteHeader,
+  NewQuoteTitle,
+  StickyAction,
+} from "../../src/ui/NewQuoteScaffold";
 import { colors } from "../../src/ui/theme";
 import { useMvpStore } from "../../src/state/mvp";
+import { useAuthStore } from "../../src/state/auth";
 
 const sampleTranscript =
   "Paint two bedrooms, patch nail holes, remove the old wallpaper in the hallway, two coats, customer provides paint.";
@@ -18,8 +30,14 @@ export default function NewQuoteTranscriptScreen() {
   const updateWizard = useMvpStore((state) => state.updateWizard);
   const upsertRemoteQuote = useMvpStore((state) => state.upsertRemoteQuote);
   const startNewQuoteWizard = useMvpStore((state) => state.startNewQuoteWizard);
+  const generateDraftFromWizard = useMvpStore(
+    (state) => state.generateDraftFromWizard,
+  );
+  const authStatus = useAuthStore((state) => state.status);
   const [editing, setEditing] = useState(false);
-  const [transcript, setTranscript] = useState(wizard.transcript.trim() || sampleTranscript);
+  const [transcript, setTranscript] = useState(
+    wizard.transcript.trim() || sampleTranscript,
+  );
   const [generating, setGenerating] = useState(false);
 
   async function generate() {
@@ -30,7 +48,10 @@ export default function NewQuoteTranscriptScreen() {
     const currentWizard = { ...wizard, transcript: transcript.trim() };
 
     if (currentWizard.address.trim().length === 0) {
-      Alert.alert("Add a job address", "The address is required before drafting.");
+      Alert.alert(
+        "Add a job address",
+        "The address is required before drafting.",
+      );
       return;
     }
 
@@ -38,6 +59,12 @@ export default function NewQuoteTranscriptScreen() {
     setGenerating(true);
 
     try {
+      if (authStatus !== "signed_in") {
+        const quote = generateDraftFromWizard();
+        router.replace({ pathname: "/quote/[id]", params: { id: quote.id } });
+        return;
+      }
+
       const quote = await snapquoteApi.createQuote({
         address: currentWizard.address.trim(),
         jobTitle: currentWizard.jobTitle.trim(),
@@ -47,8 +74,8 @@ export default function NewQuoteTranscriptScreen() {
           name: currentWizard.customerName.trim() || "Unnamed customer",
           email: currentWizard.customerEmail.trim() || undefined,
           phone: currentWizard.customerPhone.trim() || undefined,
-          address: currentWizard.address.trim()
-        }
+          address: currentWizard.address.trim(),
+        },
       });
 
       upsertRemoteQuote(quote);
@@ -64,13 +91,20 @@ export default function NewQuoteTranscriptScreen() {
   return (
     <Screen edges={["top"]}>
       <NewQuoteHeader onBack={() => router.back()} step={4} />
-      <AnimatedScreenContent contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <AnimatedScreenContent
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <NewQuoteTitle
           helper="Fix any words — you can still edit every line after."
           title="Check before drafting"
         />
 
-        <Pressable accessibilityRole="button" onPress={() => setEditing(true)} style={styles.transcriptCard}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setEditing(true)}
+          style={styles.transcriptCard}
+        >
           {editing ? (
             <TextInput
               autoFocus
@@ -90,16 +124,27 @@ export default function NewQuoteTranscriptScreen() {
         <View style={styles.lockedCard}>
           <Check color={colors.green} size={14} strokeWidth={2.6} />
           <Text style={styles.lockedText}>
-            Checklist locked: <Text style={styles.lockedStrong}>{describeChecklist(wizard.checklist)}</Text>. Voice only adds the extras above.
+            Checklist locked:{" "}
+            <Text style={styles.lockedStrong}>
+              {describeChecklist(wizard.checklist)}
+            </Text>
+            . Voice only adds the extras above.
           </Text>
         </View>
 
-        <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.listenButton}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          style={styles.listenButton}
+        >
           <Play color={colors.ink2} size={14} strokeWidth={2.1} />
           <Text style={styles.listenText}>Re-listen · 0:24</Text>
         </Pressable>
       </AnimatedScreenContent>
-      <StickyAction label={generating ? "Generating..." : "Generate draft"} onPress={() => void generate()} />
+      <StickyAction
+        label={generating ? "Generating..." : "Generate draft"}
+        onPress={() => void generate()}
+      />
     </Screen>
   );
 }
@@ -109,15 +154,15 @@ function HighlightedTranscript(props: { transcript: string }) {
 
   return (
     <Text style={styles.transcriptText}>
-      {"\""}
+      {'"'}
       {parts.map((part, index) =>
         part.highlighted ? (
           <Mark key={`${part.text}-${index}`}>{part.text}</Mark>
         ) : (
           <Text key={`${part.text}-${index}`}>{part.text}</Text>
-        )
+        ),
       )}
-      {"\""}
+      {'"'}
     </Text>
   );
 }
@@ -126,8 +171,11 @@ function Mark(props: { children: string }) {
   return <Text style={styles.mark}>{props.children}</Text>;
 }
 
-function splitHighlightedTranscript(transcript: string): { highlighted: boolean; text: string }[] {
-  const highlights = /(patch (?:nail )?holes|wallpaper|customer (?:provides|supplies) paint)/gi;
+function splitHighlightedTranscript(
+  transcript: string,
+): { highlighted: boolean; text: string }[] {
+  const highlights =
+    /(patch (?:nail )?holes|wallpaper|customer (?:provides|supplies) paint)/gi;
   const parts: { highlighted: boolean; text: string }[] = [];
   let cursor = 0;
 
@@ -150,14 +198,15 @@ function splitHighlightedTranscript(transcript: string): { highlighted: boolean;
 }
 
 function describeChecklist(checklist: PainterChecklist): string {
-  const totalRooms = checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
+  const totalRooms =
+    checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
   const roomParts = (["small", "medium", "large"] as const)
     .filter((size) => checklist.rooms[size] > 0)
     .map((size) => `${checklist.rooms[size]} ${size}`);
   const surfaces = [
     checklist.surfaces.walls ? "walls" : null,
     checklist.surfaces.ceilings ? "ceilings" : null,
-    checklist.surfaces.trim ? "trim" : null
+    checklist.surfaces.trim ? "trim" : null,
   ].filter((surface): surface is string => surface !== null);
 
   const segments = [
@@ -165,8 +214,10 @@ function describeChecklist(checklist: PainterChecklist): string {
       ? `${roomParts.join(", ")} room${totalRooms === 1 ? "" : "s"}`
       : "no rooms",
     surfaces.length > 0 ? surfaces.join(", ") : null,
-    checklist.doorCount > 0 ? `${checklist.doorCount} door${checklist.doorCount === 1 ? "" : "s"}` : null,
-    `${checklist.coatCount} coat${checklist.coatCount === 1 ? "" : "s"}`
+    checklist.doorCount > 0
+      ? `${checklist.doorCount} door${checklist.doorCount === 1 ? "" : "s"}`
+      : null,
+    `${checklist.coatCount} coat${checklist.coatCount === 1 ? "" : "s"}`,
   ].filter((segment): segment is string => segment !== null);
 
   return segments.join(" · ");
@@ -176,7 +227,7 @@ const styles = StyleSheet.create({
   content: {
     gap: 14,
     paddingBottom: 16,
-    paddingTop: 21
+    paddingTop: 21,
   },
   transcriptCard: {
     backgroundColor: colors.surface,
@@ -185,13 +236,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 384,
     marginHorizontal: 19,
-    padding: 15
+    padding: 15,
   },
   transcriptText: {
     color: colors.ink2,
     fontSize: 15,
     fontWeight: "600",
-    lineHeight: 24
+    lineHeight: 24,
   },
   transcriptInput: {
     color: colors.ink,
@@ -200,12 +251,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 24,
     minHeight: 350,
-    padding: 0
+    padding: 0,
   },
   mark: {
     backgroundColor: colors.amberBg,
     color: colors.ink,
-    fontWeight: "900"
+    fontWeight: "900",
   },
   lockedCard: {
     alignItems: "flex-start",
@@ -216,17 +267,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 9,
     marginHorizontal: 19,
-    padding: 13
+    padding: 13,
   },
   lockedText: {
     color: colors.green,
     flex: 1,
     fontSize: 12,
     fontWeight: "600",
-    lineHeight: 17
+    lineHeight: 17,
   },
   lockedStrong: {
-    fontWeight: "900"
+    fontWeight: "900",
   },
   listenButton: {
     alignItems: "center",
@@ -238,11 +289,11 @@ const styles = StyleSheet.create({
     gap: 9,
     height: 39,
     justifyContent: "center",
-    marginHorizontal: 19
+    marginHorizontal: 19,
   },
   listenText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900"
-  }
+    fontWeight: "900",
+  },
 });

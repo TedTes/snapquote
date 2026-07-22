@@ -1,14 +1,39 @@
 import { useMemo, useState } from "react";
-import { BookOpen, Check, CircleAlert, Lock, Plus, Search } from "lucide-react-native";
+import {
+  BookOpen,
+  Check,
+  CircleAlert,
+  Lock,
+  Plus,
+  Search,
+} from "lucide-react-native";
 import { router } from "expo-router";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { quoteUnits, type PriceBookItem, type QuoteLineItem } from "@snapquote/shared";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import {
+  quoteUnits,
+  type PriceBookItem,
+  type QuoteLineItem,
+} from "@snapquote/shared";
 import { AnimatedCard } from "../src/ui/AnimatedCard";
 import { AnimatedSheetContent, SheetModal } from "../src/ui/AnimatedSheet";
 import { BottomTabBar } from "../src/ui/BottomTabBar";
-import { Field, PrimaryButton, Screen, SegmentedControl } from "../src/ui/components";
+import {
+  Field,
+  PrimaryButton,
+  Screen,
+  SegmentedControl,
+} from "../src/ui/components";
 import { colors, radius, shadowLg, spacing } from "../src/ui/theme";
 import { centsToDollars, dollarsToCents, useMvpStore } from "../src/state/mvp";
+import { useAuthStore } from "../src/state/auth";
 import { formatMoney } from "../src/lib/format";
 import { snapquoteApi, userFacingErrorMessage } from "../src/lib/api";
 
@@ -16,6 +41,12 @@ const searchThreshold = 10;
 
 export default function PriceBookScreen() {
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
+  const authStatus = useAuthStore((state) => state.status);
+  const addPriceBookItem = useMvpStore((state) => state.addPriceBookItem);
+  const confirmPriceBookItem = useMvpStore(
+    (state) => state.confirmPriceBookItem,
+  );
+  const updatePriceBookItem = useMvpStore((state) => state.updatePriceBookItem);
   const upsertPriceBookItem = useMvpStore((state) => state.upsertPriceBookItem);
 
   const [query, setQuery] = useState("");
@@ -33,18 +64,28 @@ export default function PriceBookScreen() {
     }
 
     return priceBookItems.filter(
-      (item) => item.name.toLowerCase().includes(term) || item.description.toLowerCase().includes(term)
+      (item) =>
+        item.name.toLowerCase().includes(term) ||
+        item.description.toLowerCase().includes(term),
     );
   }, [priceBookItems, query, showSearch]);
 
   const active = filtered.filter((item) => item.confirmedAt !== null);
   const inactive = filtered.filter((item) => item.confirmedAt === null);
-  const editingItem = priceBookItems.find((item) => item.id === editingItemId) ?? null;
-  const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
-  const starterCount = priceBookItems.filter((item) => item.confirmedAt === null).length;
+  const editingItem =
+    priceBookItems.find((item) => item.id === editingItemId) ?? null;
+  const confirmedCount = priceBookItems.filter(
+    (item) => item.confirmedAt !== null,
+  ).length;
+  const starterCount = priceBookItems.filter(
+    (item) => item.confirmedAt === null,
+  ).length;
   const hasItems = priceBookItems.length > 0;
 
-  async function saveExistingPrice(item: PriceBookItem, pricing: PriceBookItem["pricing"]) {
+  async function saveExistingPrice(
+    item: PriceBookItem,
+    pricing: PriceBookItem["pricing"],
+  ) {
     if (savingItemId !== null) {
       return;
     }
@@ -52,7 +93,17 @@ export default function PriceBookScreen() {
     setSavingItemId(item.id);
 
     try {
-      const updated = await snapquoteApi.updatePriceBookItem(item.id, { pricing, confirmed: true });
+      if (authStatus !== "signed_in") {
+        confirmPriceBookItem(item.id, pricing);
+        updatePriceBookItem(item.id, { pricing });
+        setEditingItemId(null);
+        return;
+      }
+
+      const updated = await snapquoteApi.updatePriceBookItem(item.id, {
+        pricing,
+        confirmed: true,
+      });
       upsertPriceBookItem(updated);
       setEditingItemId(null);
     } catch (error) {
@@ -76,7 +127,16 @@ export default function PriceBookScreen() {
     setSavingNewItem(true);
 
     try {
-      const created = await snapquoteApi.createPriceBookItem({ ...input, confirmed: true });
+      if (authStatus !== "signed_in") {
+        addPriceBookItem(input);
+        setShowAddModal(false);
+        return;
+      }
+
+      const created = await snapquoteApi.createPriceBookItem({
+        ...input,
+        confirmed: true,
+      });
       upsertPriceBookItem(created);
       setShowAddModal(false);
     } catch (error) {
@@ -90,11 +150,16 @@ export default function PriceBookScreen() {
     <Screen edges={["top"]}>
       {hasItems ? (
         <View style={styles.screen}>
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.header}>
               <View style={styles.titleRow}>
                 <Text style={styles.title}>Price book</Text>
-                <Text style={styles.itemCount}>{priceBookItems.length} items</Text>
+                <Text style={styles.itemCount}>
+                  {priceBookItems.length} items
+                </Text>
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -125,20 +190,36 @@ export default function PriceBookScreen() {
               </View>
             ) : null}
 
-            {active.length === 0 && inactive.length === 0 ? <NoPriceBookMatches /> : null}
+            {active.length === 0 && inactive.length === 0 ? (
+              <NoPriceBookMatches />
+            ) : null}
 
             {active.length > 0 ? (
-              <PriceBookSection count={active.length} label="Active — matches green">
+              <PriceBookSection
+                count={active.length}
+                label="Active — matches green"
+              >
                 {active.map((item) => (
-                  <ActivePriceItem key={item.id} item={item} onPress={() => setEditingItemId(item.id)} />
+                  <ActivePriceItem
+                    key={item.id}
+                    item={item}
+                    onPress={() => setEditingItemId(item.id)}
+                  />
                 ))}
               </PriceBookSection>
             ) : null}
 
             {inactive.length > 0 ? (
-              <PriceBookSection count={inactive.length} label="Starters to confirm">
+              <PriceBookSection
+                count={inactive.length}
+                label="Starters to confirm"
+              >
                 {inactive.map((item) => (
-                  <StarterPriceItem key={item.id} item={item} onPress={() => setEditingItemId(item.id)} />
+                  <StarterPriceItem
+                    key={item.id}
+                    item={item}
+                    onPress={() => setEditingItemId(item.id)}
+                  />
                 ))}
               </PriceBookSection>
             ) : null}
@@ -161,7 +242,11 @@ export default function PriceBookScreen() {
       )}
       <BottomTabBar />
 
-      <SheetModal onDismiss={() => setEditingItemId(null)} style={styles.modalBackdrop} visible={editingItem !== null}>
+      <SheetModal
+        onDismiss={() => setEditingItemId(null)}
+        style={styles.modalBackdrop}
+        visible={editingItem !== null}
+      >
         {editingItem ? (
           <PriceItemModal
             item={editingItem}
@@ -174,7 +259,11 @@ export default function PriceBookScreen() {
         ) : null}
       </SheetModal>
 
-      <SheetModal onDismiss={() => setShowAddModal(false)} style={styles.modalBackdrop} visible={showAddModal}>
+      <SheetModal
+        onDismiss={() => setShowAddModal(false)}
+        style={styles.modalBackdrop}
+        visible={showAddModal}
+      >
         <AddItemModal
           onClose={() => setShowAddModal(false)}
           onSave={(input) => void saveNewItem(input)}
@@ -185,8 +274,15 @@ export default function PriceBookScreen() {
   );
 }
 
-function BookStrengthCard(props: { confirmedCount: number; starterCount: number; totalCount: number }) {
-  const segments = Array.from({ length: props.totalCount }, (_, index) => index);
+function BookStrengthCard(props: {
+  confirmedCount: number;
+  starterCount: number;
+  totalCount: number;
+}) {
+  const segments = Array.from(
+    { length: props.totalCount },
+    (_, index) => index,
+  );
 
   return (
     <View style={styles.strengthCard}>
@@ -202,7 +298,10 @@ function BookStrengthCard(props: { confirmedCount: number; starterCount: number;
             key={index}
             style={[
               styles.strengthBar,
-              { backgroundColor: index < props.confirmedCount ? colors.green : colors.amber }
+              {
+                backgroundColor:
+                  index < props.confirmedCount ? colors.green : colors.amber,
+              },
             ]}
           />
         ))}
@@ -216,7 +315,10 @@ function BookStrengthCard(props: { confirmedCount: number; starterCount: number;
   );
 }
 
-function EmptyPriceBookState(props: { onStarterSetup: () => void; onAddManual: () => void }) {
+function EmptyPriceBookState(props: {
+  onStarterSetup: () => void;
+  onAddManual: () => void;
+}) {
   return (
     <View style={styles.emptyFull}>
       <View style={styles.emptyIconCard}>
@@ -225,27 +327,42 @@ function EmptyPriceBookState(props: { onStarterSetup: () => void; onAddManual: (
 
       <Text style={styles.emptyHeadline}>Build your price book</Text>
       <Text style={styles.emptyCopy}>
-        This is where your prices live. SnapQuote drafts the scope of a job, but pulls every dollar from here — so it never guesses.
+        This is where your prices live. SnapQuote drafts the scope of a job, but
+        pulls every dollar from here — so it never guesses.
       </Text>
 
-      <Pressable accessibilityRole="button" onPress={props.onStarterSetup} style={styles.emptyPrimary}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={props.onStarterSetup}
+        style={styles.emptyPrimary}
+      >
         <Plus color={colors.onDark} size={16} strokeWidth={2.8} />
         <Text style={styles.emptyPrimaryText}>Set up starter prices</Text>
       </Pressable>
 
-      <Pressable accessibilityRole="button" hitSlop={10} onPress={props.onAddManual}>
+      <Pressable
+        accessibilityRole="button"
+        hitSlop={10}
+        onPress={props.onAddManual}
+      >
         <Text style={styles.manualLink}>Or add an item manually</Text>
       </Pressable>
 
       <View style={styles.emptyLock}>
         <Lock color={colors.ink3} size={11} />
-        <Text style={styles.emptyLockText}>Prices come only from your book or you</Text>
+        <Text style={styles.emptyLockText}>
+          Prices come only from your book or you
+        </Text>
       </View>
     </View>
   );
 }
 
-function PriceBookSection(props: { count: number; label: string; children: React.ReactNode }) {
+function PriceBookSection(props: {
+  count: number;
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -260,7 +377,11 @@ function PriceBookSection(props: { count: number; label: string; children: React
 function ActivePriceItem(props: { item: PriceBookItem; onPress: () => void }) {
   return (
     <AnimatedCard>
-      <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.priceCard}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={props.onPress}
+        style={styles.priceCard}
+      >
         <View style={styles.checkBadge}>
           <Check color={colors.green} size={15} strokeWidth={2.8} />
         </View>
@@ -291,7 +412,11 @@ function ActivePriceItem(props: { item: PriceBookItem; onPress: () => void }) {
 function StarterPriceItem(props: { item: PriceBookItem; onPress: () => void }) {
   return (
     <AnimatedCard>
-      <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.starterCard}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={props.onPress}
+        style={styles.starterCard}
+      >
         <View style={styles.alertBadge}>
           <CircleAlert color={colors.amber} size={14} strokeWidth={2.5} />
         </View>
@@ -316,7 +441,9 @@ function NoPriceBookMatches() {
   return (
     <View style={styles.noMatches}>
       <Text style={styles.noMatchesTitle}>Nothing matches</Text>
-      <Text style={styles.noMatchesText}>Try another item name or clear the search.</Text>
+      <Text style={styles.noMatchesText}>
+        Try another item name or clear the search.
+      </Text>
     </View>
   );
 }
@@ -329,7 +456,9 @@ function priceAmountLabel(item: PriceBookItem): string {
   return formatMoney(item.pricing.prices.medium);
 }
 
-function roomSizeSummary(pricing: Extract<PriceBookItem["pricing"], { type: "room_size" }>): string {
+function roomSizeSummary(
+  pricing: Extract<PriceBookItem["pricing"], { type: "room_size" }>,
+): string {
   const { small, medium, large } = pricing.prices;
 
   if (medium <= 0) {
@@ -364,17 +493,27 @@ function PriceItemModal(props: {
   const { item } = props;
   const pricing = item.pricing;
   const isRoomSize = pricing.type === "room_size";
-  const [small, setSmall] = useState(pricing.type === "room_size" ? centsToDollars(pricing.prices.small) : "");
-  const [medium, setMedium] = useState(
-    pricing.type === "room_size" ? centsToDollars(pricing.prices.medium) : centsToDollars(pricing.unitPriceCents)
+  const [small, setSmall] = useState(
+    pricing.type === "room_size" ? centsToDollars(pricing.prices.small) : "",
   );
-  const [large, setLarge] = useState(pricing.type === "room_size" ? centsToDollars(pricing.prices.large) : "");
+  const [medium, setMedium] = useState(
+    pricing.type === "room_size"
+      ? centsToDollars(pricing.prices.medium)
+      : centsToDollars(pricing.unitPriceCents),
+  );
+  const [large, setLarge] = useState(
+    pricing.type === "room_size" ? centsToDollars(pricing.prices.large) : "",
+  );
 
   function save() {
     if (isRoomSize) {
       props.onSave({
         type: "room_size",
-        prices: { small: dollarsToCents(small), medium: dollarsToCents(medium), large: dollarsToCents(large) }
+        prices: {
+          small: dollarsToCents(small),
+          medium: dollarsToCents(medium),
+          large: dollarsToCents(large),
+        },
       });
       return;
     }
@@ -391,21 +530,50 @@ function PriceItemModal(props: {
       {isRoomSize ? (
         <View style={styles.row}>
           <View style={styles.rowItem}>
-            <Field keyboardType="decimal-pad" label="Small $" onChangeText={setSmall} value={small} />
+            <Field
+              keyboardType="decimal-pad"
+              label="Small $"
+              onChangeText={setSmall}
+              value={small}
+            />
           </View>
           <View style={styles.rowItem}>
-            <Field keyboardType="decimal-pad" label="Medium $" onChangeText={setMedium} value={medium} />
+            <Field
+              keyboardType="decimal-pad"
+              label="Medium $"
+              onChangeText={setMedium}
+              value={medium}
+            />
           </View>
           <View style={styles.rowItem}>
-            <Field keyboardType="decimal-pad" label="Large $" onChangeText={setLarge} value={large} />
+            <Field
+              keyboardType="decimal-pad"
+              label="Large $"
+              onChangeText={setLarge}
+              value={large}
+            />
           </View>
         </View>
       ) : (
-        <Field keyboardType="decimal-pad" label={`Price ($ / ${item.unit})`} onChangeText={setMedium} value={medium} />
+        <Field
+          keyboardType="decimal-pad"
+          label={`Price ($ / ${item.unit})`}
+          onChangeText={setMedium}
+          value={medium}
+        />
       )}
 
-      <PrimaryButton disabled={props.saving} label={props.saving ? "Saving..." : "Save price"} onPress={save} />
-      <Pressable accessibilityRole="button" disabled={props.saving} onPress={props.onClose} style={styles.cancelLink}>
+      <PrimaryButton
+        disabled={props.saving}
+        label={props.saving ? "Saving..." : "Save price"}
+        onPress={save}
+      />
+      <Pressable
+        accessibilityRole="button"
+        disabled={props.saving}
+        onPress={props.onClose}
+        style={styles.cancelLink}
+      >
         <Text style={styles.cancelLinkText}>Cancel</Text>
       </Pressable>
     </AnimatedSheetContent>
@@ -441,7 +609,7 @@ function AddItemModal(props: {
       description: description.trim(),
       unit,
       kind,
-      pricing: { type: "fixed", unitPriceCents: dollarsToCents(price) }
+      pricing: { type: "fixed", unitPriceCents: dollarsToCents(price) },
     });
     setName("");
     setDescription("");
@@ -452,9 +620,24 @@ function AddItemModal(props: {
     <AnimatedSheetContent style={styles.sheet}>
       <View style={styles.grabber} />
       <Text style={styles.sheetTitle}>Add price book item</Text>
-      <Field label="Name" onChangeText={setName} placeholder="e.g. Pressure wash siding" value={name} />
-      <Field label="Description" onChangeText={setDescription} placeholder="Optional" value={description} />
-      <Field keyboardType="decimal-pad" label="Price ($)" onChangeText={setPrice} value={price} />
+      <Field
+        label="Name"
+        onChangeText={setName}
+        placeholder="e.g. Pressure wash siding"
+        value={name}
+      />
+      <Field
+        label="Description"
+        onChangeText={setDescription}
+        placeholder="Optional"
+        value={description}
+      />
+      <Field
+        keyboardType="decimal-pad"
+        label="Price ($)"
+        onChangeText={setPrice}
+        value={price}
+      />
 
       <Text style={styles.fieldLabel}>Unit</Text>
       <View style={styles.unitRow}>
@@ -463,9 +646,19 @@ function AddItemModal(props: {
             accessibilityRole="button"
             key={option}
             onPress={() => setUnit(option)}
-            style={[styles.unitChip, unit === option ? styles.unitChipActive : null]}
+            style={[
+              styles.unitChip,
+              unit === option ? styles.unitChipActive : null,
+            ]}
           >
-            <Text style={[styles.unitChipText, unit === option ? styles.unitChipTextActive : null]}>{option}</Text>
+            <Text
+              style={[
+                styles.unitChipText,
+                unit === option ? styles.unitChipTextActive : null,
+              ]}
+            >
+              {option}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -474,13 +667,22 @@ function AddItemModal(props: {
         onChange={setKind}
         options={[
           { label: "Labour", value: "labour" },
-          { label: "Material", value: "material" }
+          { label: "Material", value: "material" },
         ]}
         value={kind}
       />
 
-      <PrimaryButton disabled={!canSave || props.saving} label={props.saving ? "Adding..." : "Add item"} onPress={save} />
-      <Pressable accessibilityRole="button" disabled={props.saving} onPress={props.onClose} style={styles.cancelLink}>
+      <PrimaryButton
+        disabled={!canSave || props.saving}
+        label={props.saving ? "Adding..." : "Add item"}
+        onPress={save}
+      />
+      <Pressable
+        accessibilityRole="button"
+        disabled={props.saving}
+        onPress={props.onClose}
+        style={styles.cancelLink}
+      >
         <Text style={styles.cancelLinkText}>Cancel</Text>
       </Pressable>
     </AnimatedSheetContent>
@@ -489,38 +691,38 @@ function AddItemModal(props: {
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1
+    flex: 1,
   },
   content: {
     gap: 12,
     padding: 18,
-    paddingBottom: 92
+    paddingBottom: 92,
   },
   emptyScreen: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 22
+    paddingTop: 22,
   },
   header: {
     alignItems: "center",
     flexDirection: "row",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
   },
   titleRow: {
     alignItems: "baseline",
     flexDirection: "row",
-    gap: 10
+    gap: 10,
   },
   title: {
     color: colors.ink,
     fontSize: 25,
     fontWeight: "900",
-    letterSpacing: 0
+    letterSpacing: 0,
   },
   itemCount: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "800"
+    fontWeight: "800",
   },
   addButton: {
     alignItems: "center",
@@ -530,7 +732,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 38,
     justifyContent: "center",
-    width: 38
+    width: 38,
   },
   strengthCard: {
     backgroundColor: colors.surface,
@@ -538,39 +740,39 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: 1,
     gap: 9,
-    padding: 14
+    padding: 14,
   },
   strengthTop: {
     alignItems: "center",
     flexDirection: "row",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
   },
   strengthLabel: {
     color: colors.ink2,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.4,
-    textTransform: "uppercase"
+    textTransform: "uppercase",
   },
   strengthCount: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "900",
   },
   strengthBars: {
     flexDirection: "row",
-    gap: 4
+    gap: 4,
   },
   strengthBar: {
     borderRadius: 2,
     flex: 1,
-    height: 11
+    height: 11,
   },
   strengthCopy: {
     color: colors.ink3,
     fontSize: 11,
     fontWeight: "600",
-    lineHeight: 14
+    lineHeight: 14,
   },
   searchBox: {
     alignItems: "center",
@@ -581,29 +783,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     height: 38,
-    paddingHorizontal: 12
+    paddingHorizontal: 12,
   },
   searchInput: {
     color: colors.ink,
     flex: 1,
     fontSize: 13,
-    paddingVertical: 0
+    paddingVertical: 0,
   },
   section: {
     gap: 8,
-    marginTop: 10
+    marginTop: 10,
   },
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8
+    gap: 8,
   },
   sectionLabel: {
     color: colors.ink3,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.45,
-    textTransform: "uppercase"
+    textTransform: "uppercase",
   },
   sectionCount: {
     backgroundColor: colors.surface,
@@ -617,10 +819,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: 5,
     paddingVertical: 1,
-    textAlign: "center"
+    textAlign: "center",
   },
   sectionCards: {
-    gap: 8
+    gap: 8,
   },
   priceCard: {
     alignItems: "center",
@@ -631,7 +833,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 11,
     minHeight: 67,
-    paddingHorizontal: 13
+    paddingHorizontal: 13,
   },
   starterCard: {
     alignItems: "center",
@@ -643,7 +845,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 11,
     minHeight: 67,
-    paddingHorizontal: 13
+    paddingHorizontal: 13,
   },
   checkBadge: {
     alignItems: "center",
@@ -651,7 +853,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     height: 25,
     justifyContent: "center",
-    width: 25
+    width: 25,
   },
   alertBadge: {
     alignItems: "center",
@@ -659,28 +861,28 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     height: 25,
     justifyContent: "center",
-    width: 25
+    width: 25,
   },
   priceBody: {
     flex: 1,
     gap: 6,
-    minWidth: 0
+    minWidth: 0,
   },
   itemName: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900"
+    fontWeight: "900",
   },
   starterName: {
     color: colors.ink2,
     fontSize: 14,
-    fontWeight: "900"
+    fontWeight: "900",
   },
   itemMetaRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 7,
-    minWidth: 0
+    minWidth: 0,
   },
   unitBadge: {
     backgroundColor: colors.surfaceMuted,
@@ -692,30 +894,30 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     overflow: "hidden",
     paddingHorizontal: 6,
-    paddingVertical: 3
+    paddingVertical: 3,
   },
   itemSub: {
     color: colors.ink3,
     flexShrink: 1,
     fontSize: 10,
-    fontWeight: "800"
+    fontWeight: "800",
   },
   savedText: {
     color: colors.green,
     flexShrink: 1,
     fontSize: 10,
-    fontWeight: "800"
+    fontWeight: "800",
   },
   starterSub: {
     color: colors.amber,
     fontSize: 11,
-    fontWeight: "800"
+    fontWeight: "800",
   },
   itemPrice: {
     color: colors.ink,
     fontSize: 15,
     fontWeight: "900",
-    textAlign: "right"
+    textAlign: "right",
   },
   confirmButton: {
     alignItems: "center",
@@ -727,12 +929,12 @@ const styles = StyleSheet.create({
     gap: 5,
     height: 34,
     justifyContent: "center",
-    paddingHorizontal: 12
+    paddingHorizontal: 12,
   },
   confirmButtonText: {
     color: colors.amber,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "900",
   },
   noMatches: {
     backgroundColor: colors.surface,
@@ -740,24 +942,24 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     gap: 5,
-    padding: 16
+    padding: 16,
   },
   noMatchesTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "900"
+    fontWeight: "900",
   },
   noMatchesText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600"
+    fontWeight: "600",
   },
   emptyFull: {
     alignItems: "center",
     flex: 1,
     justifyContent: "center",
     paddingBottom: 86,
-    paddingHorizontal: 34
+    paddingHorizontal: 34,
   },
   emptyIconCard: {
     alignItems: "center",
@@ -769,14 +971,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 24,
     width: 96,
-    ...shadowLg
+    ...shadowLg,
   },
   emptyHeadline: {
     color: colors.ink,
     fontSize: 21,
     fontWeight: "900",
     marginBottom: 9,
-    textAlign: "center"
+    textAlign: "center",
   },
   emptyCopy: {
     color: colors.ink2,
@@ -785,7 +987,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 26,
     maxWidth: 290,
-    textAlign: "center"
+    textAlign: "center",
   },
   emptyPrimary: {
     alignItems: "center",
@@ -797,40 +999,40 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 13,
     paddingHorizontal: 25,
-    ...shadowLg
+    ...shadowLg,
   },
   emptyPrimaryText: {
     color: colors.onDark,
     fontSize: 15,
-    fontWeight: "900"
+    fontWeight: "900",
   },
   manualLink: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "900",
   },
   emptyLock: {
     alignItems: "center",
     flexDirection: "row",
     gap: 6,
-    marginTop: 28
+    marginTop: 28,
   },
   emptyLockText: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "600"
+    fontWeight: "600",
   },
   modalBackdrop: {
     backgroundColor: "rgba(18,22,28,0.35)",
     flex: 1,
-    justifyContent: "flex-end"
+    justifyContent: "flex-end",
   },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.sm,
-    padding: spacing.lg
+    padding: spacing.lg,
   },
   grabber: {
     alignSelf: "center",
@@ -838,61 +1040,61 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     height: 4,
     marginBottom: spacing.xs,
-    width: 38
+    width: 38,
   },
   sheetTitle: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "800"
+    fontWeight: "800",
   },
   sheetSubtitle: {
     color: colors.ink2,
     fontSize: 13,
-    marginBottom: spacing.xs
+    marginBottom: spacing.xs,
   },
   row: {
     flexDirection: "row",
-    gap: spacing.sm
+    gap: spacing.sm,
   },
   rowItem: {
-    flex: 1
+    flex: 1,
   },
   fieldLabel: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600"
+    fontWeight: "600",
   },
   unitRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6
+    gap: 6,
   },
   unitChip: {
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 6
+    paddingVertical: 6,
   },
   unitChipActive: {
     backgroundColor: colors.dark,
-    borderColor: colors.dark
+    borderColor: colors.dark,
   },
   unitChipText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "600"
+    fontWeight: "600",
   },
   unitChipTextActive: {
-    color: colors.onDark
+    color: colors.onDark,
   },
   cancelLink: {
     alignItems: "center",
-    paddingVertical: spacing.xs
+    paddingVertical: spacing.xs,
   },
   cancelLinkText: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "600"
-  }
+    fontWeight: "600",
+  },
 });

@@ -1,9 +1,20 @@
 import { useState } from "react";
 import { Mail, MessageCircle } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import type { QuoteDiscount } from "@snapquote/shared";
-import { AnimatedSheetContent, SheetModal } from "../../../src/ui/AnimatedSheet";
+import {
+  AnimatedSheetContent,
+  SheetModal,
+} from "../../../src/ui/AnimatedSheet";
 import {
   Banner,
   Card,
@@ -15,18 +26,19 @@ import {
   PrimaryButton,
   Screen,
   SegmentedControl,
-  TopBar
+  TopBar,
 } from "../../../src/ui/components";
 import { colors, radius, spacing } from "../../../src/ui/theme";
 import { formatLongDate, formatMoney, initials } from "../../../src/lib/format";
 import { snapquoteApi, userFacingErrorMessage } from "../../../src/lib/api";
+import { useAuthStore } from "../../../src/state/auth";
 import {
   getCustomer,
   getQuoteBlockers,
   getQuoteStatus,
   getQuoteTotals,
   dollarsToCents,
-  useMvpStore
+  useMvpStore,
 } from "../../../src/state/mvp";
 
 type DiscountMode = QuoteDiscount["type"];
@@ -34,20 +46,27 @@ type DiscountMode = QuoteDiscount["type"];
 export default function QuotePreviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const businessName = useMvpStore((state) => state.businessName);
-  const quote = useMvpStore((state) => state.quotes.find((candidate) => candidate.id === id));
+  const quote = useMvpStore((state) =>
+    state.quotes.find((candidate) => candidate.id === id),
+  );
   const customers = useMvpStore((state) => state.customers);
   const events = useMvpStore((state) => state.events);
+  const authStatus = useAuthStore((state) => state.status);
+  const updateQuoteDiscount = useMvpStore((state) => state.updateQuoteDiscount);
+  const removeRemoteQuote = useMvpStore((state) => state.removeRemoteQuote);
   const upsertRemoteQuote = useMvpStore((state) => state.upsertRemoteQuote);
 
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDiscountSheet, setShowDiscountSheet] = useState(false);
-  const [discountMode, setDiscountMode] = useState<DiscountMode>(quote?.discount.type ?? "none");
+  const [discountMode, setDiscountMode] = useState<DiscountMode>(
+    quote?.discount.type ?? "none",
+  );
   const [discountValue, setDiscountValue] = useState(
     quote?.discount.type === "percent"
       ? String(quote.discount.value)
       : quote?.discount.type === "cents"
         ? String(Math.round(quote.discount.value / 100))
-        : ""
+        : "",
   );
   const [sending, setSending] = useState(false);
   const [savingDiscount, setSavingDiscount] = useState(false);
@@ -57,7 +76,10 @@ export default function QuotePreviewScreen() {
       <Screen>
         <TopBar title="Preview" onBack={() => router.replace("/")} />
         <View style={styles.notFound}>
-          <EmptyState text="It may have been deleted." title="Quote not found" />
+          <EmptyState
+            text="It may have been deleted."
+            title="Quote not found"
+          />
         </View>
       </Screen>
     );
@@ -67,21 +89,70 @@ export default function QuotePreviewScreen() {
   const status = getQuoteStatus(quote, events);
   const blockers = getQuoteBlockers(quote);
   const totals = getQuoteTotals(quote);
-  const sortedLines = [...quote.lineItems].sort((a, b) => a.position - b.position);
-  const canSend = status === "draft" && blockers.reasons.length === 0 && totals !== null;
+  const sortedLines = [...quote.lineItems].sort(
+    (a, b) => a.position - b.position,
+  );
+  const canSend =
+    status === "draft" && blockers.reasons.length === 0 && totals !== null;
 
   async function confirmSend() {
     if (!quote) {
       return;
     }
 
+    if (authStatus !== "signed_in") {
+      setShowSendSheet(false);
+      Alert.alert(
+        "Continue to send",
+        "Use Apple, Google, or an email link to send this quote and track customer views.",
+        [
+          { text: "Not now", style: "cancel" },
+          { text: "Continue", onPress: () => router.push("/auth") },
+        ],
+      );
+      return;
+    }
+
     setSending(true);
 
     try {
-      const updated = await snapquoteApi.sendQuote(quote.id);
+      let quoteIdToSend = quote.id;
+
+      if (quote.id.startsWith("quote-")) {
+        const created = await snapquoteApi.createQuote({
+          customer: {
+            name: customer?.name ?? "Unnamed customer",
+            email: customer?.email ?? null,
+            phone: customer?.phone ?? null,
+            address: quote.address,
+          },
+          address: quote.address,
+          jobTitle: quote.jobTitle,
+          checklist: quote.checklist,
+          transcript: quote.transcript,
+          typedNotes: quote.notes,
+        });
+        const synced = await snapquoteApi.patchQuote(created.id, {
+          discount: quote.discount,
+          lineItems: quote.lineItems.map(({ id: _lineId, ...line }) => ({
+            ...line,
+            priceBookItemId: null,
+          })),
+          notes: quote.notes,
+          taxRate: quote.taxRate,
+          terms: quote.terms,
+          validUntil: quote.validUntil,
+        });
+
+        upsertRemoteQuote(synced);
+        removeRemoteQuote(quote.id);
+        quoteIdToSend = synced.id;
+      }
+
+      const updated = await snapquoteApi.sendQuote(quoteIdToSend);
       upsertRemoteQuote(updated);
       setShowSendSheet(false);
-      router.replace({ pathname: "/quote/[id]", params: { id: quote.id } });
+      router.replace({ pathname: "/quote/[id]", params: { id: updated.id } });
     } catch (error) {
       Alert.alert("Could not send quote", userFacingErrorMessage(error));
     } finally {
@@ -99,8 +170,19 @@ export default function QuotePreviewScreen() {
       discountMode === "none"
         ? { type: "none", value: 0 }
         : discountMode === "percent"
-          ? { type: "percent", value: Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 0 }
+          ? {
+              type: "percent",
+              value: Number.isFinite(parsed)
+                ? Math.max(0, Math.min(100, parsed))
+                : 0,
+            }
           : { type: "cents", value: dollarsToCents(discountValue) };
+
+    if (authStatus !== "signed_in") {
+      updateQuoteDiscount(quote.id, discount);
+      setShowDiscountSheet(false);
+      return;
+    }
 
     setSavingDiscount(true);
 
@@ -117,7 +199,11 @@ export default function QuotePreviewScreen() {
 
   return (
     <Screen>
-      <TopBar eyebrow="as customer sees it" title="Preview" onBack={() => router.back()} />
+      <TopBar
+        eyebrow="as customer sees it"
+        title="Preview"
+        onBack={() => router.back()}
+      />
       <ScrollView contentContainerStyle={styles.content}>
         <Card style={styles.brandCard}>
           <View style={styles.logo}>
@@ -136,7 +222,11 @@ export default function QuotePreviewScreen() {
             <View key={line.id}>
               <KeyValueRow
                 label={line.description}
-                value={formatMoney(line.unitPriceCents !== null ? Math.round(line.quantity * line.unitPriceCents) : null)}
+                value={formatMoney(
+                  line.unitPriceCents !== null
+                    ? Math.round(line.quantity * line.unitPriceCents)
+                    : null,
+                )}
               />
               {index < sortedLines.length - 1 ? <Divider /> : null}
             </View>
@@ -144,53 +234,91 @@ export default function QuotePreviewScreen() {
         </Card>
 
         <Card>
-          <KeyValueRow label="Subtotal" value={totals ? formatMoney(totals.subtotalCents) : "$--"} />
+          <KeyValueRow
+            label="Subtotal"
+            value={totals ? formatMoney(totals.subtotalCents) : "$--"}
+          />
           {totals && totals.discountCents > 0 ? (
             <>
               <View style={styles.spacer} />
-              <KeyValueRow label="Discount" value={`-${formatMoney(totals.discountCents)}`} />
+              <KeyValueRow
+                label="Discount"
+                value={`-${formatMoney(totals.discountCents)}`}
+              />
             </>
           ) : null}
           {status === "draft" ? (
             <>
               <View style={styles.spacer} />
-              <Pressable accessibilityRole="button" onPress={() => setShowDiscountSheet(true)} style={styles.discountButton}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowDiscountSheet(true)}
+                style={styles.discountButton}
+              >
                 <Text style={styles.discountButtonText}>
-                  {quote.discount.type === "none" ? "Add discount" : "Edit discount"}
+                  {quote.discount.type === "none"
+                    ? "Add discount"
+                    : "Edit discount"}
                 </Text>
               </Pressable>
             </>
           ) : null}
           <View style={styles.spacer} />
-          <KeyValueRow label={`Tax (${Math.round(quote.taxRate * 100)}%)`} value={totals ? formatMoney(totals.taxCents) : "$--"} />
+          <KeyValueRow
+            label={`Tax (${Math.round(quote.taxRate * 100)}%)`}
+            value={totals ? formatMoney(totals.taxCents) : "$--"}
+          />
           <Divider />
-          <KeyValueRow label="Total" strong value={totals ? formatMoney(totals.totalCents) : "$--"} />
+          <KeyValueRow
+            label="Total"
+            strong
+            value={totals ? formatMoney(totals.totalCents) : "$--"}
+          />
         </Card>
 
         <Text style={styles.footnote}>
           Valid until {formatLongDate(toIso(quote.validUntil))}
-          {quote.scopeNotes.length > 0 ? ` · ${quote.scopeNotes.join(" ")}` : ""}
+          {quote.scopeNotes.length > 0
+            ? ` · ${quote.scopeNotes.join(" ")}`
+            : ""}
         </Text>
       </ScrollView>
       <View style={styles.footer}>
         {canSend ? (
-          <PrimaryButton label="Send quote" onPress={() => setShowSendSheet(true)} />
+          <PrimaryButton
+            label="Send quote"
+            onPress={() => setShowSendSheet(true)}
+          />
         ) : status === "draft" ? (
-          <PrimaryButton disabled label="Fix pricing before sending" onPress={() => {}} />
+          <PrimaryButton
+            disabled
+            label="Fix pricing before sending"
+            onPress={() => {}}
+          />
         ) : (
           <GhostButton
             label="View quote status"
-            onPress={() => router.replace({ pathname: "/quote/[id]", params: { id: quote.id } })}
+            onPress={() =>
+              router.replace({
+                pathname: "/quote/[id]",
+                params: { id: quote.id },
+              })
+            }
           />
         )}
       </View>
 
-      <SheetModal onDismiss={() => setShowSendSheet(false)} style={styles.modalBackdrop} visible={showSendSheet}>
+      <SheetModal
+        onDismiss={() => setShowSendSheet(false)}
+        style={styles.modalBackdrop}
+        visible={showSendSheet}
+      >
         <AnimatedSheetContent style={styles.sheet}>
           <View style={styles.grabber} />
           <Text style={styles.sheetTitle}>Send quote</Text>
           <Text style={styles.sheetSubtitle}>
-            {totals ? formatMoney(totals.totalCents) : "$--"} to {customer?.name ?? "customer"}
+            {totals ? formatMoney(totals.totalCents) : "$--"} to{" "}
+            {customer?.name ?? "customer"}
           </Text>
 
           <Card style={styles.channelRow}>
@@ -199,9 +327,14 @@ export default function QuotePreviewScreen() {
             </View>
             <View style={styles.channelText}>
               <Text style={styles.channelTitle}>Email link</Text>
-              <Text style={styles.channelSub}>{customer?.email ?? "No email on file"}</Text>
+              <Text style={styles.channelSub}>
+                {customer?.email ?? "No email on file"}
+              </Text>
             </View>
-            <Chip label={customer?.email ? "Ready" : "Missing"} tone={customer?.email ? "green" : "red"} />
+            <Chip
+              label={customer?.email ? "Ready" : "Missing"}
+              tone={customer?.email ? "green" : "red"}
+            />
           </Card>
 
           <Card style={[styles.channelRow, styles.channelRowDisabled]}>
@@ -232,7 +365,11 @@ export default function QuotePreviewScreen() {
         </AnimatedSheetContent>
       </SheetModal>
 
-      <SheetModal onDismiss={() => setShowDiscountSheet(false)} style={styles.modalBackdrop} visible={showDiscountSheet}>
+      <SheetModal
+        onDismiss={() => setShowDiscountSheet(false)}
+        style={styles.modalBackdrop}
+        visible={showDiscountSheet}
+      >
         <AnimatedSheetContent style={styles.sheet}>
           <View style={styles.grabber} />
           <Text style={styles.sheetTitle}>Discount</Text>
@@ -241,7 +378,7 @@ export default function QuotePreviewScreen() {
             options={[
               { label: "None", value: "none" },
               { label: "%", value: "percent" },
-              { label: "$", value: "cents" }
+              { label: "$", value: "cents" },
             ]}
             value={discountMode}
           />
@@ -274,15 +411,15 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.lg,
-    paddingBottom: spacing.xxl
+    paddingBottom: spacing.xxl,
   },
   notFound: {
-    padding: spacing.lg
+    padding: spacing.lg,
   },
   brandCard: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.md
+    gap: spacing.md,
   },
   logo: {
     alignItems: "center",
@@ -292,28 +429,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 44,
     justifyContent: "center",
-    width: 44
+    width: 44,
   },
   logoText: {
     color: colors.ink2,
     fontSize: 14,
-    fontWeight: "700"
+    fontWeight: "700",
   },
   brandText: {
     flex: 1,
-    gap: 2
+    gap: 2,
   },
   brandName: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "700"
+    fontWeight: "700",
   },
   brandSub: {
     color: colors.ink2,
-    fontSize: 12
+    fontSize: 12,
   },
   spacer: {
-    height: spacing.sm
+    height: spacing.sm,
   },
   discountButton: {
     alignItems: "center",
@@ -321,33 +458,33 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: 1,
     justifyContent: "center",
-    minHeight: 40
+    minHeight: 40,
   },
   discountButtonText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "800"
+    fontWeight: "800",
   },
   footnote: {
     color: colors.ink3,
     fontSize: 12,
-    lineHeight: 17
+    lineHeight: 17,
   },
   footer: {
     padding: spacing.lg,
-    paddingTop: spacing.sm
+    paddingTop: spacing.sm,
   },
   modalBackdrop: {
     backgroundColor: "rgba(18,22,28,0.35)",
     flex: 1,
-    justifyContent: "flex-end"
+    justifyContent: "flex-end",
   },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.sm,
-    padding: spacing.lg
+    padding: spacing.lg,
   },
   grabber: {
     alignSelf: "center",
@@ -355,25 +492,25 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     height: 4,
     marginBottom: spacing.xs,
-    width: 38
+    width: 38,
   },
   sheetTitle: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "800"
+    fontWeight: "800",
   },
   sheetSubtitle: {
     color: colors.ink2,
     fontSize: 13,
-    marginBottom: spacing.xs
+    marginBottom: spacing.xs,
   },
   channelRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm
+    gap: spacing.sm,
   },
   channelRowDisabled: {
-    opacity: 0.55
+    opacity: 0.55,
   },
   discountInput: {
     backgroundColor: colors.surface,
@@ -384,7 +521,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     minHeight: 52,
-    paddingHorizontal: 14
+    paddingHorizontal: 14,
   },
   channelIcon: {
     alignItems: "center",
@@ -392,33 +529,33 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     height: 34,
     justifyContent: "center",
-    width: 34
+    width: 34,
   },
   channelText: {
     flex: 1,
-    gap: 2
+    gap: 2,
   },
   channelTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "700"
+    fontWeight: "700",
   },
   channelTitleMuted: {
     color: colors.ink2,
     fontSize: 14,
-    fontWeight: "700"
+    fontWeight: "700",
   },
   channelSub: {
     color: colors.ink3,
-    fontSize: 12
+    fontSize: 12,
   },
   cancelLink: {
     alignItems: "center",
-    paddingVertical: spacing.xs
+    paddingVertical: spacing.xs,
   },
   cancelLinkText: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "600"
-  }
+    fontWeight: "600",
+  },
 });

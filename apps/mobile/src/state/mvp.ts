@@ -17,7 +17,7 @@ import {
   type QuoteLineItem,
   type QuoteStatus,
   type SendBlockers,
-  type QuoteTotals
+  type QuoteTotals,
 } from "@snapquote/shared";
 import { create } from "zustand";
 import type { ApiQuote, MeResponse } from "../lib/api";
@@ -76,7 +76,7 @@ const starterIds: Record<PainterPriceBookKey, string> = {
   heavy_wall_prep: "00000000-0000-4000-8000-100000000005",
   patch_nail_holes: "00000000-0000-4000-8000-100000000006",
   primer_coat: "00000000-0000-4000-8000-100000000007",
-  material_allowance: "00000000-0000-4000-8000-100000000008"
+  material_allowance: "00000000-0000-4000-8000-100000000008",
 };
 
 export const defaultCorePrices: PainterCorePriceInput = {
@@ -84,7 +84,7 @@ export const defaultCorePrices: PainterCorePriceInput = {
   paintCeiling: { small: 12000, medium: 18000, large: 26000 },
   paintTrim: { small: 9000, medium: 16000, large: 24000 },
   paintDoorEachCents: 9500,
-  heavyPrepHourlyCents: 8500
+  heavyPrepHourlyCents: 8500,
 };
 
 export const defaultChecklist: PainterChecklist = {
@@ -93,7 +93,7 @@ export const defaultChecklist: PainterChecklist = {
   doorCount: 2,
   prepLevel: "normal",
   coatCount: 2,
-  customerSuppliesPaint: true
+  customerSuppliesPaint: true,
 };
 
 function defaultWizard(): WizardState {
@@ -109,9 +109,9 @@ function defaultWizard(): WizardState {
       doorCount: defaultChecklist.doorCount,
       prepLevel: defaultChecklist.prepLevel,
       coatCount: defaultChecklist.coatCount,
-      customerSuppliesPaint: defaultChecklist.customerSuppliesPaint
+      customerSuppliesPaint: defaultChecklist.customerSuppliesPaint,
     },
-    transcript: ""
+    transcript: "",
   };
 }
 
@@ -148,9 +148,14 @@ type MvpState = {
   updateWizard: (patch: Partial<WizardState>) => void;
   generateDraftFromWizard: () => QuoteRecord;
 
-  updateLineItem: (quoteId: string, lineId: string, patch: LineItemFormInput) => void;
+  updateLineItem: (
+    quoteId: string,
+    lineId: string,
+    patch: LineItemFormInput,
+  ) => void;
   addManualLine: (quoteId: string, input: LineItemFormInput) => string;
   removeLine: (quoteId: string, lineId: string) => void;
+  updateQuoteDiscount: (quoteId: string, discount: QuoteDiscount) => void;
   confirmYellowLine: (quoteId: string, lineId: string) => void;
   saveLineToPriceBook: (quoteId: string, lineId: string) => void;
 
@@ -161,7 +166,10 @@ type MvpState = {
   duplicateQuote: (quoteId: string) => string;
 
   confirmPriceBookItem: (itemId: string, pricing: PriceBookPricing) => void;
-  updatePriceBookItem: (itemId: string, patch: { name?: string; pricing?: PriceBookPricing }) => void;
+  updatePriceBookItem: (
+    itemId: string,
+    patch: { name?: string; pricing?: PriceBookPricing },
+  ) => void;
   addPriceBookItem: (input: {
     name: string;
     description: string;
@@ -184,14 +192,15 @@ const initialPriceBook = buildPainterStarterPriceBook({
   orgId,
   now: new Date().toISOString(),
   makeId: (key) => starterIds[key],
-  corePrices: defaultCorePrices
+  corePrices: defaultCorePrices,
 });
 
 export const useMvpStore = create<MvpState>((set, get) => ({
   onboarded: false,
   businessName: "SnapQuote Painting Co.",
   defaultTaxRate: 0.13,
-  defaultTerms: "50% deposit due to schedule the job, balance due on completion.",
+  defaultTerms:
+    "50% deposit due to schedule the job, balance due on completion.",
   quoteValidDays: 14,
   priceBookItems: initialPriceBook,
   customers: [],
@@ -206,7 +215,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
         orgId,
         now: new Date().toISOString(),
         makeId: (key) => starterIds[key],
-        corePrices: input.corePrices
+        corePrices: input.corePrices,
       });
 
     set({
@@ -215,7 +224,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       defaultTaxRate: input.defaultTaxRate,
       defaultTerms: input.defaultTerms ?? get().defaultTerms,
       quoteValidDays: input.quoteValidDays ?? get().quoteValidDays,
-      priceBookItems
+      priceBookItems,
     });
   },
 
@@ -224,17 +233,18 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       businessName: input.businessName ?? state.businessName,
       defaultTaxRate: input.defaultTaxRate ?? state.defaultTaxRate,
       defaultTerms: input.defaultTerms ?? state.defaultTerms,
-      quoteValidDays: input.quoteValidDays ?? state.quoteValidDays
+      quoteValidDays: input.quoteValidDays ?? state.quoteValidDays,
     }));
   },
 
   startNewQuoteWizard: () =>
     set((state) => ({
       priceBookItems: ensureCoreStarterPrices(state.priceBookItems),
-      wizard: defaultWizard()
+      wizard: defaultWizard(),
     })),
 
-  updateWizard: (patch) => set((state) => ({ wizard: { ...state.wizard, ...patch } })),
+  updateWizard: (patch) =>
+    set((state) => ({ wizard: { ...state.wizard, ...patch } })),
 
   generateDraftFromWizard: () => {
     const state = get();
@@ -247,20 +257,23 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       orgId,
       name: wizard.customerName.trim() || "Unnamed customer",
       email: wizard.customerEmail.trim(),
-      phone: wizard.customerPhone.trim().length > 0 ? wizard.customerPhone.trim() : null,
+      phone:
+        wizard.customerPhone.trim().length > 0
+          ? wizard.customerPhone.trim()
+          : null,
       address: wizard.address.trim(),
-      createdAt: nowIso
+      createdAt: nowIso,
     };
 
     const draft = createPainterDraftLines({
       checklist: wizard.checklist,
       transcript: wizard.transcript,
-      priceBookItems: state.priceBookItems
+      priceBookItems: state.priceBookItems,
     });
 
     const lineItems: StoredLineItem[] = draft.lineItems.map((line) => ({
       ...line,
-      id: makeId("line")
+      id: makeId("line"),
     }));
 
     const quote: QuoteRecord = {
@@ -274,7 +287,11 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       notes: "",
       terms: state.defaultTerms,
       validUntil: addDays(now, state.quoteValidDays),
-      scopeSummary: buildScopeSummary(customer.name, wizard.checklist, draft.scopeNotes),
+      scopeSummary: buildScopeSummary(
+        customer.name,
+        wizard.checklist,
+        draft.scopeNotes,
+      ),
       scopeNotes: draft.scopeNotes,
       conflicts: draft.conflicts,
       checklist: wizard.checklist,
@@ -284,14 +301,14 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       respondedAt: null,
       supersededByQuoteId: null,
       createdAt: nowIso,
-      updatedAt: nowIso
+      updatedAt: nowIso,
     };
 
     set((current) => ({
       customers: [customer, ...current.customers],
       quotes: [quote, ...current.quotes],
       events: [...current.events, createEvent(quote.id, "created")],
-      wizard: defaultWizard()
+      wizard: defaultWizard(),
     }));
 
     return quote;
@@ -318,12 +335,12 @@ export const useMvpStore = create<MvpState>((set, get) => ({
                   source: "manual" as const,
                   priceBookItemId: null,
                   matchConfidence: null,
-                  matchState: "green" as const
+                  matchState: "green" as const,
                 }
-              : line
-          )
+              : line,
+          ),
         });
-      })
+      }),
     }));
   },
 
@@ -347,11 +364,14 @@ export const useMvpStore = create<MvpState>((set, get) => ({
           source: "manual",
           priceBookItemId: null,
           matchConfidence: null,
-          matchState: "green"
+          matchState: "green",
         };
 
-        return withUpdatedAt({ ...quote, lineItems: [...quote.lineItems, line] });
-      })
+        return withUpdatedAt({
+          ...quote,
+          lineItems: [...quote.lineItems, line],
+        });
+      }),
     }));
 
     return id;
@@ -361,9 +381,20 @@ export const useMvpStore = create<MvpState>((set, get) => ({
     set((state) => ({
       quotes: state.quotes.map((quote) =>
         quote.id === quoteId
-          ? withUpdatedAt({ ...quote, lineItems: quote.lineItems.filter((line) => line.id !== lineId) })
-          : quote
-      )
+          ? withUpdatedAt({
+              ...quote,
+              lineItems: quote.lineItems.filter((line) => line.id !== lineId),
+            })
+          : quote,
+      ),
+    }));
+  },
+
+  updateQuoteDiscount: (quoteId, discount) => {
+    set((state) => ({
+      quotes: state.quotes.map((quote) =>
+        quote.id === quoteId ? withUpdatedAt({ ...quote, discount }) : quote,
+      ),
     }));
   },
 
@@ -372,9 +403,16 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
     set((state) => {
       const quote = state.quotes.find((candidate) => candidate.id === quoteId);
-      const line = quote?.lineItems.find((candidate) => candidate.id === lineId);
+      const line = quote?.lineItems.find(
+        (candidate) => candidate.id === lineId,
+      );
 
-      if (!quote || !line || line.matchState !== "yellow" || line.priceBookItemId === null) {
+      if (
+        !quote ||
+        !line ||
+        line.matchState !== "yellow" ||
+        line.priceBookItemId === null
+      ) {
         return state;
       }
 
@@ -382,7 +420,9 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
       return {
         priceBookItems: state.priceBookItems.map((item) =>
-          item.id === priceBookItemId ? { ...item, confirmedAt: now, updatedAt: now } : item
+          item.id === priceBookItemId
+            ? { ...item, confirmedAt: now, updatedAt: now }
+            : item,
         ),
         quotes: state.quotes.map((candidate) =>
           candidate.id === quoteId
@@ -390,12 +430,16 @@ export const useMvpStore = create<MvpState>((set, get) => ({
                 ...candidate,
                 lineItems: candidate.lineItems.map((candidateLine) =>
                   candidateLine.id === lineId
-                    ? { ...candidateLine, matchState: "green" as const, matchConfidence: 1 }
-                    : candidateLine
-                )
+                    ? {
+                        ...candidateLine,
+                        matchState: "green" as const,
+                        matchConfidence: 1,
+                      }
+                    : candidateLine,
+                ),
               })
-            : candidate
-        )
+            : candidate,
+        ),
       };
     });
   },
@@ -405,7 +449,9 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
     set((state) => {
       const quote = state.quotes.find((candidate) => candidate.id === quoteId);
-      const line = quote?.lineItems.find((candidate) => candidate.id === lineId);
+      const line = quote?.lineItems.find(
+        (candidate) => candidate.id === lineId,
+      );
 
       if (!quote || !line || line.unitPriceCents === null) {
         return state;
@@ -424,7 +470,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
         confirmedAt: now,
         usageCount: 1,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       };
 
       return {
@@ -441,13 +487,13 @@ export const useMvpStore = create<MvpState>((set, get) => ({
                         priceBookItemId: item.id,
                         priceBookItemKey: item.key,
                         matchConfidence: 1,
-                        matchState: "green" as const
+                        matchState: "green" as const,
                       }
-                    : candidateLine
-                )
+                    : candidateLine,
+                ),
               })
-            : candidate
-        )
+            : candidate,
+        ),
       };
     });
   },
@@ -464,9 +510,14 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
       return {
         quotes: state.quotes.map((candidate) =>
-          candidate.id === quoteId ? { ...candidate, sentAt: now, updatedAt: now } : candidate
+          candidate.id === quoteId
+            ? { ...candidate, sentAt: now, updatedAt: now }
+            : candidate,
         ),
-        events: [...state.events, createEvent(quoteId, "sent", { channel: "email" })]
+        events: [
+          ...state.events,
+          createEvent(quoteId, "sent", { channel: "email" }),
+        ],
       };
     });
   },
@@ -484,14 +535,14 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       const status = deriveQuoteStatus({
         events: getQuoteEvents(state.events, quoteId),
         validUntil: quote.validUntil,
-        now: new Date()
+        now: new Date(),
       });
 
       const stale = isQuoteStale({
         sentAt: quote.sentAt,
         firstViewedAt: quote.firstViewedAt,
         respondedAt: quote.respondedAt,
-        now: new Date()
+        now: new Date(),
       });
 
       if ((status !== "sent" && status !== "viewed") || !stale) {
@@ -500,9 +551,14 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
       return {
         quotes: state.quotes.map((candidate) =>
-          candidate.id === quoteId ? { ...candidate, updatedAt: now } : candidate
+          candidate.id === quoteId
+            ? { ...candidate, updatedAt: now }
+            : candidate,
         ),
-        events: [...state.events, createEvent(quoteId, "followed_up", { channel: "email" })]
+        events: [
+          ...state.events,
+          createEvent(quoteId, "followed_up", { channel: "email" }),
+        ],
       };
     });
   },
@@ -510,7 +566,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
   deleteDraftQuote: (quoteId) => {
     set((state) => ({
       quotes: state.quotes.filter((quote) => quote.id !== quoteId),
-      events: state.events.filter((event) => event.quoteId !== quoteId)
+      events: state.events.filter((event) => event.quoteId !== quoteId),
     }));
   },
 
@@ -531,10 +587,14 @@ export const useMvpStore = create<MvpState>((set, get) => ({
           ...state.quotes.map((candidate) =>
             candidate.id === quoteId
               ? { ...candidate, supersededByQuoteId: newId, updatedAt: now }
-              : candidate
-          )
+              : candidate,
+          ),
         ],
-        events: [...state.events, createEvent(newId, "created"), createEvent(quoteId, "superseded")]
+        events: [
+          ...state.events,
+          createEvent(newId, "created"),
+          createEvent(quoteId, "superseded"),
+        ],
       };
     });
 
@@ -554,7 +614,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
       return {
         quotes: [clone, ...state.quotes],
-        events: [...state.events, createEvent(newId, "created")]
+        events: [...state.events, createEvent(newId, "created")],
       };
     });
 
@@ -566,8 +626,10 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
     set((state) => ({
       priceBookItems: state.priceBookItems.map((item) =>
-        item.id === itemId ? { ...item, pricing, confirmedAt: now, updatedAt: now } : item
-      )
+        item.id === itemId
+          ? { ...item, pricing, confirmedAt: now, updatedAt: now }
+          : item,
+      ),
     }));
   },
 
@@ -584,9 +646,9 @@ export const useMvpStore = create<MvpState>((set, get) => ({
           ...item,
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.pricing !== undefined ? { pricing: patch.pricing } : {}),
-          updatedAt: now
+          updatedAt: now,
         };
-      })
+      }),
     }));
   },
 
@@ -605,7 +667,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       confirmedAt: now,
       usageCount: 0,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     set((state) => ({ priceBookItems: [item, ...state.priceBookItems] }));
@@ -613,12 +675,16 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
   upsertPriceBookItem: (item) => {
     set((state) => {
-      const exists = state.priceBookItems.some((candidate) => candidate.id === item.id);
+      const exists = state.priceBookItems.some(
+        (candidate) => candidate.id === item.id,
+      );
 
       return {
         priceBookItems: exists
-          ? state.priceBookItems.map((candidate) => (candidate.id === item.id ? item : candidate))
-          : [item, ...state.priceBookItems]
+          ? state.priceBookItems.map((candidate) =>
+              candidate.id === item.id ? item : candidate,
+            )
+          : [item, ...state.priceBookItems],
       };
     });
   },
@@ -626,20 +692,32 @@ export const useMvpStore = create<MvpState>((set, get) => ({
   upsertRemoteQuote: (quote) => {
     set((state) => {
       const localQuote = remoteQuoteToLocal(quote);
-      const quoteExists = state.quotes.some((candidate) => candidate.id === quote.id);
-      const customerExists = state.customers.some((customer) => customer.id === quote.customerId);
+      const quoteExists = state.quotes.some(
+        (candidate) => candidate.id === quote.id,
+      );
+      const customerExists = state.customers.some(
+        (customer) => customer.id === quote.customerId,
+      );
       const remoteEvents = remoteQuoteEvents(quote);
-      const localEvents = state.events.filter((event) => event.quoteId !== quote.id);
+      const localEvents = state.events.filter(
+        (event) => event.quoteId !== quote.id,
+      );
 
       return {
         customers:
           quote.customer !== null && !customerExists
             ? [quote.customer, ...state.customers]
-            : state.customers.map((customer) => (customer.id === quote.customerId && quote.customer !== null ? quote.customer : customer)),
+            : state.customers.map((customer) =>
+                customer.id === quote.customerId && quote.customer !== null
+                  ? quote.customer
+                  : customer,
+              ),
         quotes: quoteExists
-          ? state.quotes.map((candidate) => (candidate.id === quote.id ? localQuote : candidate))
+          ? state.quotes.map((candidate) =>
+              candidate.id === quote.id ? localQuote : candidate,
+            )
           : [localQuote, ...state.quotes],
-        events: [...localEvents, ...remoteEvents]
+        events: [...localEvents, ...remoteEvents],
       };
     });
   },
@@ -647,24 +725,44 @@ export const useMvpStore = create<MvpState>((set, get) => ({
   removeRemoteQuote: (quoteId) => {
     set((state) => ({
       quotes: state.quotes.filter((quote) => quote.id !== quoteId),
-      events: state.events.filter((event) => event.quoteId !== quoteId)
+      events: state.events.filter((event) => event.quoteId !== quoteId),
     }));
   },
 
   hydrateRemoteState: (input) => {
-    set({
-      onboarded: true,
-      businessName: input.me.org.name ?? "SnapQuote Painting Co.",
-      defaultTaxRate: Number.isFinite(input.me.org.defaultTaxRate) ? input.me.org.defaultTaxRate : 0.13,
-      defaultTerms:
-        input.me.org.defaultTerms ?? "50% deposit due to schedule the job, balance due on completion.",
-      quoteValidDays: input.me.org.quoteValidDays ?? 14,
-      priceBookItems: input.priceBookItems,
-      customers: input.customers,
-      quotes: input.quotes.map(remoteQuoteToLocal),
-      events: input.quotes.flatMap(remoteQuoteEvents)
+    set((state) => {
+      const localCustomers = state.customers.filter((customer) =>
+        customer.id.startsWith("cust-"),
+      );
+      const localQuotes = state.quotes.filter((quote) =>
+        quote.id.startsWith("quote-"),
+      );
+      const localPriceBookItems = state.priceBookItems.filter((item) =>
+        item.id.startsWith("pbi-"),
+      );
+      const localEvents = state.events.filter((event) =>
+        localQuotes.some((quote) => quote.id === event.quoteId),
+      );
+      const remoteQuotes = input.quotes.map(remoteQuoteToLocal);
+      const remoteEvents = input.quotes.flatMap(remoteQuoteEvents);
+
+      return {
+        onboarded: true,
+        businessName: input.me.org.name ?? "SnapQuote Painting Co.",
+        defaultTaxRate: Number.isFinite(input.me.org.defaultTaxRate)
+          ? input.me.org.defaultTaxRate
+          : 0.13,
+        defaultTerms:
+          input.me.org.defaultTerms ??
+          "50% deposit due to schedule the job, balance due on completion.",
+        quoteValidDays: input.me.org.quoteValidDays ?? 14,
+        priceBookItems: mergeById(input.priceBookItems, localPriceBookItems),
+        customers: mergeById(input.customers, localCustomers),
+        quotes: mergeById(remoteQuotes, localQuotes),
+        events: [...remoteEvents, ...localEvents],
+      };
     });
-  }
+  },
 }));
 
 function remoteQuoteToLocal(quote: ApiQuote): QuoteRecord {
@@ -689,7 +787,7 @@ function remoteQuoteToLocal(quote: ApiQuote): QuoteRecord {
     respondedAt: quote.respondedAt,
     supersededByQuoteId: quote.supersededByQuoteId,
     createdAt: quote.createdAt,
-    updatedAt: quote.updatedAt
+    updatedAt: quote.updatedAt,
   };
 }
 
@@ -700,8 +798,8 @@ function remoteQuoteEvents(quote: ApiQuote): QuoteEvent[] {
       quoteId: quote.id,
       type: "created",
       meta: {},
-      createdAt: quote.createdAt
-    }
+      createdAt: quote.createdAt,
+    },
   ];
 
   if (quote.sentAt !== null) {
@@ -710,7 +808,7 @@ function remoteQuoteEvents(quote: ApiQuote): QuoteEvent[] {
       quoteId: quote.id,
       type: "sent",
       meta: { channel: "email" },
-      createdAt: quote.sentAt
+      createdAt: quote.sentAt,
     });
   }
 
@@ -720,17 +818,20 @@ function remoteQuoteEvents(quote: ApiQuote): QuoteEvent[] {
       quoteId: quote.id,
       type: "viewed",
       meta: {},
-      createdAt: quote.firstViewedAt
+      createdAt: quote.firstViewedAt,
     });
   }
 
-  if (quote.respondedAt !== null && (quote.status === "accepted" || quote.status === "declined")) {
+  if (
+    quote.respondedAt !== null &&
+    (quote.status === "accepted" || quote.status === "declined")
+  ) {
     events.push({
       id: `${quote.id}-remote-${quote.status}`,
       quoteId: quote.id,
       type: quote.status,
       meta: {},
-      createdAt: quote.respondedAt
+      createdAt: quote.respondedAt,
     });
   }
 
@@ -740,11 +841,20 @@ function remoteQuoteEvents(quote: ApiQuote): QuoteEvent[] {
       quoteId: quote.id,
       type: "superseded",
       meta: { supersededByQuoteId: quote.supersededByQuoteId },
-      createdAt: quote.updatedAt
+      createdAt: quote.updatedAt,
     });
   }
 
   return events;
+}
+
+function mergeById<T extends { id: string }>(
+  remoteItems: T[],
+  localItems: T[],
+): T[] {
+  const remoteIds = new Set(remoteItems.map((item) => item.id));
+  const uniqueLocalItems = localItems.filter((item) => !remoteIds.has(item.id));
+  return [...remoteItems, ...uniqueLocalItems];
 }
 
 function ensureCoreStarterPrices(items: PriceBookItem[]): PriceBookItem[] {
@@ -765,12 +875,14 @@ function ensureCoreStarterPrices(items: PriceBookItem[]): PriceBookItem[] {
       ...item,
       pricing,
       confirmedAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
   });
 }
 
-function defaultPricingForCoreStarter(key: PriceBookItem["key"]): PriceBookPricing | null {
+function defaultPricingForCoreStarter(
+  key: PriceBookItem["key"],
+): PriceBookPricing | null {
   switch (key) {
     case "paint_walls":
       return { type: "room_size", prices: defaultCorePrices.paintWalls };
@@ -779,25 +891,37 @@ function defaultPricingForCoreStarter(key: PriceBookItem["key"]): PriceBookPrici
     case "paint_trim":
       return { type: "room_size", prices: defaultCorePrices.paintTrim };
     case "paint_door":
-      return { type: "fixed", unitPriceCents: defaultCorePrices.paintDoorEachCents };
+      return {
+        type: "fixed",
+        unitPriceCents: defaultCorePrices.paintDoorEachCents,
+      };
     case "heavy_wall_prep":
-      return { type: "fixed", unitPriceCents: defaultCorePrices.heavyPrepHourlyCents };
+      return {
+        type: "fixed",
+        unitPriceCents: defaultCorePrices.heavyPrepHourlyCents,
+      };
     default:
       return null;
   }
 }
 
-export function getQuoteEvents(events: QuoteEvent[], quoteId: string): QuoteEvent[] {
+export function getQuoteEvents(
+  events: QuoteEvent[],
+  quoteId: string,
+): QuoteEvent[] {
   return events
     .filter((event) => event.quoteId === quoteId)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-export function getQuoteStatus(quote: QuoteRecord, events: QuoteEvent[]): QuoteStatus {
+export function getQuoteStatus(
+  quote: QuoteRecord,
+  events: QuoteEvent[],
+): QuoteStatus {
   return deriveQuoteStatus({
     events: getQuoteEvents(events, quote.id),
     validUntil: quote.validUntil,
-    now: new Date()
+    now: new Date(),
   });
 }
 
@@ -810,7 +934,7 @@ export function getQuoteTotals(quote: QuoteRecord): QuoteTotals | null {
     return computeQuoteTotals({
       lineItems: quote.lineItems,
       discount: quote.discount,
-      taxRate: quote.taxRate
+      taxRate: quote.taxRate,
     });
   } catch {
     return null;
@@ -822,11 +946,14 @@ export function getQuoteIsStale(quote: QuoteRecord): boolean {
     sentAt: quote.sentAt,
     firstViewedAt: quote.firstViewedAt,
     respondedAt: quote.respondedAt,
-    now: new Date()
+    now: new Date(),
   });
 }
 
-export function getCustomer(customers: Customer[], customerId: string): Customer | undefined {
+export function getCustomer(
+  customers: Customer[],
+  customerId: string,
+): Customer | undefined {
   return customers.find((customer) => customer.id === customerId);
 }
 
@@ -834,7 +961,7 @@ function cloneQuoteAsDraft(
   quotes: QuoteRecord[],
   quoteId: string,
   newId: string,
-  now: string
+  now: string,
 ): QuoteRecord | null {
   const quote = quotes.find((candidate) => candidate.id === quoteId);
 
@@ -851,7 +978,7 @@ function cloneQuoteAsDraft(
     respondedAt: null,
     supersededByQuoteId: null,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 }
 
@@ -859,13 +986,17 @@ function withUpdatedAt(quote: QuoteRecord): QuoteRecord {
   return { ...quote, updatedAt: new Date().toISOString() };
 }
 
-function createEvent(quoteId: string, type: QuoteEvent["type"], meta: Record<string, unknown> = {}): QuoteEvent {
+function createEvent(
+  quoteId: string,
+  type: QuoteEvent["type"],
+  meta: Record<string, unknown> = {},
+): QuoteEvent {
   return {
     id: makeId("evt"),
     quoteId,
     type,
     meta,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
 }
 
@@ -875,12 +1006,17 @@ function addDays(date: Date, days: number): string {
   return next.toISOString().slice(0, 10);
 }
 
-function buildScopeSummary(customerName: string, checklist: PainterChecklist, notes: string[]): string {
-  const roomCount = checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
+function buildScopeSummary(
+  customerName: string,
+  checklist: PainterChecklist,
+  notes: string[],
+): string {
+  const roomCount =
+    checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
   const surfaces = [
     checklist.surfaces.walls ? "walls" : null,
     checklist.surfaces.ceilings ? "ceilings" : null,
-    checklist.surfaces.trim ? "trim" : null
+    checklist.surfaces.trim ? "trim" : null,
   ].filter((surface): surface is string => surface !== null);
   const scope = `Painting quote for ${customerName}: ${roomCount} ${roomCount === 1 ? "room" : "rooms"}${
     surfaces.length > 0 ? `, ${surfaces.join(", ")}` : ""
