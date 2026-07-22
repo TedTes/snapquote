@@ -7,7 +7,7 @@ import { QuoteCard } from "../src/ui/QuoteCard";
 import { QuoteMark } from "../src/ui/QuoteMark";
 import { Screen } from "../src/ui/components";
 import { colors, radius } from "../src/ui/theme";
-import { formatMoney } from "../src/lib/format";
+import { formatMoney, initials } from "../src/lib/format";
 import { useQuoteRows } from "../src/state/useQuoteRows";
 import { useMvpStore, type QuoteRecord } from "../src/state/mvp";
 
@@ -15,6 +15,7 @@ type QuotesFilter = "draft" | "sent" | "viewed" | "stale" | "accepted";
 
 export default function DashboardScreen() {
   const businessName = useMvpStore((state) => state.businessName);
+  const onboarded = useMvpStore((state) => state.onboarded);
   const startNewQuoteWizard = useMvpStore((state) => state.startNewQuoteWizard);
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
   const rows = useQuoteRows();
@@ -85,13 +86,13 @@ export default function DashboardScreen() {
             onPress={() => router.push("/settings/edit")}
             style={styles.avatar}
           >
-            <QuoteMark boxed size={39} />
+            <Text style={styles.avatarText}>{initials(displayBusinessName)}</Text>
           </Pressable>
         </View>
 
         {rows.length === 0 ? (
           <EmptyDashboardState
-            businessReady
+            businessReady={onboarded}
             onConfirmPrices={() => router.push("/price-book")}
             onNewQuote={startQuote}
             onVoice={startQuote}
@@ -214,8 +215,10 @@ function EmptyDashboardState(props: {
   starterPricesToConfirm: number;
   totalPriceItems: number;
 }) {
+  const setupDone = props.businessReady && props.starterPricesToConfirm === 0;
+
   return (
-    <>
+    <View style={styles.emptyStack}>
       <View style={styles.firstQuoteCard}>
         <View style={styles.emptyIconCard}>
           <QuoteMark boxed size={56} />
@@ -244,32 +247,36 @@ function EmptyDashboardState(props: {
         </View>
       </View>
 
-      <Text style={[styles.sectionLabel, styles.setupLabel]}>Finish setting up</Text>
-      <View style={styles.setupCard}>
-        <SetupRow
-          action={props.starterPricesToConfirm > 0 ? "Confirm" : "Done"}
-          done={props.starterPricesToConfirm === 0}
-          icon="book"
-          last={false}
-          onPress={props.onConfirmPrices}
-          subtitle={
-            props.starterPricesToConfirm > 0
-              ? `${props.starterPricesToConfirm} of ${props.totalPriceItems} still need your ok`
-              : `${props.totalPriceItems} prices ready to match`
-          }
-          title={props.starterPricesToConfirm > 0 ? "Confirm your starter prices" : "Starter prices confirmed"}
-        />
-        <SetupRow
-          action="Done"
-          done={props.businessReady}
-          icon="check"
-          last
-          onPress={() => router.push("/settings")}
-          subtitle="Name, tax rate, terms"
-          title="Business details added"
-        />
-      </View>
-    </>
+      {setupDone ? null : (
+        <>
+          <Text style={styles.sectionLabel}>Finish setting up</Text>
+          <View style={styles.setupCard}>
+            <SetupRow
+              action={props.starterPricesToConfirm > 0 ? "Confirm" : "Done"}
+              done={props.starterPricesToConfirm === 0}
+              icon="book"
+              last={false}
+              onPress={props.onConfirmPrices}
+              subtitle={
+                props.starterPricesToConfirm > 0
+                  ? `${props.starterPricesToConfirm} of ${props.totalPriceItems} still need your ok`
+                  : `${props.totalPriceItems} prices ready to match`
+              }
+              title={props.starterPricesToConfirm > 0 ? "Confirm your starter prices" : "Starter prices confirmed"}
+            />
+            <SetupRow
+              action="Done"
+              done={props.businessReady}
+              icon="check"
+              last
+              onPress={() => router.push("/settings")}
+              subtitle="Name, tax rate, terms"
+              title="Business details added"
+            />
+          </View>
+        </>
+      )}
+    </View>
   );
 }
 
@@ -398,9 +405,14 @@ function plural(count: number, noun: string): string {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     gap: 15,
     padding: 20,
     paddingBottom: 86
+  },
+  emptyStack: {
+    gap: 15,
+    paddingTop: 24
   },
   header: {
     alignItems: "flex-start",
@@ -429,11 +441,16 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
-    borderRadius: 11,
-    height: 39,
+    backgroundColor: colors.dark,
+    borderRadius: 24,
+    height: 48,
     justifyContent: "center",
-    overflow: "hidden",
-    width: 39
+    width: 48
+  },
+  avatarText: {
+    color: colors.onDark,
+    fontSize: 16,
+    fontWeight: "900"
   },
   pipelineCard: {
     backgroundColor: colors.surface,
@@ -570,7 +587,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     marginTop: 3,
-    paddingBottom: 14,
+    paddingBottom: 17,
     paddingHorizontal: 18,
     paddingTop: 20
   },
@@ -588,12 +605,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
     lineHeight: 22,
-    marginTop: 16,
+    marginTop: 15,
     textAlign: "center"
   },
   firstQuoteActions: {
     alignItems: "center",
-    marginTop: 18,
+    marginTop: 20,
     width: "100%"
   },
   firstQuotePrimary: {
@@ -602,7 +619,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     flexDirection: "row",
     gap: 8,
-    height: 42,
+    height: 48,
     justifyContent: "center",
     width: "100%"
   },
@@ -616,7 +633,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 5,
     justifyContent: "center",
-    marginTop: 9
+    marginTop: 10
   },
   voiceInlineButton: {
     alignItems: "center",
@@ -632,9 +649,6 @@ const styles = StyleSheet.create({
     color: colors.ink2,
     fontSize: 11,
     fontWeight: "800"
-  },
-  setupLabel: {
-    marginTop: 7
   },
   fab: {
     alignItems: "center",

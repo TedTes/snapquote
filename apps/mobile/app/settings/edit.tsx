@@ -8,6 +8,7 @@ import {
   CircleHelp,
   CreditCard,
   EllipsisVertical,
+  LogIn,
   LogOut,
   Mail,
   Phone,
@@ -26,14 +27,15 @@ export default function ProfileScreen() {
   const quotes = useMvpStore((state) => state.quotes);
   const events = useMvpStore((state) => state.events);
   const me = useAuthStore((state) => state.me);
+  const authStatus = useAuthStore((state) => state.status);
   const signOut = useAuthStore((state) => state.signOut);
 
   const statuses = quotes.map((quote) => getQuoteStatus(quote, events));
   const sentCount = statuses.filter((status) => status === "sent" || status === "viewed" || status === "accepted").length;
   const acceptedCount = statuses.filter((status) => status === "accepted").length;
   const winRate = sentCount > 0 ? Math.round((acceptedCount / sentCount) * 100) : 0;
-  const userName = me?.user.name || "Sam Everett";
-  const email = me?.user.email || "sam@sharpedge.co";
+  const userName = me?.user.name ?? "Guest";
+  const email = me?.user.email ?? "Not signed in";
 
   return (
     <Screen edges={["top"]}>
@@ -122,17 +124,16 @@ export default function ProfileScreen() {
             onPress={() => Alert.alert("Your name", "Profile editing is coming next.")}
           />
           <ProfileRow
-            customValue={<VerifiedBadge />}
+            customValue={authStatus === "signed_in" ? <VerifiedBadge /> : undefined}
             detail={email}
             icon={<Mail color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Login email"
-            onPress={() => Alert.alert("Login email", "Email changes are coming next.")}
-          />
-          <ProfileRow
-            icon={<Shield color={colors.ink2} size={15} strokeWidth={2.1} />}
-            label="Password"
             last
-            onPress={() => Alert.alert("Password", "Password reset is coming next.")}
+            onPress={() =>
+              authStatus === "signed_in"
+                ? Alert.alert("Login email", "Email changes are coming next.")
+                : router.push("/auth")
+            }
           />
         </ProfileSection>
 
@@ -142,24 +143,34 @@ export default function ProfileScreen() {
             label="Help & feedback"
             onPress={() => Alert.alert("Help & feedback", "Send feedback from the test channel for now.")}
           />
-          <ProfileRow
-            icon={<LogOut color={colors.ink2} size={15} strokeWidth={2.1} />}
-            label="Sign out"
-            last
-            onPress={() => {
-              Alert.alert("Sign out", "You will need to sign in again on this phone.", [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Sign out",
-                  style: "destructive",
-                  onPress: () => {
-                    signOut();
+          {authStatus === "signed_in" ? (
+            <ProfileRow
+              icon={<LogOut color={colors.ink2} size={15} strokeWidth={2.1} />}
+              label="Sign out"
+              last
+              onPress={() => {
+                Alert.alert("Sign out", "You will need to sign in again on this phone.", [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Sign out",
+                    style: "destructive",
+                    onPress: () => {
+                      signOut();
+                      router.replace("/");
+                    }
                   }
-                }
-              ]);
-            }}
-            showChevron={false}
-          />
+                ]);
+              }}
+              showChevron={false}
+            />
+          ) : (
+            <ProfileRow
+              icon={<LogIn color={colors.ink2} size={15} strokeWidth={2.1} />}
+              label="Sign in"
+              last
+              onPress={() => router.push("/auth")}
+            />
+          )}
         </ProfileSection>
 
         <Text style={styles.version}>SnapQuote · v0.4.1</Text>

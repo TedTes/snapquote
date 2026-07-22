@@ -15,12 +15,13 @@ import {
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BottomTabBar } from "../src/ui/BottomTabBar";
 import { Screen } from "../src/ui/components";
-import { QuoteMark } from "../src/ui/QuoteMark";
 import { colors, radius } from "../src/ui/theme";
+import { initials } from "../src/lib/format";
 import { useMvpStore } from "../src/state/mvp";
 import { useAuthStore } from "../src/state/auth";
 
 export default function SettingsScreen() {
+  const businessName = useMvpStore((state) => state.businessName);
   const defaultTaxRate = useMvpStore((state) => state.defaultTaxRate);
   const defaultTerms = useMvpStore((state) => state.defaultTerms);
   const quoteValidDays = useMvpStore((state) => state.quoteValidDays);
@@ -42,7 +43,7 @@ export default function SettingsScreen() {
             onPress={() => router.push("/settings/edit")}
             style={styles.headerAvatar}
           >
-            <QuoteMark boxed size={40} />
+            <Text style={styles.headerAvatarText}>{initials(businessName)}</Text>
           </Pressable>
         </View>
 
@@ -223,11 +224,16 @@ const styles = StyleSheet.create({
   },
   headerAvatar: {
     alignItems: "center",
-    borderRadius: 11,
-    height: 40,
+    backgroundColor: colors.dark,
+    borderRadius: 24,
+    height: 48,
     justifyContent: "center",
-    overflow: "hidden",
-    width: 40
+    width: 48
+  },
+  headerAvatarText: {
+    color: colors.onDark,
+    fontSize: 16,
+    fontWeight: "900"
   },
   section: {
     gap: 9
