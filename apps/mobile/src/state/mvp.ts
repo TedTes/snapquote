@@ -20,6 +20,7 @@ import {
   type QuoteTotals
 } from "@snapquote/shared";
 import { create } from "zustand";
+import type { ApiQuote, MeResponse } from "../lib/api";
 
 export type StoredLineItem = QuoteLineItem & { id: string };
 
@@ -131,7 +132,10 @@ type MvpState = {
   completeOnboarding: (input: {
     businessName: string;
     defaultTaxRate: number;
+    defaultTerms?: string;
+    quoteValidDays?: number;
     corePrices: PainterCorePriceInput;
+    priceBookItems?: PriceBookItem[];
   }) => void;
   updateOrgSettings: (input: {
     businessName?: string;
@@ -165,6 +169,15 @@ type MvpState = {
     kind: PriceBookItem["kind"];
     pricing: PriceBookPricing;
   }) => void;
+  upsertPriceBookItem: (item: PriceBookItem) => void;
+  upsertRemoteQuote: (quote: ApiQuote) => void;
+  removeRemoteQuote: (quoteId: string) => void;
+  hydrateRemoteState: (input: {
+    me: MeResponse;
+    priceBookItems: PriceBookItem[];
+    customers: Customer[];
+    quotes: ApiQuote[];
+  }) => void;
 };
 
 const initialPriceBook = buildPainterStarterPriceBook({
@@ -187,17 +200,21 @@ export const useMvpStore = create<MvpState>((set, get) => ({
   wizard: defaultWizard(),
 
   completeOnboarding: (input) => {
-    const priceBookItems = buildPainterStarterPriceBook({
-      orgId,
-      now: new Date().toISOString(),
-      makeId: (key) => starterIds[key],
-      corePrices: input.corePrices
-    });
+    const priceBookItems =
+      input.priceBookItems ??
+      buildPainterStarterPriceBook({
+        orgId,
+        now: new Date().toISOString(),
+        makeId: (key) => starterIds[key],
+        corePrices: input.corePrices
+      });
 
     set({
       onboarded: true,
       businessName: input.businessName,
       defaultTaxRate: input.defaultTaxRate,
+      defaultTerms: input.defaultTerms ?? get().defaultTerms,
+      quoteValidDays: input.quoteValidDays ?? get().quoteValidDays,
       priceBookItems
     });
   },
@@ -592,8 +609,143 @@ export const useMvpStore = create<MvpState>((set, get) => ({
     };
 
     set((state) => ({ priceBookItems: [item, ...state.priceBookItems] }));
+  },
+
+  upsertPriceBookItem: (item) => {
+    set((state) => {
+      const exists = state.priceBookItems.some((candidate) => candidate.id === item.id);
+
+      return {
+        priceBookItems: exists
+          ? state.priceBookItems.map((candidate) => (candidate.id === item.id ? item : candidate))
+          : [item, ...state.priceBookItems]
+      };
+    });
+  },
+
+  upsertRemoteQuote: (quote) => {
+    set((state) => {
+      const localQuote = remoteQuoteToLocal(quote);
+      const quoteExists = state.quotes.some((candidate) => candidate.id === quote.id);
+      const customerExists = state.customers.some((customer) => customer.id === quote.customerId);
+      const remoteEvents = remoteQuoteEvents(quote);
+      const localEvents = state.events.filter((event) => event.quoteId !== quote.id);
+
+      return {
+        customers:
+          quote.customer !== null && !customerExists
+            ? [quote.customer, ...state.customers]
+            : state.customers.map((customer) => (customer.id === quote.customerId && quote.customer !== null ? quote.customer : customer)),
+        quotes: quoteExists
+          ? state.quotes.map((candidate) => (candidate.id === quote.id ? localQuote : candidate))
+          : [localQuote, ...state.quotes],
+        events: [...localEvents, ...remoteEvents]
+      };
+    });
+  },
+
+  removeRemoteQuote: (quoteId) => {
+    set((state) => ({
+      quotes: state.quotes.filter((quote) => quote.id !== quoteId),
+      events: state.events.filter((event) => event.quoteId !== quoteId)
+    }));
+  },
+
+  hydrateRemoteState: (input) => {
+    set({
+      onboarded: true,
+      businessName: input.me.org.name ?? "SnapQuote Painting Co.",
+      defaultTaxRate: Number.isFinite(input.me.org.defaultTaxRate) ? input.me.org.defaultTaxRate : 0.13,
+      defaultTerms:
+        input.me.org.defaultTerms ?? "50% deposit due to schedule the job, balance due on completion.",
+      quoteValidDays: input.me.org.quoteValidDays ?? 14,
+      priceBookItems: input.priceBookItems,
+      customers: input.customers,
+      quotes: input.quotes.map(remoteQuoteToLocal),
+      events: input.quotes.flatMap(remoteQuoteEvents)
+    });
   }
 }));
+
+function remoteQuoteToLocal(quote: ApiQuote): QuoteRecord {
+  return {
+    id: quote.id,
+    customerId: quote.customerId,
+    address: quote.address,
+    jobTitle: quote.jobTitle,
+    lineItems: quote.lineItems,
+    discount: quote.discount,
+    taxRate: quote.taxRate,
+    notes: quote.notes,
+    terms: quote.terms,
+    validUntil: quote.validUntil,
+    scopeSummary: quote.scopeSummary,
+    scopeNotes: quote.scopeNotes,
+    conflicts: quote.conflicts,
+    checklist: quote.checklist,
+    transcript: quote.transcript,
+    sentAt: quote.sentAt,
+    firstViewedAt: quote.firstViewedAt,
+    respondedAt: quote.respondedAt,
+    supersededByQuoteId: quote.supersededByQuoteId,
+    createdAt: quote.createdAt,
+    updatedAt: quote.updatedAt
+  };
+}
+
+function remoteQuoteEvents(quote: ApiQuote): QuoteEvent[] {
+  const events: QuoteEvent[] = [
+    {
+      id: `${quote.id}-remote-created`,
+      quoteId: quote.id,
+      type: "created",
+      meta: {},
+      createdAt: quote.createdAt
+    }
+  ];
+
+  if (quote.sentAt !== null) {
+    events.push({
+      id: `${quote.id}-remote-sent`,
+      quoteId: quote.id,
+      type: "sent",
+      meta: { channel: "email" },
+      createdAt: quote.sentAt
+    });
+  }
+
+  if (quote.firstViewedAt !== null) {
+    events.push({
+      id: `${quote.id}-remote-viewed`,
+      quoteId: quote.id,
+      type: "viewed",
+      meta: {},
+      createdAt: quote.firstViewedAt
+    });
+  }
+
+  if (quote.respondedAt !== null && (quote.status === "accepted" || quote.status === "declined")) {
+    events.push({
+      id: `${quote.id}-remote-${quote.status}`,
+      quoteId: quote.id,
+      type: quote.status,
+      meta: {},
+      createdAt: quote.respondedAt
+    });
+  }
+
+  if (quote.supersededByQuoteId !== null) {
+    events.push({
+      id: `${quote.id}-remote-superseded`,
+      quoteId: quote.id,
+      type: "superseded",
+      meta: { supersededByQuoteId: quote.supersededByQuoteId },
+      createdAt: quote.updatedAt
+    });
+  }
+
+  return events;
+}
 
 function ensureCoreStarterPrices(items: PriceBookItem[]): PriceBookItem[] {
   const now = new Date().toISOString();
