@@ -19,6 +19,10 @@ export default function DashboardScreen() {
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
   const rows = useQuoteRows();
   const starterPricesToConfirm = priceBookItems.filter((item) => item.confirmedAt === null).length;
+  const displayBusinessName =
+    typeof businessName === "string" && businessName.trim().length > 0
+      ? businessName
+      : "SnapQuote Painting Co.";
 
   const metrics = useMemo(() => {
     const activeRows = rows.filter(
@@ -78,12 +82,12 @@ export default function DashboardScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.eyebrow}>{businessName.toUpperCase()}</Text>
+            <Text style={styles.eyebrow}>{displayBusinessName.toUpperCase()}</Text>
             <Text style={styles.title}>Today</Text>
             <Text style={styles.date}>{formatToday()}</Text>
           </View>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials(businessName)}</Text>
+            <Text style={styles.avatarText}>{initials(displayBusinessName)}</Text>
           </View>
         </View>
 

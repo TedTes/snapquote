@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -18,6 +18,7 @@ import { Banner, Card, Chip, EmptyState, GhostButton, Screen } from "../../../sr
 import { fadeEnter, useMotionEnabled } from "../../../src/ui/motion";
 import { colors, radius, spacing, type MatchTone } from "../../../src/ui/theme";
 import { describeQuantity, formatDateTime, formatMoney, formatRelativeToNow } from "../../../src/lib/format";
+import { snapquoteApi, userFacingErrorMessage } from "../../../src/lib/api";
 import {
   getCustomer,
   getQuoteBlockers,
@@ -59,8 +60,11 @@ export default function QuoteScreen() {
 
 function DraftReview(props: { quote: QuoteRecord; customerName: string }) {
   const { quote } = props;
-  const deleteDraftQuote = useMvpStore((state) => state.deleteDraftQuote);
-  const confirmYellowLine = useMvpStore((state) => state.confirmYellowLine);
+  const removeRemoteQuote = useMvpStore((state) => state.removeRemoteQuote);
+  const upsertPriceBookItem = useMvpStore((state) => state.upsertPriceBookItem);
+  const upsertRemoteQuote = useMvpStore((state) => state.upsertRemoteQuote);
+  const [savingLineId, setSavingLineId] = useState<string | null>(null);
+  const [deletingDraft, setDeletingDraft] = useState(false);
   const blockers = useMemo(() => getQuoteBlockers(quote), [quote]);
   const sortedLines = useMemo(() => [...quote.lineItems].sort((a, b) => a.position - b.position), [quote]);
   const trustedLines = sortedLines.filter((line) => line.matchState === "green");
@@ -86,11 +90,28 @@ function DraftReview(props: { quote: QuoteRecord; customerName: string }) {
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          deleteDraftQuote(quote.id);
-          router.replace("/");
+          void deleteRemoteDraft();
         }
       }
     ]);
+  }
+
+  async function deleteRemoteDraft() {
+    if (deletingDraft) {
+      return;
+    }
+
+    setDeletingDraft(true);
+
+    try {
+      await snapquoteApi.deleteDraftQuote(quote.id);
+      removeRemoteQuote(quote.id);
+      router.replace("/");
+    } catch (error) {
+      Alert.alert("Could not delete draft", userFacingErrorMessage(error));
+    } finally {
+      setDeletingDraft(false);
+    }
   }
 
   function openDraftMenu() {
@@ -110,6 +131,24 @@ function DraftReview(props: { quote: QuoteRecord; customerName: string }) {
 
   function openLine(lineId: string) {
     router.push({ pathname: "/quote/[id]/line/[lineId]", params: { id: quote.id, lineId } });
+  }
+
+  async function confirmLine(lineId: string) {
+    if (savingLineId !== null) {
+      return;
+    }
+
+    setSavingLineId(lineId);
+
+    try {
+      const response = await snapquoteApi.confirmLine(quote.id, lineId);
+      upsertPriceBookItem(response.item);
+      upsertRemoteQuote(response.quote);
+    } catch (error) {
+      Alert.alert("Could not confirm price", userFacingErrorMessage(error));
+    } finally {
+      setSavingLineId(null);
+    }
   }
 
   function goBack() {
@@ -173,9 +212,9 @@ function DraftReview(props: { quote: QuoteRecord; customerName: string }) {
         {confirmLines.map((line) => (
           <DraftLineCard
             key={line.id}
-            actionLabel="Confirm"
+            actionLabel={savingLineId === line.id ? "Saving" : "Confirm"}
             line={line}
-            onAction={() => confirmYellowLine(quote.id, line.id)}
+            onAction={() => void confirmLine(line.id)}
             onPress={() => openLine(line.id)}
             tone="yellow"
           />
@@ -312,22 +351,66 @@ function CoverageLegend(props: { color: string; label: string }) {
 
 function QuoteDetail(props: { quote: QuoteRecord; customerName: string; events: QuoteEvent[] }) {
   const { quote } = props;
-  const followUpQuote = useMvpStore((state) => state.followUpQuote);
-  const reviseQuote = useMvpStore((state) => state.reviseQuote);
-  const duplicateQuote = useMvpStore((state) => state.duplicateQuote);
+  const upsertRemoteQuote = useMvpStore((state) => state.upsertRemoteQuote);
+  const [sendingFollowUp, setSendingFollowUp] = useState(false);
+  const [quoteAction, setQuoteAction] = useState<"revise" | "duplicate" | null>(null);
   const status = getQuoteStatus(quote, props.events);
   const totals = getQuoteTotals(quote);
   const stale = getQuoteIsStale(quote);
   const timeline = useMemo(() => getQuoteEvents(props.events, quote.id), [props.events, quote.id]);
 
-  function revise() {
-    const newId = reviseQuote(quote.id);
-    router.push({ pathname: "/quote/[id]", params: { id: newId } });
+  async function revise() {
+    if (quoteAction !== null) {
+      return;
+    }
+
+    setQuoteAction("revise");
+
+    try {
+      const response = await snapquoteApi.reviseQuote(quote.id);
+      upsertRemoteQuote(response.supersededQuote);
+      upsertRemoteQuote(response.quote);
+      router.push({ pathname: "/quote/[id]", params: { id: response.quote.id } });
+    } catch (error) {
+      Alert.alert("Could not revise quote", userFacingErrorMessage(error));
+    } finally {
+      setQuoteAction(null);
+    }
   }
 
-  function duplicate() {
-    const newId = duplicateQuote(quote.id);
-    router.push({ pathname: "/quote/[id]", params: { id: newId } });
+  async function duplicate() {
+    if (quoteAction !== null) {
+      return;
+    }
+
+    setQuoteAction("duplicate");
+
+    try {
+      const duplicated = await snapquoteApi.duplicateQuote(quote.id);
+      upsertRemoteQuote(duplicated);
+      router.push({ pathname: "/quote/[id]", params: { id: duplicated.id } });
+    } catch (error) {
+      Alert.alert("Could not duplicate quote", userFacingErrorMessage(error));
+    } finally {
+      setQuoteAction(null);
+    }
+  }
+
+  async function followUp() {
+    if (sendingFollowUp) {
+      return;
+    }
+
+    setSendingFollowUp(true);
+
+    try {
+      const updated = await snapquoteApi.followUpQuote(quote.id);
+      upsertRemoteQuote(updated);
+    } catch (error) {
+      Alert.alert("Could not send follow-up", userFacingErrorMessage(error));
+    } finally {
+      setSendingFollowUp(false);
+    }
   }
 
   return (
@@ -353,7 +436,10 @@ function QuoteDetail(props: { quote: QuoteRecord; customerName: string; events: 
         {stale ? (
           <>
             <Banner tone="red">Sent 3+ days ago with no response. A nudge often closes these.</Banner>
-            <GhostButton label="Send follow-up email" onPress={() => followUpQuote(quote.id)} />
+            <GhostButton
+              label={sendingFollowUp ? "Sending follow-up..." : "Send follow-up email"}
+              onPress={() => void followUp()}
+            />
           </>
         ) : null}
 
@@ -376,10 +462,18 @@ function QuoteDetail(props: { quote: QuoteRecord; customerName: string; events: 
         {status !== "superseded" ? (
           <View style={styles.detailActions}>
             <View style={styles.detailActionItem}>
-              <GhostButton label="Revise" onPress={revise} small />
+              <GhostButton
+                label={quoteAction === "revise" ? "Revising..." : "Revise"}
+                onPress={() => void revise()}
+                small
+              />
             </View>
             <View style={styles.detailActionItem}>
-              <GhostButton label="Duplicate" onPress={duplicate} small />
+              <GhostButton
+                label={quoteAction === "duplicate" ? "Duplicating..." : "Duplicate"}
+                onPress={() => void duplicate()}
+                small
+              />
             </View>
           </View>
         ) : null}

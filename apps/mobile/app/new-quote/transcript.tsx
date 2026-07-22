@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Check, Play } from "lucide-react-native";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { PainterChecklist } from "@snapquote/shared";
+import { snapquoteApi, userFacingErrorMessage } from "../../src/lib/api";
 import { AnimatedScreenContent } from "../../src/ui/AnimatedScreenContent";
 import { Screen } from "../../src/ui/components";
 import { NewQuoteHeader, NewQuoteTitle, StickyAction } from "../../src/ui/NewQuoteScaffold";
@@ -15,13 +16,49 @@ const sampleTranscript =
 export default function NewQuoteTranscriptScreen() {
   const wizard = useMvpStore((state) => state.wizard);
   const updateWizard = useMvpStore((state) => state.updateWizard);
+  const upsertRemoteQuote = useMvpStore((state) => state.upsertRemoteQuote);
+  const startNewQuoteWizard = useMvpStore((state) => state.startNewQuoteWizard);
   const [editing, setEditing] = useState(false);
   const [transcript, setTranscript] = useState(wizard.transcript.trim() || sampleTranscript);
+  const [generating, setGenerating] = useState(false);
 
-  function generate() {
-    updateWizard({ transcript: transcript.trim() });
-    const quote = useMvpStore.getState().generateDraftFromWizard();
-    router.replace({ pathname: "/quote/[id]", params: { id: quote.id } });
+  async function generate() {
+    if (generating) {
+      return;
+    }
+
+    const currentWizard = { ...wizard, transcript: transcript.trim() };
+
+    if (currentWizard.address.trim().length === 0) {
+      Alert.alert("Add a job address", "The address is required before drafting.");
+      return;
+    }
+
+    updateWizard({ transcript: currentWizard.transcript });
+    setGenerating(true);
+
+    try {
+      const quote = await snapquoteApi.createQuote({
+        address: currentWizard.address.trim(),
+        jobTitle: currentWizard.jobTitle.trim(),
+        checklist: currentWizard.checklist,
+        transcript: currentWizard.transcript,
+        customer: {
+          name: currentWizard.customerName.trim() || "Unnamed customer",
+          email: currentWizard.customerEmail.trim() || undefined,
+          phone: currentWizard.customerPhone.trim() || undefined,
+          address: currentWizard.address.trim()
+        }
+      });
+
+      upsertRemoteQuote(quote);
+      startNewQuoteWizard();
+      router.replace({ pathname: "/quote/[id]", params: { id: quote.id } });
+    } catch (error) {
+      Alert.alert("Could not generate draft", userFacingErrorMessage(error));
+    } finally {
+      setGenerating(false);
+    }
   }
 
   return (
@@ -62,7 +99,7 @@ export default function NewQuoteTranscriptScreen() {
           <Text style={styles.listenText}>Re-listen · 0:24</Text>
         </Pressable>
       </AnimatedScreenContent>
-      <StickyAction label="Generate draft" onPress={generate} />
+      <StickyAction label={generating ? "Generating..." : "Generate draft"} onPress={() => void generate()} />
     </Screen>
   );
 }

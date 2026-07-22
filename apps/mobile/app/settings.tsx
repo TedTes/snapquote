@@ -18,6 +18,7 @@ import { BottomTabBar } from "../src/ui/BottomTabBar";
 import { Screen } from "../src/ui/components";
 import { colors, radius } from "../src/ui/theme";
 import { initials } from "../src/lib/format";
+import { useAuthStore } from "../src/state/auth";
 import { useMvpStore } from "../src/state/mvp";
 
 export default function SettingsScreen() {
@@ -26,6 +27,8 @@ export default function SettingsScreen() {
   const defaultTerms = useMvpStore((state) => state.defaultTerms);
   const quoteValidDays = useMvpStore((state) => state.quoteValidDays);
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
+  const signOut = useAuthStore((state) => state.signOut);
+  const me = useAuthStore((state) => state.me);
 
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const totalCount = priceBookItems.length;
@@ -38,7 +41,7 @@ export default function SettingsScreen() {
         <View style={styles.profileBlock}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push("/onboarding")}
+            onPress={() => router.push("/settings/edit")}
             style={styles.profileCard}
           >
             <View style={styles.avatar}>
@@ -60,20 +63,20 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={<Percent color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Tax rate"
-            onPress={() => Alert.alert("Tax rate", "Use the edit profile screen to change quote defaults.")}
+            onPress={() => router.push("/settings/edit")}
             value={`${Math.round(defaultTaxRate * 100)}%`}
           />
           <SettingsRow
             icon={<CalendarDays color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Quote valid for"
-            onPress={() => Alert.alert("Quote validity", "Use the edit profile screen to change quote defaults.")}
+            onPress={() => router.push("/settings/edit")}
             value={`${quoteValidDays} days`}
           />
           <SettingsRow
             detail={defaultTerms}
             icon={<FileText color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Default terms"
-            onPress={() => Alert.alert("Default terms", defaultTerms)}
+            onPress={() => router.push("/settings/edit")}
           />
           <SettingsRow
             detail="Hi {name}, just checking in..."
@@ -104,7 +107,7 @@ export default function SettingsScreen() {
         <SettingsSection label="Sending">
           <SettingsRow
             customValue={<VerifiedBadge />}
-            detail="quotes@acepaint.co"
+            detail={me?.user.email ?? "quotes@snapquote.local"}
             icon={<Mail color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Send quotes from"
             last
@@ -128,7 +131,18 @@ export default function SettingsScreen() {
             icon={<LogOut color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Sign out"
             last
-            onPress={() => Alert.alert("Sign out", "Authentication is not wired in this local MVP yet.")}
+            onPress={() => {
+              Alert.alert("Sign out", "You will need to sign in again on this phone.", [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Sign out",
+                  style: "destructive",
+                  onPress: () => {
+                    signOut();
+                  }
+                }
+              ]);
+            }}
             showChevron={false}
           />
         </SettingsSection>

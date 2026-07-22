@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { snapquoteApi, userFacingErrorMessage } from "../src/lib/api";
 import {
   centsToDollars,
   defaultCorePrices,
@@ -22,8 +23,49 @@ export default function OnboardingScreen() {
   const [prepHourly, setPrepHourly] = useState(
     centsToDollars(defaultCorePrices.heavyPrepHourlyCents)
   );
+  const [saving, setSaving] = useState(false);
 
-  function save() {
+  async function save() {
+    if (saving) {
+      return;
+    }
+
+    const payload = {
+      businessName,
+      defaultTaxRate: Number(taxRate) / 100,
+      defaultTerms: useMvpStore.getState().defaultTerms,
+      quoteValidDays: useMvpStore.getState().quoteValidDays,
+      corePrices: {
+        paintWalls: roomPrices(dollarsToCents(wallsMedium)),
+        paintCeiling: roomPrices(dollarsToCents(ceilingMedium)),
+        paintTrim: roomPrices(dollarsToCents(trimMedium)),
+        paintDoorEachCents: dollarsToCents(doorEach),
+        heavyPrepHourlyCents: dollarsToCents(prepHourly)
+      }
+    };
+
+    setSaving(true);
+
+    try {
+      const response = await snapquoteApi.onboardPainter(payload);
+
+      completeOnboarding({
+        ...payload,
+        businessName: response.org.name,
+        defaultTaxRate: response.org.defaultTaxRate,
+        defaultTerms: response.org.defaultTerms,
+        quoteValidDays: response.org.quoteValidDays,
+        priceBookItems: response.priceBookItems
+      });
+      router.replace("/");
+    } catch (error) {
+      Alert.alert("Could not save setup", userFacingErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function saveLocalOnly() {
     completeOnboarding({
       businessName,
       defaultTaxRate: Number(taxRate) / 100,
@@ -61,8 +103,16 @@ export default function OnboardingScreen() {
           stores explicit prices, not AI guesses.
         </Text>
 
-        <Pressable accessibilityRole="button" style={styles.primaryAction} onPress={save}>
-          <Text style={styles.primaryActionText}>Save Prices</Text>
+        <Pressable
+          accessibilityRole="button"
+          disabled={saving}
+          style={[styles.primaryAction, saving ? styles.primaryActionDisabled : null]}
+          onPress={() => void save()}
+        >
+          <Text style={styles.primaryActionText}>{saving ? "Saving..." : "Save Prices"}</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={saving} onPress={saveLocalOnly} style={styles.secondaryAction}>
+          <Text style={styles.secondaryActionText}>Continue offline</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -147,9 +197,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 4
   },
+  primaryActionDisabled: {
+    opacity: 0.65
+  },
   primaryActionText: {
     color: "#ffffff",
     fontSize: 18,
     fontWeight: "900"
+  },
+  secondaryAction: {
+    alignItems: "center",
+    paddingVertical: 12
+  },
+  secondaryActionText: {
+    color: "#475467",
+    fontSize: 14,
+    fontWeight: "800"
   }
 });

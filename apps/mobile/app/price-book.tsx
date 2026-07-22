@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { BookOpen, Check, CircleAlert, Lock, Plus, Search } from "lucide-react-native";
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { quoteUnits, type PriceBookItem, type QuoteLineItem } from "@snapquote/shared";
 import { AnimatedCard } from "../src/ui/AnimatedCard";
 import { AnimatedSheetContent, SheetModal } from "../src/ui/AnimatedSheet";
@@ -10,17 +10,19 @@ import { Field, PrimaryButton, Screen, SegmentedControl } from "../src/ui/compon
 import { colors, radius, shadowLg, spacing } from "../src/ui/theme";
 import { centsToDollars, dollarsToCents, useMvpStore } from "../src/state/mvp";
 import { formatMoney } from "../src/lib/format";
+import { snapquoteApi, userFacingErrorMessage } from "../src/lib/api";
 
 const searchThreshold = 10;
 
 export default function PriceBookScreen() {
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
-  const confirmPriceBookItem = useMvpStore((state) => state.confirmPriceBookItem);
-  const addPriceBookItem = useMvpStore((state) => state.addPriceBookItem);
+  const upsertPriceBookItem = useMvpStore((state) => state.upsertPriceBookItem);
 
   const [query, setQuery] = useState("");
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [savingNewItem, setSavingNewItem] = useState(false);
   const showSearch = priceBookItems.length > searchThreshold;
 
   const filtered = useMemo(() => {
@@ -41,6 +43,48 @@ export default function PriceBookScreen() {
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const starterCount = priceBookItems.filter((item) => item.confirmedAt === null).length;
   const hasItems = priceBookItems.length > 0;
+
+  async function saveExistingPrice(item: PriceBookItem, pricing: PriceBookItem["pricing"]) {
+    if (savingItemId !== null) {
+      return;
+    }
+
+    setSavingItemId(item.id);
+
+    try {
+      const updated = await snapquoteApi.updatePriceBookItem(item.id, { pricing, confirmed: true });
+      upsertPriceBookItem(updated);
+      setEditingItemId(null);
+    } catch (error) {
+      Alert.alert("Could not save price", userFacingErrorMessage(error));
+    } finally {
+      setSavingItemId(null);
+    }
+  }
+
+  async function saveNewItem(input: {
+    name: string;
+    description: string;
+    unit: PriceBookItem["unit"];
+    kind: PriceBookItem["kind"];
+    pricing: PriceBookItem["pricing"];
+  }) {
+    if (savingNewItem) {
+      return;
+    }
+
+    setSavingNewItem(true);
+
+    try {
+      const created = await snapquoteApi.createPriceBookItem({ ...input, confirmed: true });
+      upsertPriceBookItem(created);
+      setShowAddModal(false);
+    } catch (error) {
+      Alert.alert("Could not add price", userFacingErrorMessage(error));
+    } finally {
+      setSavingNewItem(false);
+    }
+  }
 
   return (
     <Screen edges={["top"]}>
@@ -122,9 +166,9 @@ export default function PriceBookScreen() {
           <PriceItemModal
             item={editingItem}
             onClose={() => setEditingItemId(null)}
+            saving={savingItemId === editingItem.id}
             onSave={(pricing) => {
-              confirmPriceBookItem(editingItem.id, pricing);
-              setEditingItemId(null);
+              void saveExistingPrice(editingItem, pricing);
             }}
           />
         ) : null}
@@ -133,10 +177,8 @@ export default function PriceBookScreen() {
       <SheetModal onDismiss={() => setShowAddModal(false)} style={styles.modalBackdrop} visible={showAddModal}>
         <AddItemModal
           onClose={() => setShowAddModal(false)}
-          onSave={(input) => {
-            addPriceBookItem(input);
-            setShowAddModal(false);
-          }}
+          onSave={(input) => void saveNewItem(input)}
+          saving={savingNewItem}
         />
       </SheetModal>
     </Screen>
@@ -317,6 +359,7 @@ function PriceItemModal(props: {
   item: PriceBookItem;
   onClose: () => void;
   onSave: (pricing: PriceBookItem["pricing"]) => void;
+  saving: boolean;
 }) {
   const { item } = props;
   const pricing = item.pricing;
@@ -361,8 +404,8 @@ function PriceItemModal(props: {
         <Field keyboardType="decimal-pad" label={`Price ($ / ${item.unit})`} onChangeText={setMedium} value={medium} />
       )}
 
-      <PrimaryButton label="Save price" onPress={save} />
-      <Pressable accessibilityRole="button" onPress={props.onClose} style={styles.cancelLink}>
+      <PrimaryButton disabled={props.saving} label={props.saving ? "Saving..." : "Save price"} onPress={save} />
+      <Pressable accessibilityRole="button" disabled={props.saving} onPress={props.onClose} style={styles.cancelLink}>
         <Text style={styles.cancelLinkText}>Cancel</Text>
       </Pressable>
     </AnimatedSheetContent>
@@ -378,6 +421,7 @@ function AddItemModal(props: {
     kind: PriceBookItem["kind"];
     pricing: PriceBookItem["pricing"];
   }) => void;
+  saving: boolean;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -388,7 +432,7 @@ function AddItemModal(props: {
   const canSave = name.trim().length > 0 && price.trim().length > 0;
 
   function save() {
-    if (!canSave) {
+    if (!canSave || props.saving) {
       return;
     }
 
@@ -435,8 +479,8 @@ function AddItemModal(props: {
         value={kind}
       />
 
-      <PrimaryButton disabled={!canSave} label="Add item" onPress={save} />
-      <Pressable accessibilityRole="button" onPress={props.onClose} style={styles.cancelLink}>
+      <PrimaryButton disabled={!canSave || props.saving} label={props.saving ? "Adding..." : "Add item"} onPress={save} />
+      <Pressable accessibilityRole="button" disabled={props.saving} onPress={props.onClose} style={styles.cancelLink}>
         <Text style={styles.cancelLinkText}>Cancel</Text>
       </Pressable>
     </AnimatedSheetContent>

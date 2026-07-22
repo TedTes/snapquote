@@ -2,6 +2,7 @@ import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { quoteUnits, type QuoteLineItem } from "@snapquote/shared";
+import { snapquoteApi, userFacingErrorMessage } from "../../../../src/lib/api";
 import {
   Banner,
   Card,
@@ -25,11 +26,8 @@ export default function EditLineScreen() {
   const { id, lineId } = useLocalSearchParams<{ id: string; lineId: string }>();
   const quote = useMvpStore((state) => state.quotes.find((candidate) => candidate.id === id));
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
-  const updateLineItem = useMvpStore((state) => state.updateLineItem);
-  const addManualLine = useMvpStore((state) => state.addManualLine);
-  const removeLine = useMvpStore((state) => state.removeLine);
-  const confirmYellowLine = useMvpStore((state) => state.confirmYellowLine);
-  const saveLineToPriceBook = useMvpStore((state) => state.saveLineToPriceBook);
+  const upsertPriceBookItem = useMvpStore((state) => state.upsertPriceBookItem);
+  const upsertRemoteQuote = useMvpStore((state) => state.upsertRemoteQuote);
 
   const isNew = lineId === "new";
   const existingLine = quote?.lineItems.find((line) => line.id === lineId);
@@ -49,6 +47,7 @@ export default function EditLineScreen() {
       : ""
   );
   const [saveToPriceBook, setSaveToPriceBook] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   if (!id || !quote || (!isNew && !existingLine)) {
     return (
@@ -61,6 +60,7 @@ export default function EditLineScreen() {
     );
   }
 
+  const activeQuote = quote;
   const quoteId = quote.id;
 
   function close() {
@@ -73,13 +73,23 @@ export default function EditLineScreen() {
 
   const isYellowConfirmMode = existingLine !== undefined && existingLine.matchState === "yellow" && !overriding;
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!existingLine) {
       return;
     }
 
-    confirmYellowLine(quoteId, existingLine.id);
-    close();
+    setSaving(true);
+
+    try {
+      const response = await snapquoteApi.confirmLine(quoteId, existingLine.id);
+      upsertPriceBookItem(response.item);
+      upsertRemoteQuote(response.quote);
+      close();
+    } catch (error) {
+      Alert.alert("Could not confirm price", userFacingErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
   }
 
   const quantityNumber = Number(quantity);
@@ -87,33 +97,51 @@ export default function EditLineScreen() {
   const canSave =
     description.trim().length > 0 && Number.isFinite(quantityNumber) && quantityNumber > 0 && priceCents !== null;
 
-  function handleSave() {
+  async function handleSave() {
     if (!canSave || priceCents === null) {
       return;
     }
 
-    const input = {
+    setSaving(true);
+
+    const input: QuoteLineItem = {
+      id: existingLine?.id,
+      position: existingLine?.position ?? activeQuote.lineItems.length,
       description: description.trim(),
       quantity: quantityNumber,
       unit,
       unitPriceCents: priceCents,
-      kind
+      kind,
+      source: "manual",
+      priceBookItemId: null,
+      priceBookItemKey: null,
+      matchConfidence: null,
+      matchState: "green"
     };
 
-    let targetLineId: string | null = null;
+    try {
+      const lineItems = isNew
+        ? [...activeQuote.lineItems, input]
+        : activeQuote.lineItems.map((line) => (line.id === existingLine?.id ? input : line));
+      let updated = await snapquoteApi.patchQuote(quoteId, { lineItems });
 
-    if (isNew) {
-      targetLineId = addManualLine(quoteId, input);
-    } else if (existingLine) {
-      updateLineItem(quoteId, existingLine.id, input);
-      targetLineId = existingLine.id;
+      if (saveToPriceBook) {
+        const targetLine = findPatchedLine(updated.lineItems, input);
+
+        if (targetLine) {
+          const response = await snapquoteApi.saveLineToPriceBook(quoteId, targetLine.id);
+          upsertPriceBookItem(response.item);
+          updated = response.quote;
+        }
+      }
+
+      upsertRemoteQuote(updated);
+      close();
+    } catch (error) {
+      Alert.alert("Could not save line", userFacingErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
-
-    if (saveToPriceBook && targetLineId) {
-      saveLineToPriceBook(quoteId, targetLineId);
-    }
-
-    close();
   }
 
   function handleRemove() {
@@ -127,11 +155,32 @@ export default function EditLineScreen() {
         text: "Remove",
         style: "destructive",
         onPress: () => {
-          removeLine(quoteId, existingLine.id);
-          close();
+          void removeRemoteLine();
         }
       }
     ]);
+  }
+
+  async function removeRemoteLine() {
+    if (!existingLine) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const updated = await snapquoteApi.patchQuote(quoteId, {
+        lineItems: activeQuote.lineItems
+          .filter((line) => line.id !== existingLine.id)
+          .map((line, index) => ({ ...line, position: index }))
+      });
+      upsertRemoteQuote(updated);
+      close();
+    } catch (error) {
+      Alert.alert("Could not remove line", userFacingErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (isYellowConfirmMode && existingLine) {
@@ -150,7 +199,11 @@ export default function EditLineScreen() {
               This price comes from your starter price book and hasn't been confirmed yet.
             </Text>
           </Card>
-          <PrimaryButton label="Confirm starter price" onPress={handleConfirm} />
+          <PrimaryButton
+            disabled={saving}
+            label={saving ? "Confirming..." : "Confirm starter price"}
+            onPress={() => void handleConfirm()}
+          />
           <Pressable accessibilityRole="button" onPress={() => setOverriding(true)} style={styles.overrideLink}>
             <Text style={styles.overrideLinkText}>Override with a different price instead</Text>
           </Pressable>
@@ -218,9 +271,26 @@ export default function EditLineScreen() {
         {existingLine ? <GhostButton label="Remove line" onPress={handleRemove} tone="danger" /> : null}
       </ScrollView>
       <View style={styles.footer}>
-        <PrimaryButton disabled={!canSave} label="Save line" onPress={handleSave} />
+        <PrimaryButton
+          disabled={!canSave || saving}
+          label={saving ? "Saving..." : "Save line"}
+          onPress={() => void handleSave()}
+        />
       </View>
     </Screen>
+  );
+}
+
+function findPatchedLine(
+  lines: Array<QuoteLineItem & { id: string }>,
+  target: QuoteLineItem
+): (QuoteLineItem & { id: string }) | undefined {
+  return lines.find(
+    (line) =>
+      line.position === target.position &&
+      line.description === target.description &&
+      line.quantity === target.quantity &&
+      line.unitPriceCents === target.unitPriceCents
   );
 }
 
