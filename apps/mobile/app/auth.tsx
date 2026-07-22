@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { AlertCircle, ArrowRight, Mail } from "lucide-react-native";
+import { AlertCircle, ArrowRight, ChevronLeft, Mail } from "lucide-react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import Animated from "react-native-reanimated";
 import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../src/ui/components";
 import { QuoteMark } from "../src/ui/QuoteMark";
 import { fadeEnter, useMotionEnabled } from "../src/ui/motion";
@@ -46,6 +48,7 @@ function AuthBackground() {
 }
 
 export default function AuthScreen() {
+  const params = useLocalSearchParams<{ from?: string }>();
   const [email, setEmail] = useState("");
   const [showEmail, setShowEmail] = useState(false);
   const [linkSentTo, setLinkSentTo] = useState<string | null>(null);
@@ -54,8 +57,10 @@ export default function AuthScreen() {
   const authError = useAuthStore((state) => state.error);
   const sendEmailLink = useAuthStore((state) => state.sendEmailLink);
   const startOAuth = useAuthStore((state) => state.startOAuth);
+  const insets = useSafeAreaInsets();
   const busy = status === "loading";
   const error = localError ?? authError;
+  const canDismiss = params.from === "app";
 
   async function submitEmailLink() {
     const trimmedEmail = email.trim();
@@ -90,6 +95,23 @@ export default function AuthScreen() {
   return (
     <Screen edges={["top", "bottom"]}>
       <AuthBackground />
+      {canDismiss ? (
+        <Pressable
+          accessibilityLabel="Back to app"
+          accessibilityRole="button"
+          hitSlop={10}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/");
+            }
+          }}
+          style={[styles.dismissButton, { top: insets.top + 20 }]}
+        >
+          <ChevronLeft color={colors.ink} size={23} strokeWidth={2.4} />
+        </Pressable>
+      ) : null}
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
@@ -278,6 +300,19 @@ function GoogleMark() {
 }
 
 const styles = StyleSheet.create({
+  dismissButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: "center",
+    left: 20,
+    position: "absolute",
+    width: 42,
+    zIndex: 10
+  },
   keyboard: {
     flex: 1
   },

@@ -132,7 +132,7 @@ export default function ProfileScreen() {
             onPress={() =>
               authStatus === "signed_in"
                 ? Alert.alert("Login email", "Email changes are coming next.")
-                : router.push("/auth")
+                : router.push({ pathname: "/auth", params: { from: "app" } })
             }
           />
         </ProfileSection>
@@ -168,7 +168,7 @@ export default function ProfileScreen() {
               icon={<LogIn color={colors.ink2} size={15} strokeWidth={2.1} />}
               label="Sign in"
               last
-              onPress={() => router.push("/auth")}
+              onPress={() => router.push({ pathname: "/auth", params: { from: "app" } })}
             />
           )}
         </ProfileSection>
@@ -246,8 +246,8 @@ function VerifiedBadge() {
 const styles = StyleSheet.create({
   content: {
     gap: 23,
-    paddingHorizontal: 19,
-    paddingTop: 10,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 18
   },
   nav: {

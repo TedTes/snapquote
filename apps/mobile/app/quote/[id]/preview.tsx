@@ -107,7 +107,7 @@ export default function QuotePreviewScreen() {
         "Use Apple, Google, or an email link to send this quote and track customer views.",
         [
           { text: "Not now", style: "cancel" },
-          { text: "Continue", onPress: () => router.push("/auth") },
+          { text: "Continue", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) },
         ],
       );
       return;
