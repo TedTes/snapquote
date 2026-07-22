@@ -11,3 +11,4 @@ apps/mobile/.expo
 apps/mobile/.expo-shared
 apps/mobile/web-build
 infra/.data
+supabase/**/.temp

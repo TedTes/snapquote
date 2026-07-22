@@ -1,0 +1,12 @@
+project_id = "snapquote"
+
+[api]
+enabled = true
+schemas = ["public", "snapquote"]
+
+[auth]
+enabled = true
+site_url = "http://localhost:8081"
+
+[functions.snapquote]
+verify_jwt = false

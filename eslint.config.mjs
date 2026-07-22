@@ -9,7 +9,8 @@ export default [
       "**/node_modules/**",
       "apps/mobile/.expo/**",
       "apps/mobile/babel.config.cjs",
-      "apps/mobile/metro.config.cjs"
+      "apps/mobile/metro.config.cjs",
+      "supabase/functions/**"
     ]
   },
   js.configs.recommended,
