@@ -73,6 +73,15 @@ export function initials(name: string): string {
     .join("");
 }
 
+export function displayBusinessName(name: string | null | undefined, fallback = "Your business"): string {
+  const trimmedName = typeof name === "string" ? name.trim() : "";
+  return trimmedName.length > 0 ? trimmedName : fallback;
+}
+
+export function businessInitials(name: string | null | undefined): string {
+  return initials(displayBusinessName(name));
+}
+
 export function formatRelativeToNow(iso: string, now = new Date()): string {
   const then = new Date(iso);
   const diffMs = now.getTime() - then.getTime();

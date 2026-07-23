@@ -6,7 +6,7 @@ import { BottomTabBar } from "../src/ui/BottomTabBar";
 import { QuoteCard } from "../src/ui/QuoteCard";
 import { Screen } from "../src/ui/components";
 import { colors, radius } from "../src/ui/theme";
-import { formatMoney, initials } from "../src/lib/format";
+import { businessInitials, displayBusinessName, formatMoney } from "../src/lib/format";
 import { useQuoteRows } from "../src/state/useQuoteRows";
 import { useMvpStore, type QuoteRecord } from "../src/state/mvp";
 
@@ -15,10 +15,7 @@ type QuotesFilter = "draft" | "sent" | "viewed" | "stale" | "accepted";
 export default function DashboardScreen() {
   const businessName = useMvpStore((state) => state.businessName);
   const rows = useQuoteRows();
-  const displayBusinessName =
-    typeof businessName === "string" && businessName.trim().length > 0
-      ? businessName
-      : "SnapQuote Painting Co.";
+  const businessDisplayName = displayBusinessName(businessName, "Add business name");
 
   const metrics = useMemo(() => {
     const activeRows = rows.filter(
@@ -66,7 +63,7 @@ export default function DashboardScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.eyebrow}>{displayBusinessName.toUpperCase()}</Text>
+            <Text style={styles.eyebrow}>{businessDisplayName.toUpperCase()}</Text>
             <Text style={styles.title}>Today</Text>
             <Text style={styles.date}>{formatToday()}</Text>
           </View>
@@ -76,7 +73,7 @@ export default function DashboardScreen() {
             onPress={() => router.push("/settings/edit")}
             style={styles.avatar}
           >
-            <Text style={styles.avatarText}>{initials(displayBusinessName)}</Text>
+            <Text style={styles.avatarText}>{businessInitials(businessName)}</Text>
           </Pressable>
         </View>
 

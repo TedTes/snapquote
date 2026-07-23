@@ -16,7 +16,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { BottomTabBar } from "../src/ui/BottomTabBar";
 import { Screen } from "../src/ui/components";
 import { colors, radius } from "../src/ui/theme";
-import { initials } from "../src/lib/format";
+import { businessInitials } from "../src/lib/format";
 import { useMvpStore } from "../src/state/mvp";
 import { useAuthStore } from "../src/state/auth";
 
@@ -43,7 +43,7 @@ export default function SettingsScreen() {
             onPress={() => router.push("/settings/edit")}
             style={styles.headerAvatar}
           >
-            <Text style={styles.headerAvatarText}>{initials(businessName)}</Text>
+            <Text style={styles.headerAvatarText}>{businessInitials(businessName)}</Text>
           </Pressable>
         </View>
 
@@ -197,7 +197,7 @@ function VerifiedBadge() {
 function TradeValue() {
   return (
     <View style={styles.tradeValue}>
-      <Text style={styles.tradeText}>Painting</Text>
+      <Text style={styles.tradeText}>Flexible</Text>
       <Lock color={colors.ink3} size={11} strokeWidth={2.2} />
     </View>
   );

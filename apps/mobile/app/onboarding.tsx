@@ -22,7 +22,7 @@ import {
 export default function OnboardingScreen() {
   const completeOnboarding = useMvpStore((state) => state.completeOnboarding);
   const authStatus = useAuthStore((state) => state.status);
-  const [businessName, setBusinessName] = useState("Sharp Edge Painting");
+  const [businessName, setBusinessName] = useState("");
   const [taxRate, setTaxRate] = useState("13");
   const [wallsMedium, setWallsMedium] = useState(
     centsToDollars(defaultCorePrices.paintWalls.medium),
@@ -47,7 +47,7 @@ export default function OnboardingScreen() {
     }
 
     const payload = {
-      businessName,
+      businessName: businessName.trim(),
       defaultTaxRate: Number(taxRate) / 100,
       defaultTerms: useMvpStore.getState().defaultTerms,
       quoteValidDays: useMvpStore.getState().quoteValidDays,
@@ -89,7 +89,7 @@ export default function OnboardingScreen() {
 
   function saveLocalOnly() {
     completeOnboarding({
-      businessName,
+      businessName: businessName.trim(),
       defaultTaxRate: Number(taxRate) / 100,
       corePrices: {
         paintWalls: roomPrices(dollarsToCents(wallsMedium)),
@@ -105,11 +105,12 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.kicker}>Painter Setup</Text>
+        <Text style={styles.kicker}>Setup</Text>
         <Text style={styles.title}>Confirm your core prices</Text>
 
         <Field
           label="Business name"
+          placeholder="e.g. Brightline Services"
           value={businessName}
           onChangeText={setBusinessName}
         />
@@ -181,6 +182,7 @@ function Field(props: {
   value: string;
   onChangeText: (value: string) => void;
   keyboardType?: "default" | "numeric";
+  placeholder?: string | undefined;
 }) {
   return (
     <View style={styles.field}>
@@ -188,6 +190,8 @@ function Field(props: {
       <TextInput
         keyboardType={props.keyboardType ?? "default"}
         onChangeText={props.onChangeText}
+        placeholder={props.placeholder}
+        placeholderTextColor="#98a2b3"
         style={styles.input}
         value={props.value}
       />

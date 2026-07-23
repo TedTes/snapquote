@@ -197,7 +197,7 @@ const initialPriceBook = buildPainterStarterPriceBook({
 
 export const useMvpStore = create<MvpState>((set, get) => ({
   onboarded: false,
-  businessName: "SnapQuote Painting Co.",
+  businessName: "",
   defaultTaxRate: 0.13,
   defaultTerms:
     "50% deposit due to schedule the job, balance due on completion.",
@@ -748,7 +748,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
       return {
         onboarded: true,
-        businessName: input.me.org.name ?? "SnapQuote Painting Co.",
+        businessName: input.me.org.name ?? "",
         defaultTaxRate: Number.isFinite(input.me.org.defaultTaxRate)
           ? input.me.org.defaultTaxRate
           : 0.13,

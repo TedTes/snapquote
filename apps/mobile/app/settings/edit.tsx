@@ -18,6 +18,7 @@ import {
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useAuthStore } from "../../src/state/auth";
 import { getQuoteStatus, useMvpStore } from "../../src/state/mvp";
+import { displayBusinessName } from "../../src/lib/format";
 import { QuoteMark } from "../../src/ui/QuoteMark";
 import { Screen } from "../../src/ui/components";
 import { colors, radius } from "../../src/ui/theme";
@@ -67,8 +68,8 @@ export default function ProfileScreen() {
               <Camera color={colors.ink2} size={14} strokeWidth={2.2} />
             </Pressable>
           </View>
-          <Text style={styles.businessName}>{businessName}</Text>
-          <Text style={styles.businessMeta}>Painting · Interior</Text>
+          <Text style={styles.businessName}>{displayBusinessName(businessName, "Add business name")}</Text>
+          <Text style={styles.businessMeta}>Business identity</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => Alert.alert("Business info", "Business info editing is coming next.")}
