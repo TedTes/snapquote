@@ -8,12 +8,21 @@ import type {
   QuoteStatus
 } from "@snapquote/shared";
 
-const rawApiBaseUrl =
-  process.env.EXPO_PUBLIC_API_URL ?? "https://dctmpfrbkgntiuhjbblu.functions.supabase.co/snapquote";
-const snapquoteOrgId = process.env.EXPO_PUBLIC_SNAPQUOTE_ORG_ID;
+type ExpoRuntimeProcess = {
+  env?: Record<string, string | undefined>;
+};
+
+const runtimeProcess = globalThis as unknown as { process?: ExpoRuntimeProcess };
+const rawApiBaseUrl = envValue("EXPO_PUBLIC_API_URL") ?? "https://dctmpfrbkgntiuhjbblu.functions.supabase.co/snapquote";
+const snapquoteOrgId = envValue("EXPO_PUBLIC_SNAPQUOTE_ORG_ID");
 let authAccessToken: string | null = null;
 
 export const apiBaseUrl = rawApiBaseUrl.replace(/\/$/, "");
+
+function envValue(key: string): string | undefined {
+  const value = runtimeProcess.process?.env?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
 
 type RequestOptions = {
   body?: unknown;
