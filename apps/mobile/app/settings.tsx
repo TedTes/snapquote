@@ -51,20 +51,20 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={<Percent color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Tax rate"
-            onPress={() => router.push("/settings/edit")}
+            onPress={() => router.push("/settings/business")}
             value={`${Math.round(defaultTaxRate * 100)}%`}
           />
           <SettingsRow
             icon={<CalendarDays color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Quote valid for"
-            onPress={() => router.push("/settings/edit")}
+            onPress={() => router.push("/settings/business")}
             value={`${quoteValidDays} days`}
           />
           <SettingsRow
             detail={defaultTerms}
             icon={<FileText color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Default terms"
-            onPress={() => router.push("/settings/edit")}
+            onPress={() => router.push("/settings/business")}
           />
           <SettingsRow
             detail="Hi {name}, just checking in..."

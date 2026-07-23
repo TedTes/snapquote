@@ -72,7 +72,7 @@ export default function ProfileScreen() {
           <Text style={styles.businessMeta}>Business identity</Text>
           <Pressable
             accessibilityRole="button"
-            onPress={() => Alert.alert("Business info", "Business info editing is coming next.")}
+            onPress={() => router.push("/settings/business")}
             style={styles.editButton}
           >
             <Text style={styles.editButtonText}>Edit business info</Text>
@@ -90,7 +90,7 @@ export default function ProfileScreen() {
             detail="Shown on every quote"
             icon={<Building2 color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Business name & logo"
-            onPress={() => Alert.alert("Business identity", "Business profile editing is coming next.")}
+            onPress={() => router.push("/settings/business")}
           />
           <ProfileRow
             detail="(416) 555-0148 · sharpedge.co"
