@@ -130,6 +130,16 @@ const oauthCompleteSchema = z.object({
   name: z.string().trim().max(120).optional()
 });
 
+const nativeOAuthSchema = z.object({
+  provider: z.literal("apple"),
+  identityToken: z.string().min(1),
+  authorizationCode: z.string().min(1).optional(),
+  email: z.string().trim().email().max(320).optional(),
+  businessName: z.string().trim().min(1).max(120).optional(),
+  name: z.string().trim().max(120).optional(),
+  nonce: z.string().min(1).max(256).optional()
+});
+
 const refreshSchema = z.object({
   refreshToken: z.string().min(1)
 });
@@ -239,6 +249,10 @@ Deno.serve(async (request) => {
 
     if (route.method === "POST" && route.path === "/v1/auth/oauth/complete") {
       return json(await completeOAuth(db, request));
+    }
+
+    if (route.method === "POST" && route.path === "/v1/auth/oauth/native") {
+      return json(await completeNativeOAuth(db, request));
     }
 
     const orgId = await resolveOrgId(db, request);
@@ -577,27 +591,52 @@ async function completeOAuth(db: SupabaseClient, request: Request) {
     throw new HttpError(401, "Could not complete sign in. Try again.");
   }
 
+  return authResponseForSupabaseUser(db, {
+    accessToken: input.accessToken,
+    refreshToken: input.refreshToken,
+    expiresAt: input.expiresAt,
+    user: { id: data.user.id }
+  }, data.user, input);
+}
+
+async function completeNativeOAuth(db: SupabaseClient, request: Request) {
+  const input = parse(nativeOAuthSchema, await request.json());
+  const { data, error } = await db.auth.signInWithIdToken({
+    provider: input.provider,
+    token: input.identityToken,
+    ...(input.nonce ? { nonce: input.nonce } : {})
+  });
+
+  if (error || !data.session || !data.user) {
+    console.warn("Native Apple sign-in token exchange failed", authFailureMessage(error));
+    throw new HttpError(401, nativeAppleAuthFailureMessage(error));
+  }
+
+  return authResponseForSupabaseUser(db, sessionResponse(data.session, data.user), data.user, input);
+}
+
+async function authResponseForSupabaseUser(
+  db: SupabaseClient,
+  session: AuthSessionPayload,
+  user: any,
+  input: { businessName?: string | undefined; email?: string | undefined; name?: string | undefined }
+) {
   const existingMember = await maybeSingle(
-    db.from("snapquote_org_members").select("*").eq("auth_user_id", data.user.id)
+    db.from("snapquote_org_members").select("*").eq("auth_user_id", user.id)
   );
 
   if (existingMember) {
     const org = await single(db.from("snapquote_orgs").select("*").eq("id", existingMember.org_id));
-    return authResponse({
-      accessToken: input.accessToken,
-      refreshToken: input.refreshToken,
-      expiresAt: input.expiresAt,
-      user: { id: data.user.id }
-    }, org, existingMember);
+    return authResponse(session, org, existingMember);
   }
 
-  const email = data.user.email;
+  const email = input.email || user.email;
 
   if (!email) {
     throw new HttpError(400, "Your account did not provide an email address.");
   }
 
-  const userMetadata = data.user.user_metadata ?? {};
+  const userMetadata = user.user_metadata ?? {};
   const rawName =
     input.name ||
     String(userMetadata.full_name ?? userMetadata.name ?? userMetadata.display_name ?? "").trim() ||
@@ -618,7 +657,7 @@ async function completeOAuth(db: SupabaseClient, request: Request) {
 
   const member = await single(db.from("snapquote_org_members").insert({
     org_id: org.id,
-    auth_user_id: data.user.id,
+    auth_user_id: user.id,
     email,
     name: rawName,
     role: "owner"
@@ -626,12 +665,7 @@ async function completeOAuth(db: SupabaseClient, request: Request) {
 
   await seedStarterPriceBook(db, String(org.id), false);
 
-  return authResponse({
-    accessToken: input.accessToken,
-    refreshToken: input.refreshToken,
-    expiresAt: input.expiresAt,
-    user: { id: data.user.id }
-  }, org, member);
+  return authResponse(session, org, member);
 }
 
 async function createPasswordSession(db: SupabaseClient, email: string, password: string) {
@@ -2152,6 +2186,29 @@ function authFailureMessage(...errors: unknown[]) {
   }
 
   return message;
+}
+
+function nativeAppleAuthFailureMessage(error: unknown) {
+  const message = authFailureMessage(error);
+  const lower = message.toLowerCase();
+
+  if (lower.includes("audience") || lower.includes("client") || lower.includes("bundle")) {
+    return "Apple sign-in is not configured for this app bundle.";
+  }
+
+  if (lower.includes("nonce")) {
+    return "Apple sign-in could not verify this request. Try again.";
+  }
+
+  if (lower.includes("relation \"users\"") || lower.includes("column \"name\"")) {
+    return "Apple sign-in is blocked by an account setup issue. Try again after setup is fixed.";
+  }
+
+  if (lower.includes("provider") || lower.includes("apple")) {
+    return "Apple sign-in is not fully enabled for this Supabase project.";
+  }
+
+  return "Could not complete Apple sign-in. Try again.";
 }
 
 function debugMessageFromError(error: unknown) {
