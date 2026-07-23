@@ -256,6 +256,10 @@ Deno.serve(async (request) => {
       return json(await updatePriceBookItem(db, request, params(route.path, "/v1/price-book/:id").id));
     }
 
+    if (route.method === "POST" && match(route.path, "/v1/price-book/:id/archive")) {
+      return json(await archivePriceBookItem(db, request, params(route.path, "/v1/price-book/:id/archive").id));
+    }
+
     if (route.method === "GET" && route.path === "/v1/customers") {
       return json({ customers: await listCustomers(db, orgIdFromRequest(request)) });
     }
@@ -698,6 +702,7 @@ async function seedStarterPriceBook(
 
 async function listPriceBook(db: SupabaseClient, orgId: string): Promise<PriceBookItem[]> {
   const { data, error } = await db.from("snapquote_price_book_items").select("*").eq("org_id", orgId)
+    .is("archived_at", null)
     .order("confirmed_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: true });
 
@@ -732,6 +737,21 @@ async function updatePriceBookItem(db: SupabaseClient, request: Request, id: str
     db.from("snapquote_price_book_items").update(patch).eq("id", id).eq("org_id", orgIdFromRequest(request)).select("*")
   );
   return priceBookItemFromRow(item as PriceBookRow);
+}
+
+async function archivePriceBookItem(db: SupabaseClient, request: Request, id: string) {
+  const orgId = orgIdFromRequest(request);
+  const now = new Date().toISOString();
+  const item = await single(
+    db.from("snapquote_price_book_items")
+      .update({ archived_at: now, updated_at: now })
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .is("archived_at", null)
+      .select("id")
+  ) as { id: string };
+
+  return { id: item.id, archived: true };
 }
 
 async function createPriceBookItem(db: SupabaseClient, request: Request) {
@@ -1022,7 +1042,25 @@ async function confirmLine(db: SupabaseClient, request: Request, quoteId: string
   }
 
   const now = new Date().toISOString();
-  const item = await single(db.from("snapquote_price_book_items").update({ confirmed_at: now }).eq("id", line.price_book_item_id).eq("org_id", orgId).select("*"));
+  const existingItem = await single(
+    db.from("snapquote_price_book_items")
+      .select("usage_count")
+      .eq("id", line.price_book_item_id)
+      .eq("org_id", orgId)
+      .is("archived_at", null)
+  ) as { usage_count: number };
+  const item = await single(
+    db.from("snapquote_price_book_items")
+      .update({
+        confirmed_at: now,
+        usage_count: existingItem.usage_count + 1,
+        updated_at: now
+      })
+      .eq("id", line.price_book_item_id)
+      .eq("org_id", orgId)
+      .is("archived_at", null)
+      .select("*")
+  );
   must(await db.from("snapquote_quote_line_items").update({ match_state: "green", match_confidence: 1 }).eq("id", lineId));
   await recomputeQuoteTotals(db, orgId, quoteId);
 
