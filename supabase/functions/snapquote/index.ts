@@ -80,7 +80,7 @@ const checklistSchema = z.object({
 });
 
 const onboardingSchema = z.object({
-  businessName: z.string().trim().min(1).max(120),
+  businessName: z.string().trim().max(120).default(""),
   defaultTaxRate: z.number().min(0).max(1),
   defaultTerms: z.string().trim().max(4000).default(""),
   quoteValidDays: z.number().int().min(1).max(365).default(14),
@@ -94,7 +94,7 @@ const onboardingSchema = z.object({
 });
 
 const orgSettingsSchema = z.object({
-  businessName: z.string().trim().min(1).max(120).optional(),
+  businessName: z.string().trim().max(120).optional(),
   defaultTaxRate: z.number().min(0).max(1).optional(),
   defaultTerms: z.string().trim().max(4000).optional(),
   quoteValidDays: z.number().int().min(1).max(365).optional()
@@ -378,7 +378,7 @@ function getDb() {
 
 async function signUp(db: SupabaseClient, request: Request) {
   const input = parse(authSchema, await request.json());
-  const account = await createAuthAccount(db, input).catch(() => null);
+  const account = await createAuthAccount(input).catch(() => null);
 
   if (!account) {
     return signUpWithDbIdentity(db, input);
@@ -390,12 +390,12 @@ async function signUp(db: SupabaseClient, request: Request) {
 
   if (existingMember) {
     const org = await single(db.from("snapquote_orgs").select("*").eq("id", existingMember.org_id));
-    const session = account.session ?? await createPasswordSession(db, input.email, input.password);
+    const session = account.session ?? await createPasswordSession(input.email, input.password);
     return authResponse(session, org, existingMember);
   }
 
   const org = await single(db.from("snapquote_orgs").insert({
-    name: input.businessName ?? "SnapQuote Painting Co.",
+    name: input.businessName ?? "",
     trade: "painting",
     default_tax_rate: 0.13,
     default_terms: "50% deposit due to schedule the job, balance due on completion.",
@@ -413,7 +413,7 @@ async function signUp(db: SupabaseClient, request: Request) {
 
   await seedStarterPriceBook(db, String(org.id), false);
 
-  const session = account.session ?? await createPasswordSession(db, input.email, input.password);
+  const session = account.session ?? await createPasswordSession(input.email, input.password);
 
   return authResponse(session, org, member);
 }
@@ -436,7 +436,7 @@ async function signUpWithDbIdentity(db: SupabaseClient, input: z.infer<typeof au
   }
 
   const org = await single(db.from("snapquote_orgs").insert({
-    name: input.businessName ?? "SnapQuote Painting Co.",
+    name: input.businessName ?? "",
     trade: "painting",
     default_tax_rate: 0.13,
     default_terms: "50% deposit due to schedule the job, balance due on completion.",
@@ -463,8 +463,9 @@ async function signUpWithDbIdentity(db: SupabaseClient, input: z.infer<typeof au
   return authResponse(await createAppSession(member), org, member);
 }
 
-async function createAuthAccount(db: SupabaseClient, input: z.infer<typeof authSchema>) {
-  const { data: adminData, error: adminError } = await db.auth.admin.createUser({
+async function createAuthAccount(input: z.infer<typeof authSchema>) {
+  const authDb = getDb();
+  const { data: adminData, error: adminError } = await authDb.auth.admin.createUser({
     email: input.email,
     password: input.password,
     email_confirm: true,
@@ -477,7 +478,7 @@ async function createAuthAccount(db: SupabaseClient, input: z.infer<typeof authS
     return { user: adminData.user, session: null };
   }
 
-  const { data: signUpData, error: signUpError } = await db.auth.signUp({
+  const { data: signUpData, error: signUpError } = await authDb.auth.signUp({
     email: input.email,
     password: input.password,
     options: {
@@ -496,7 +497,7 @@ async function createAuthAccount(db: SupabaseClient, input: z.infer<typeof authS
     };
   }
 
-  const passwordSession = await createPasswordSession(db, input.email, input.password).catch(() => null);
+  const passwordSession = await createPasswordSession(input.email, input.password).catch(() => null);
 
   if (passwordSession) {
     return { user: passwordSession.user, session: passwordSession };
@@ -507,7 +508,7 @@ async function createAuthAccount(db: SupabaseClient, input: z.infer<typeof authS
 
 async function signIn(db: SupabaseClient, request: Request) {
   const input = parse(authSchema.pick({ email: true, password: true }), await request.json());
-  const supabaseSession = await createPasswordSession(db, input.email, input.password).catch(() => null);
+  const supabaseSession = await createPasswordSession(input.email, input.password).catch(() => null);
 
   if (supabaseSession) {
     const member = await single(db.from("snapquote_org_members").select("*").eq("auth_user_id", supabaseSession.user.id));
@@ -550,7 +551,8 @@ async function sendEmailLink(db: SupabaseClient, request: Request) {
 
 async function refreshAuthSession(db: SupabaseClient, request: Request) {
   const input = parse(refreshSchema, await request.json());
-  const { data, error } = await db.auth.refreshSession({ refresh_token: input.refreshToken });
+  const authDb = getDb();
+  const { data, error } = await authDb.auth.refreshSession({ refresh_token: input.refreshToken });
 
   if (!error && data.session && data.user) {
     const session = sessionResponse(data.session, data.user);
@@ -601,7 +603,8 @@ async function completeOAuth(db: SupabaseClient, request: Request) {
 
 async function completeNativeOAuth(db: SupabaseClient, request: Request) {
   const input = parse(nativeOAuthSchema, await request.json());
-  const { data, error } = await db.auth.signInWithIdToken({
+  const authDb = getDb();
+  const { data, error } = await authDb.auth.signInWithIdToken({
     provider: input.provider,
     token: input.identityToken,
     ...(input.nonce ? { nonce: input.nonce } : {})
@@ -637,14 +640,14 @@ async function authResponseForSupabaseUser(
   }
 
   const userMetadata = user.user_metadata ?? {};
-  const rawName =
+  const providedName =
     input.name ||
-    String(userMetadata.full_name ?? userMetadata.name ?? userMetadata.display_name ?? "").trim() ||
-    email;
+    String(userMetadata.full_name ?? userMetadata.name ?? userMetadata.display_name ?? "").trim();
+  const memberName = providedName || "Owner";
   const businessName =
     input.businessName ||
     String(userMetadata.business_name ?? "").trim() ||
-    `${rawName.split("@")[0]}'s Painting Co.`;
+    "";
 
   const org = await single(db.from("snapquote_orgs").insert({
     name: businessName,
@@ -659,7 +662,7 @@ async function authResponseForSupabaseUser(
     org_id: org.id,
     auth_user_id: user.id,
     email,
-    name: rawName,
+    name: memberName,
     role: "owner"
   }).select("*"));
 
@@ -668,8 +671,9 @@ async function authResponseForSupabaseUser(
   return authResponse(session, org, member);
 }
 
-async function createPasswordSession(db: SupabaseClient, email: string, password: string) {
-  const { data, error } = await db.auth.signInWithPassword({ email, password });
+async function createPasswordSession(email: string, password: string) {
+  const authDb = getDb();
+  const { data, error } = await authDb.auth.signInWithPassword({ email, password });
 
   if (error) {
     throw new HttpError(401, "Email or password is incorrect");
@@ -763,7 +767,7 @@ async function ensureOrg(db: SupabaseClient, orgId: string) {
 
   must(await db.from("snapquote_orgs").insert({
     id: orgId,
-    name: "SnapQuote Painting Co.",
+    name: "",
     trade: "painting",
     default_tax_rate: 0.13,
     default_terms: "50% deposit due to schedule the job, balance due on completion.",
@@ -2198,10 +2202,6 @@ function nativeAppleAuthFailureMessage(error: unknown) {
 
   if (lower.includes("nonce")) {
     return "Apple sign-in could not verify this request. Try again.";
-  }
-
-  if (lower.includes("relation \"users\"") || lower.includes("column \"name\"")) {
-    return "Apple sign-in is blocked by an account setup issue. Try again after setup is fixed.";
   }
 
   if (lower.includes("provider") || lower.includes("apple")) {
