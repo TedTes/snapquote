@@ -1,5 +1,4 @@
 import { useEffect, type ReactNode } from "react";
-import * as Linking from "expo-linking";
 import { router, usePathname } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { colors } from "../ui/theme";
@@ -8,42 +7,29 @@ import { useAuthStore } from "./auth";
 export function AuthGate(props: { children: ReactNode }) {
   const pathname = usePathname();
   const status = useAuthStore((state) => state.status);
+  const me = useAuthStore((state) => state.me);
   const initialize = useAuthStore((state) => state.initialize);
-  const completeOAuthRedirect = useAuthStore(
-    (state) => state.completeOAuthRedirect,
-  );
   const isAuthRoute = pathname === "/auth";
+  const isOnboardingRoute = pathname === "/onboarding";
 
   useEffect(() => {
-    let mounted = true;
-
-    void Linking.getInitialURL().then(async (url) => {
-      if (!mounted) {
-        return;
-      }
-
-      if (url && (await completeOAuthRedirect(url))) {
-        return;
-      }
-
-      await initialize();
-    });
-
-    const subscription = Linking.addEventListener("url", ({ url }) => {
-      void completeOAuthRedirect(url);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, [completeOAuthRedirect, initialize]);
+    void initialize();
+  }, [initialize]);
 
   useEffect(() => {
-    if (status === "signed_in" && isAuthRoute) {
+    if (status !== "signed_in") {
+      return;
+    }
+
+    if (!me?.org.setupCompletedAt && !isOnboardingRoute) {
+      router.replace("/onboarding");
+      return;
+    }
+
+    if (isAuthRoute) {
       router.replace("/");
     }
-  }, [isAuthRoute, status]);
+  }, [isAuthRoute, isOnboardingRoute, me?.org.setupCompletedAt, status]);
 
   if (status === "loading") {
     return (

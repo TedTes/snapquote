@@ -10,7 +10,7 @@ import {
   type AuthSession,
   type MeResponse
 } from "../lib/api";
-import { useMvpStore } from "./mvp";
+import { corePricesFromPriceBook, useMvpStore } from "./mvp";
 
 type AuthStatus = "loading" | "signed_out" | "signed_in";
 
@@ -21,7 +21,6 @@ type AuthState = {
   error: string | null;
   initialize: () => Promise<void>;
   completeOAuthRedirect: (url: string) => Promise<boolean>;
-  sendEmailLink: (email: string) => Promise<void>;
   signInWithNativeApple: (input: {
     identityToken: string;
     authorizationCode?: string | undefined;
@@ -112,20 +111,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     return true;
   },
 
-  sendEmailLink: async (email) => {
-    set({ status: "loading", error: null });
-
-    try {
-      const redirectTo = Linking.createURL("auth/callback");
-      await snapquoteApi.sendEmailLink({ email: email.trim(), redirectTo });
-      set({ status: "signed_out", session: null, me: null, error: null });
-    } catch (error) {
-      const message = userFacingErrorMessage(error);
-      set({ status: "signed_out", session: null, me: null, error: message });
-      throw new Error(message);
-    }
-  },
-
   signInWithNativeApple: async (input) => {
     set({ status: "loading", error: null });
 
@@ -178,21 +163,49 @@ async function applyAuthResponse(
 }
 
 async function bootstrapRemoteData(meOverride?: MeResponse) {
-  const [me, priceBook, customers, quotes] = await Promise.all([
-    meOverride ? Promise.resolve(meOverride) : snapquoteApi.me(),
+  const syncedMe = await syncLocalSetupIfNeeded(meOverride ?? await snapquoteApi.me());
+  const [priceBook, customers, quotes] = await Promise.all([
     snapquoteApi.listPriceBook(),
     snapquoteApi.listCustomers(),
     snapquoteApi.listQuotes()
   ]);
 
   useMvpStore.getState().hydrateRemoteState({
-    me,
+    me: syncedMe,
     priceBookItems: priceBook.items,
     customers: customers.customers,
     quotes: quotes.quotes
   });
 
-  return me;
+  return syncedMe;
+}
+
+async function syncLocalSetupIfNeeded(me: MeResponse): Promise<MeResponse> {
+  if (me.org.setupCompletedAt) {
+    return me;
+  }
+
+  const local = useMvpStore.getState();
+
+  if (!local.onboarded) {
+    return me;
+  }
+
+  const response = await snapquoteApi.onboardPainter({
+    businessName: local.businessName.trim(),
+    defaultTaxRate: local.defaultTaxRate,
+    defaultTerms: local.defaultTerms,
+    quoteValidDays: local.quoteValidDays,
+    corePrices: corePricesFromPriceBook(local.priceBookItems)
+  });
+
+  return {
+    ...me,
+    org: {
+      ...response.org,
+      setupCompletedAt: response.org.setupCompletedAt ?? new Date().toISOString()
+    }
+  };
 }
 
 function shouldRefresh(session: AuthSession) {
@@ -212,7 +225,7 @@ function oauthSessionFromUrl(url: string):
         provider?: OAuthProvider | undefined;
       };
     } {
-  if (!url.includes("auth/callback")) {
+  if (!isOAuthReturnUrl(url)) {
     return { type: "ignore" };
   }
 
@@ -247,6 +260,11 @@ function oauthSessionFromUrl(url: string):
       provider
     }
   };
+}
+
+function isOAuthReturnUrl(url: string) {
+  const lowerUrl = url.toLowerCase();
+  return lowerUrl.includes("auth/callback") || lowerUrl.includes("://auth") || lowerUrl.includes("/--/auth");
 }
 
 function paramsFromUrl(url: string) {

@@ -49,12 +49,13 @@ export const healthResponseSchema = z.object({
 
 export const orgProfileSchema = z.object({
   id: idSchema,
-  name: z.string().trim().min(1).max(120),
+  name: z.string().trim().max(120),
   trade: z.literal("painting"),
   logoUrl: z.string().url().nullable(),
   defaultTaxRate: z.number().min(0).max(1),
   defaultTerms: z.string().trim().max(4000),
   quoteValidDays: z.number().int().min(1).max(365),
+  setupCompletedAt: z.string().datetime().nullable(),
   plan: z.enum(["trial", "solo", "crew", "expired"])
 });
 

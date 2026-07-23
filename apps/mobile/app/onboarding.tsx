@@ -22,8 +22,13 @@ import {
 export default function OnboardingScreen() {
   const completeOnboarding = useMvpStore((state) => state.completeOnboarding);
   const authStatus = useAuthStore((state) => state.status);
+  const authMe = useAuthStore((state) => state.me);
+  const storedDefaultTerms = useMvpStore((state) => state.defaultTerms);
+  const storedQuoteValidDays = useMvpStore((state) => state.quoteValidDays);
   const [businessName, setBusinessName] = useState("");
   const [taxRate, setTaxRate] = useState("13");
+  const [defaultTerms, setDefaultTerms] = useState(storedDefaultTerms);
+  const [quoteValidDays, setQuoteValidDays] = useState(String(storedQuoteValidDays));
   const [wallsMedium, setWallsMedium] = useState(
     centsToDollars(defaultCorePrices.paintWalls.medium),
   );
@@ -49,8 +54,8 @@ export default function OnboardingScreen() {
     const payload = {
       businessName: businessName.trim(),
       defaultTaxRate: Number(taxRate) / 100,
-      defaultTerms: useMvpStore.getState().defaultTerms,
-      quoteValidDays: useMvpStore.getState().quoteValidDays,
+      defaultTerms: defaultTerms.trim(),
+      quoteValidDays: Number.parseInt(quoteValidDays, 10) || 14,
       corePrices: {
         paintWalls: roomPrices(dollarsToCents(wallsMedium)),
         paintCeiling: roomPrices(dollarsToCents(ceilingMedium)),
@@ -70,15 +75,29 @@ export default function OnboardingScreen() {
       }
 
       const response = await snapquoteApi.onboardPainter(payload);
+      const completedOrg = {
+        ...response.org,
+        setupCompletedAt: response.org.setupCompletedAt ?? new Date().toISOString(),
+      };
 
       completeOnboarding({
         ...payload,
-        businessName: response.org.name,
-        defaultTaxRate: response.org.defaultTaxRate,
-        defaultTerms: response.org.defaultTerms,
-        quoteValidDays: response.org.quoteValidDays,
+        businessName: completedOrg.name,
+        defaultTaxRate: completedOrg.defaultTaxRate,
+        defaultTerms: completedOrg.defaultTerms,
+        quoteValidDays: completedOrg.quoteValidDays,
         priceBookItems: response.priceBookItems,
       });
+
+      if (authMe) {
+        useAuthStore.setState({
+          me: {
+            ...authMe,
+            org: completedOrg,
+          },
+        });
+      }
+
       router.replace("/");
     } catch (error) {
       Alert.alert("Could not save setup", userFacingErrorMessage(error));
@@ -91,6 +110,8 @@ export default function OnboardingScreen() {
     completeOnboarding({
       businessName: businessName.trim(),
       defaultTaxRate: Number(taxRate) / 100,
+      defaultTerms: defaultTerms.trim(),
+      quoteValidDays: Number.parseInt(quoteValidDays, 10) || 14,
       corePrices: {
         paintWalls: roomPrices(dollarsToCents(wallsMedium)),
         paintCeiling: roomPrices(dollarsToCents(ceilingMedium)),
@@ -107,6 +128,11 @@ export default function OnboardingScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.kicker}>Setup</Text>
         <Text style={styles.title}>Confirm your core prices</Text>
+        <Text style={styles.helper}>
+          {authStatus === "signed_in"
+            ? "Required once before this account can sync and send quotes."
+            : "You can continue offline now. Sign in later to sync these prices."}
+        </Text>
 
         <Field
           label="Business name"
@@ -119,6 +145,18 @@ export default function OnboardingScreen() {
           value={taxRate}
           onChangeText={setTaxRate}
           keyboardType="numeric"
+        />
+        <Field
+          label="Quote valid days"
+          value={quoteValidDays}
+          onChangeText={setQuoteValidDays}
+          keyboardType="numeric"
+        />
+        <Field
+          label="Default terms"
+          value={defaultTerms}
+          onChangeText={setDefaultTerms}
+          multiline
         />
         <Field
           label="Walls, medium room $"
@@ -164,14 +202,16 @@ export default function OnboardingScreen() {
             {saving ? "Saving..." : "Save Prices"}
           </Text>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          disabled={saving}
-          onPress={saveLocalOnly}
-          style={styles.secondaryAction}
-        >
-          <Text style={styles.secondaryActionText}>Continue offline</Text>
-        </Pressable>
+        {authStatus === "signed_in" ? null : (
+          <Pressable
+            accessibilityRole="button"
+            disabled={saving}
+            onPress={saveLocalOnly}
+            style={styles.secondaryAction}
+          >
+            <Text style={styles.secondaryActionText}>Continue offline</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -183,6 +223,7 @@ function Field(props: {
   onChangeText: (value: string) => void;
   keyboardType?: "default" | "numeric";
   placeholder?: string | undefined;
+  multiline?: boolean | undefined;
 }) {
   return (
     <View style={styles.field}>
@@ -192,7 +233,9 @@ function Field(props: {
         onChangeText={props.onChangeText}
         placeholder={props.placeholder}
         placeholderTextColor="#98a2b3"
-        style={styles.input}
+        multiline={props.multiline}
+        style={[styles.input, props.multiline ? styles.inputMultiline : null]}
+        textAlignVertical={props.multiline ? "top" : "center"}
         value={props.value}
       />
     </View>
@@ -244,6 +287,10 @@ const styles = StyleSheet.create({
     fontSize: 17,
     minHeight: 50,
     paddingHorizontal: 14,
+  },
+  inputMultiline: {
+    minHeight: 106,
+    paddingTop: 13,
   },
   helper: {
     color: "#475467",

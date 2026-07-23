@@ -121,6 +121,7 @@ type MvpState = {
   defaultTaxRate: number;
   defaultTerms: string;
   quoteValidDays: number;
+  setupCompletedAt: string | null;
 
   priceBookItems: PriceBookItem[];
   customers: Customer[];
@@ -202,6 +203,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
   defaultTerms:
     "50% deposit due to schedule the job, balance due on completion.",
   quoteValidDays: 14,
+  setupCompletedAt: null,
   priceBookItems: initialPriceBook,
   customers: [],
   quotes: [],
@@ -224,6 +226,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       defaultTaxRate: input.defaultTaxRate,
       defaultTerms: input.defaultTerms ?? get().defaultTerms,
       quoteValidDays: input.quoteValidDays ?? get().quoteValidDays,
+      setupCompletedAt: new Date().toISOString(),
       priceBookItems,
     });
   },
@@ -738,7 +741,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
         quote.id.startsWith("quote-"),
       );
       const localPriceBookItems = state.priceBookItems.filter((item) =>
-        item.id.startsWith("pbi-"),
+        item.id.startsWith("pbi-") && !item.starter,
       );
       const localEvents = state.events.filter((event) =>
         localQuotes.some((quote) => quote.id === event.quoteId),
@@ -756,6 +759,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
           input.me.org.defaultTerms ??
           "50% deposit due to schedule the job, balance due on completion.",
         quoteValidDays: input.me.org.quoteValidDays ?? 14,
+        setupCompletedAt: input.me.org.setupCompletedAt,
         priceBookItems: mergeById(input.priceBookItems, localPriceBookItems),
         customers: mergeById(input.customers, localCustomers),
         quotes: mergeById(remoteQuotes, localQuotes),
@@ -1044,4 +1048,28 @@ export function centsToDollars(cents: number): string {
 export function dollarsToCents(dollars: string): number {
   const parsed = Number(dollars.replace(/[^0-9.]/g, ""));
   return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
+}
+
+export function corePricesFromPriceBook(items: PriceBookItem[]): PainterCorePriceInput {
+  return {
+    paintWalls: roomSizePrices(items, "paint_walls", defaultCorePrices.paintWalls),
+    paintCeiling: roomSizePrices(items, "paint_ceiling", defaultCorePrices.paintCeiling),
+    paintTrim: roomSizePrices(items, "paint_trim", defaultCorePrices.paintTrim),
+    paintDoorEachCents: fixedPrice(items, "paint_door", defaultCorePrices.paintDoorEachCents),
+    heavyPrepHourlyCents: fixedPrice(items, "heavy_wall_prep", defaultCorePrices.heavyPrepHourlyCents),
+  };
+}
+
+function roomSizePrices(
+  items: PriceBookItem[],
+  key: PainterPriceBookKey,
+  fallback: PainterCorePriceInput["paintWalls"],
+) {
+  const pricing = items.find((item) => item.key === key)?.pricing;
+  return pricing?.type === "room_size" ? pricing.prices : fallback;
+}
+
+function fixedPrice(items: PriceBookItem[], key: PainterPriceBookKey, fallback: number) {
+  const pricing = items.find((item) => item.key === key)?.pricing;
+  return pricing?.type === "fixed" ? pricing.unitPriceCents : fallback;
 }

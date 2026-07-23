@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as AppleAuthentication from "expo-apple-authentication";
-import { AlertCircle, ArrowRight, ChevronLeft, Mail } from "lucide-react-native";
+import { AlertCircle, ChevronLeft } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   KeyboardAvoidingView,
@@ -9,18 +9,15 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View
 } from "react-native";
-import Animated from "react-native-reanimated";
 import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Screen } from "../src/ui/components";
-import { QuoteMark } from "../src/ui/QuoteMark";
-import { fadeEnter, useMotionEnabled } from "../src/ui/motion";
-import { colors } from "../src/ui/theme";
-import { useAuthStore } from "../src/state/auth";
+import { Screen } from "../../src/ui/components";
+import { QuoteMark } from "../../src/ui/QuoteMark";
+import { colors } from "../../src/ui/theme";
+import { useAuthStore } from "../../src/state/auth";
 
 function AuthBackground() {
   const { width, height } = useWindowDimensions();
@@ -50,13 +47,9 @@ function AuthBackground() {
 
 export default function AuthScreen() {
   const params = useLocalSearchParams<{ from?: string }>();
-  const [email, setEmail] = useState("");
-  const [showEmail, setShowEmail] = useState(false);
-  const [linkSentTo, setLinkSentTo] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const status = useAuthStore((state) => state.status);
   const authError = useAuthStore((state) => state.error);
-  const sendEmailLink = useAuthStore((state) => state.sendEmailLink);
   const signInWithNativeApple = useAuthStore((state) => state.signInWithNativeApple);
   const startOAuth = useAuthStore((state) => state.startOAuth);
   const insets = useSafeAreaInsets();
@@ -83,24 +76,6 @@ export default function AuthScreen() {
       mounted = false;
     };
   }, []);
-
-  async function submitEmailLink() {
-    const trimmedEmail = email.trim();
-
-    if (!trimmedEmail.includes("@")) {
-      setLocalError("Enter a valid email address.");
-      return;
-    }
-
-    setLocalError(null);
-
-    try {
-      await sendEmailLink(trimmedEmail);
-      setLinkSentTo(trimmedEmail);
-    } catch {
-      // Store already exposes a user-safe message.
-    }
-  }
 
   async function startProvider(provider: "apple" | "google") {
     setLocalError(null);
@@ -140,8 +115,6 @@ export default function AuthScreen() {
       setLocalError(error instanceof Error ? error.message : "Could not complete sign in. Try again.");
     }
   }
-
-  const motionEnabled = useMotionEnabled();
 
   return (
     <Screen edges={["top", "bottom"]}>
@@ -196,85 +169,12 @@ export default function AuthScreen() {
               />
             </View>
 
-            {!showEmail && error ? (
+            {error ? (
               <View style={styles.errorRow}>
                 <AlertCircle color={colors.red} size={14} strokeWidth={2.2} />
                 <Text style={styles.error}>{error}</Text>
               </View>
             ) : null}
-
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {showEmail ? (
-              <Animated.View
-                {...(motionEnabled ? { entering: fadeEnter } : {})}
-                style={styles.emailPanel}
-              >
-                <View style={styles.emailPanelHeader}>
-                  <Text style={styles.emailPanelTitle}>Sign in with email</Text>
-                  <Pressable accessibilityRole="button" hitSlop={10} onPress={() => setShowEmail(false)}>
-                    <Text style={styles.emailPanelClose}>Cancel</Text>
-                  </Pressable>
-                </View>
-
-                <AuthField
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  icon={<Mail color={colors.ink3} size={15} strokeWidth={2.1} />}
-                  keyboardType="email-address"
-                  label="Email address"
-                  onChangeText={(value) => {
-                    setEmail(value);
-                    setLinkSentTo(null);
-                  }}
-                  placeholder="name@email.com"
-                  textContentType="emailAddress"
-                  value={email}
-                />
-
-                {error ? (
-                  <View style={styles.errorRow}>
-                    <AlertCircle color={colors.red} size={14} strokeWidth={2.2} />
-                    <Text style={styles.error}>{error}</Text>
-                  </View>
-                ) : null}
-
-                {linkSentTo ? (
-                  <View style={styles.sentCard}>
-                    <Mail color={colors.green} size={17} strokeWidth={2.2} />
-                    <View style={styles.sentTextWrap}>
-                      <Text style={styles.sentTitle}>Check your email</Text>
-                      <Text style={styles.sentText}>We sent a sign-in link to {linkSentTo}.</Text>
-                    </View>
-                  </View>
-                ) : null}
-
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={busy}
-                  onPress={() => {
-                    void submitEmailLink();
-                  }}
-                  style={[styles.emailSubmit, busy ? styles.submitDisabled : null]}
-                >
-                  <Text style={styles.emailSubmitText}>{busy ? "Sending..." : "Send sign-in link"}</Text>
-                  <ArrowRight color={colors.onDark} size={15} strokeWidth={2.5} />
-                </Pressable>
-              </Animated.View>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setShowEmail(true)}
-                style={styles.emailToggle}
-              >
-                <Mail color={colors.ink2} size={16} strokeWidth={2.2} />
-                <Text style={styles.emailToggleText}>Continue with email</Text>
-              </Pressable>
-            )}
 
             <Text style={styles.legal}>
               By continuing you agree to our <Text style={styles.legalLink}>Terms</Text> &amp;{" "}
@@ -443,38 +343,6 @@ function isAppleCancel(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ERR_REQUEST_CANCELED";
 }
 
-function AuthField(props: {
-  autoCapitalize?: "none" | "sentences" | "words" | "characters" | undefined;
-  autoComplete?: "email" | undefined;
-  icon: React.ReactNode;
-  keyboardType?: "default" | "email-address" | undefined;
-  label: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
-  textContentType?: "emailAddress" | undefined;
-  value: string;
-}) {
-  return (
-    <View style={styles.fieldWrap}>
-      <Text style={styles.label}>{props.label}</Text>
-      <View style={styles.inputWrap}>
-        {props.icon}
-        <TextInput
-          autoCapitalize={props.autoCapitalize ?? "words"}
-          autoComplete={props.autoComplete}
-          keyboardType={props.keyboardType ?? "default"}
-          onChangeText={props.onChangeText}
-          placeholder={props.placeholder}
-          placeholderTextColor={colors.ink3}
-          style={styles.input}
-          textContentType={props.textContentType}
-          value={props.value}
-        />
-      </View>
-    </View>
-  );
-}
-
 function SocialButton(props: {
   brand: "apple" | "google";
   disabled?: boolean | undefined;
@@ -577,8 +445,7 @@ const styles = StyleSheet.create({
     paddingTop: 32
   },
   socialStack: {
-    gap: 11,
-    marginBottom: 18
+    gap: 11
   },
   socialButton: {
     alignItems: "center",
@@ -615,98 +482,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 20
   },
-  dividerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16
-  },
-  dividerLine: {
-    backgroundColor: colors.border,
-    flex: 1,
-    height: 1
-  },
-  dividerText: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase"
-  },
-  emailToggle: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    height: 48,
-    justifyContent: "center"
-  },
-  emailToggleText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  emailPanel: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 12,
-    padding: 16
-  },
-  emailPanelHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  emailPanelTitle: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    textTransform: "uppercase"
-  },
-  emailPanelClose: {
-    color: colors.ink3,
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  fieldWrap: {
-    gap: 8
-  },
-  label: {
-    color: colors.ink3,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.35,
-    textTransform: "uppercase"
-  },
-  inputWrap: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 45,
-    paddingHorizontal: 14
-  },
-  input: {
-    color: colors.ink,
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "700",
-    minHeight: 45,
-    padding: 0
-  },
   errorRow: {
     alignItems: "flex-start",
     flexDirection: "row",
-    gap: 7
+    gap: 7,
+    marginTop: 14
   },
   error: {
     color: colors.red,
@@ -714,49 +494,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 17
-  },
-  sentCard: {
-    alignItems: "flex-start",
-    backgroundColor: colors.greenBg,
-    borderColor: colors.greenBorder,
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    padding: 12
-  },
-  sentTextWrap: {
-    flex: 1,
-    gap: 2
-  },
-  sentTitle: {
-    color: colors.green,
-    fontSize: 13,
-    fontWeight: "900"
-  },
-  sentText: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 17
-  },
-  emailSubmit: {
-    alignItems: "center",
-    backgroundColor: colors.dark,
-    borderRadius: 10,
-    flexDirection: "row",
-    gap: 9,
-    height: 48,
-    justifyContent: "center",
-    marginTop: 2
-  },
-  submitDisabled: {
-    opacity: 0.65
-  },
-  emailSubmitText: {
-    color: colors.onDark,
-    fontSize: 14,
-    fontWeight: "900"
   },
   legal: {
     color: colors.ink3,

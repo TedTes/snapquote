@@ -39,7 +39,6 @@ const corsHeaders = {
 const defaultOrgId = Deno.env.get("SNAPQUOTE_DEFAULT_ORG_ID") ?? "00000000-0000-4000-8000-000000000001";
 const defaultUserId = Deno.env.get("SNAPQUOTE_DEFAULT_USER_ID") ?? "00000000-0000-4000-8000-000000000002";
 const requestOrgIds = new WeakMap<Request, string>();
-const passwordHashIterations = 120_000;
 const appAccessTokenSeconds = 60 * 60 * 24 * 7;
 const appRefreshTokenSeconds = 60 * 60 * 24 * 30;
 
@@ -98,20 +97,6 @@ const orgSettingsSchema = z.object({
   defaultTaxRate: z.number().min(0).max(1).optional(),
   defaultTerms: z.string().trim().max(4000).optional(),
   quoteValidDays: z.number().int().min(1).max(365).optional()
-});
-
-const authSchema = z.object({
-  email: z.string().trim().email().max(320),
-  password: z.string().min(8).max(128),
-  name: z.string().trim().max(120).optional(),
-  businessName: z.string().trim().min(1).max(120).optional()
-});
-
-const emailLinkSchema = z.object({
-  email: z.string().trim().email().max(320),
-  redirectTo: z.string().trim().min(1).max(1000),
-  name: z.string().trim().max(120).optional(),
-  businessName: z.string().trim().min(1).max(120).optional()
 });
 
 const oauthProviderSchema = z.enum(["apple", "google"]);
@@ -225,18 +210,6 @@ Deno.serve(async (request) => {
 
     if (route.method === "GET" && route.path === "/health") {
       return json({ ok: true, service: "snapquote-edge", timestamp: new Date().toISOString() });
-    }
-
-    if (route.method === "POST" && route.path === "/v1/auth/sign-up") {
-      return json(await signUp(db, request), 201);
-    }
-
-    if (route.method === "POST" && route.path === "/v1/auth/sign-in") {
-      return json(await signIn(db, request));
-    }
-
-    if (route.method === "POST" && route.path === "/v1/auth/email-link") {
-      return json(await sendEmailLink(db, request));
     }
 
     if (route.method === "POST" && route.path === "/v1/auth/refresh") {
@@ -376,179 +349,6 @@ function getDb() {
   });
 }
 
-async function signUp(db: SupabaseClient, request: Request) {
-  const input = parse(authSchema, await request.json());
-  const account = await createAuthAccount(input).catch(() => null);
-
-  if (!account) {
-    return signUpWithDbIdentity(db, input);
-  }
-
-  const existingMember = await maybeSingle(
-    db.from("snapquote_org_members").select("*").eq("auth_user_id", account.user.id)
-  );
-
-  if (existingMember) {
-    const org = await single(db.from("snapquote_orgs").select("*").eq("id", existingMember.org_id));
-    const session = account.session ?? await createPasswordSession(input.email, input.password);
-    return authResponse(session, org, existingMember);
-  }
-
-  const org = await single(db.from("snapquote_orgs").insert({
-    name: input.businessName ?? "",
-    trade: "painting",
-    default_tax_rate: 0.13,
-    default_terms: "50% deposit due to schedule the job, balance due on completion.",
-    quote_valid_days: 14,
-    plan: "trial"
-  }).select("*"));
-
-  const member = await single(db.from("snapquote_org_members").insert({
-    org_id: org.id,
-    auth_user_id: account.user.id,
-    email: input.email,
-    name: input.name ?? input.email,
-    role: "owner"
-  }).select("*"));
-
-  await seedStarterPriceBook(db, String(org.id), false);
-
-  const session = account.session ?? await createPasswordSession(input.email, input.password);
-
-  return authResponse(session, org, member);
-}
-
-async function signUpWithDbIdentity(db: SupabaseClient, input: z.infer<typeof authSchema>) {
-  const existingIdentity = await maybeSingle(
-    db.from("snapquote_auth_identities").select("*").ilike("email", input.email)
-  );
-
-  if (existingIdentity) {
-    const member = await single(db.from("snapquote_org_members").select("*").eq("id", existingIdentity.org_member_id));
-    const passwordMatches = await verifyPassword(input.password, String(existingIdentity.password_hash));
-
-    if (!passwordMatches) {
-      throw new HttpError(409, "An account with this email already exists.");
-    }
-
-    const org = await single(db.from("snapquote_orgs").select("*").eq("id", member.org_id));
-    return authResponse(await createAppSession(member), org, member);
-  }
-
-  const org = await single(db.from("snapquote_orgs").insert({
-    name: input.businessName ?? "",
-    trade: "painting",
-    default_tax_rate: 0.13,
-    default_terms: "50% deposit due to schedule the job, balance due on completion.",
-    quote_valid_days: 14,
-    plan: "trial"
-  }).select("*"));
-
-  const member = await single(db.from("snapquote_org_members").insert({
-    org_id: org.id,
-    auth_user_id: null,
-    email: input.email,
-    name: input.name ?? input.email,
-    role: "owner"
-  }).select("*"));
-
-  await single(db.from("snapquote_auth_identities").insert({
-    org_member_id: member.id,
-    email: input.email,
-    password_hash: await hashPassword(input.password)
-  }).select("*"));
-
-  await seedStarterPriceBook(db, String(org.id), false);
-
-  return authResponse(await createAppSession(member), org, member);
-}
-
-async function createAuthAccount(input: z.infer<typeof authSchema>) {
-  const authDb = getDb();
-  const { data: adminData, error: adminError } = await authDb.auth.admin.createUser({
-    email: input.email,
-    password: input.password,
-    email_confirm: true,
-    user_metadata: {
-      name: input.name ?? ""
-    }
-  });
-
-  if (adminData.user) {
-    return { user: adminData.user, session: null };
-  }
-
-  const { data: signUpData, error: signUpError } = await authDb.auth.signUp({
-    email: input.email,
-    password: input.password,
-    options: {
-      data: {
-        name: input.name ?? ""
-      }
-    }
-  });
-
-  if (signUpData.user) {
-    return {
-      user: signUpData.user,
-      session: signUpData.session
-        ? sessionResponse(signUpData.session, signUpData.user)
-        : null
-    };
-  }
-
-  const passwordSession = await createPasswordSession(input.email, input.password).catch(() => null);
-
-  if (passwordSession) {
-    return { user: passwordSession.user, session: passwordSession };
-  }
-
-  throw new HttpError(400, authFailureMessage(adminError, signUpError));
-}
-
-async function signIn(db: SupabaseClient, request: Request) {
-  const input = parse(authSchema.pick({ email: true, password: true }), await request.json());
-  const supabaseSession = await createPasswordSession(input.email, input.password).catch(() => null);
-
-  if (supabaseSession) {
-    const member = await single(db.from("snapquote_org_members").select("*").eq("auth_user_id", supabaseSession.user.id));
-    const org = await single(db.from("snapquote_orgs").select("*").eq("id", member.org_id));
-    return authResponse(supabaseSession, org, member);
-  }
-
-  const identity = await maybeSingle(db.from("snapquote_auth_identities").select("*").ilike("email", input.email));
-
-  if (!identity || !(await verifyPassword(input.password, String(identity.password_hash)))) {
-    throw new HttpError(401, "Email or password is incorrect");
-  }
-
-  const member = await single(db.from("snapquote_org_members").select("*").eq("id", identity.org_member_id));
-  const org = await single(db.from("snapquote_orgs").select("*").eq("id", member.org_id));
-
-  return authResponse(await createAppSession(member), org, member);
-}
-
-async function sendEmailLink(db: SupabaseClient, request: Request) {
-  const input = parse(emailLinkSchema, await request.json());
-  const { error } = await db.auth.signInWithOtp({
-    email: input.email,
-    options: {
-      emailRedirectTo: input.redirectTo,
-      shouldCreateUser: true,
-      data: {
-        name: input.name ?? "",
-        business_name: input.businessName ?? ""
-      }
-    }
-  });
-
-  if (error) {
-    throw new HttpError(400, authFailureMessage(error));
-  }
-
-  return { ok: true, email: input.email };
-}
-
 async function refreshAuthSession(db: SupabaseClient, request: Request) {
   const input = parse(refreshSchema, await request.json());
   const authDb = getDb();
@@ -669,21 +469,6 @@ async function authResponseForSupabaseUser(
   await seedStarterPriceBook(db, String(org.id), false);
 
   return authResponse(session, org, member);
-}
-
-async function createPasswordSession(email: string, password: string) {
-  const authDb = getDb();
-  const { data, error } = await authDb.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    throw new HttpError(401, "Email or password is incorrect");
-  }
-
-  if (!data.session || !data.user) {
-    throw new HttpError(401, "Email or password is incorrect");
-  }
-
-  return sessionResponse(data.session, data.user);
 }
 
 function sessionResponse(
@@ -866,7 +651,8 @@ async function onboardPainter(db: SupabaseClient, request: Request) {
     name: input.businessName,
     default_tax_rate: input.defaultTaxRate,
     default_terms: input.defaultTerms,
-    quote_valid_days: input.quoteValidDays
+    quote_valid_days: input.quoteValidDays,
+    setup_completed_at: new Date().toISOString()
   }).eq("id", orgId).select("*"));
 
   await seedStarterPriceBook(db, orgId, true, input.corePrices);
@@ -1639,6 +1425,7 @@ function orgResponse(row: Record<string, unknown>) {
     defaultTaxRate: Number(row.default_tax_rate),
     defaultTerms: row.default_terms,
     quoteValidDays: row.quote_valid_days,
+    setupCompletedAt: typeof row.setup_completed_at === "string" ? row.setup_completed_at : null,
     plan: row.plan
   };
 }
@@ -1946,55 +1733,6 @@ function corePricing(key: string, corePrices: typeof defaultCorePrices): PriceBo
   return null;
 }
 
-async function hashPassword(password: string) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await pbkdf2(password, salt, passwordHashIterations);
-
-  return [
-    "pbkdf2_sha256",
-    String(passwordHashIterations),
-    base64UrlEncode(salt),
-    base64UrlEncode(hash)
-  ].join("$");
-}
-
-async function verifyPassword(password: string, stored: string) {
-  const [scheme, iterationsRaw, saltRaw, hashRaw] = stored.split("$");
-  const iterations = Number(iterationsRaw);
-
-  if (scheme !== "pbkdf2_sha256" || !Number.isInteger(iterations) || !saltRaw || !hashRaw) {
-    return false;
-  }
-
-  const salt = base64UrlDecode(saltRaw);
-  const expected = base64UrlDecode(hashRaw);
-  const actual = await pbkdf2(password, salt, iterations);
-
-  return timingSafeEqual(actual, expected);
-}
-
-async function pbkdf2(password: string, salt: Uint8Array, iterations: number) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"]
-  );
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      hash: "SHA-256",
-      salt,
-      iterations
-    },
-    key,
-    256
-  );
-
-  return new Uint8Array(bits);
-}
-
 async function signAppToken(payload: {
   typ: "access" | "refresh";
   sub: string;
@@ -2186,7 +1924,7 @@ function authFailureMessage(...errors: unknown[]) {
   const message = errors.map(debugMessageFromError).find((candidate) => candidate !== "Request failed");
 
   if (!message || message === "{}") {
-    return "Could not create account. Check your email and password, then try again.";
+    return "Could not complete sign in. Try again.";
   }
 
   return message;

@@ -101,6 +101,7 @@ export type MeResponse = {
     defaultTaxRate: number;
     defaultTerms: string;
     quoteValidDays: number;
+    setupCompletedAt: string | null;
     plan: "trial" | "solo" | "crew" | "expired";
   };
   entitlements: {
@@ -155,18 +156,6 @@ export type ScopeExtraction = {
 
 export const snapquoteApi = {
   health: () => request<unknown>("/health"),
-
-  sendEmailLink: (input: {
-    email: string;
-    redirectTo: string;
-    name?: string | undefined;
-    businessName?: string | undefined;
-  }) =>
-    request<{ ok: boolean; email: string }>("/v1/auth/email-link", {
-      method: "POST",
-      body: input,
-      skipAuth: true
-    }),
 
   refreshSession: (input: { refreshToken: string }) =>
     request<AuthResponse>("/v1/auth/refresh", {
