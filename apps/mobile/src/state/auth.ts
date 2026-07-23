@@ -22,6 +22,14 @@ type AuthState = {
   initialize: () => Promise<void>;
   completeOAuthRedirect: (url: string) => Promise<boolean>;
   sendEmailLink: (email: string) => Promise<void>;
+  signInWithNativeApple: (input: {
+    identityToken: string;
+    authorizationCode?: string | undefined;
+    email?: string | undefined;
+    name?: string | undefined;
+    businessName?: string | undefined;
+    nonce?: string | undefined;
+  }) => Promise<void>;
   startOAuth: (provider: OAuthProvider, input?: { businessName?: string | undefined; name?: string | undefined }) => Promise<void>;
   signOut: () => void;
 };
@@ -113,6 +121,23 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ status: "signed_out", session: null, me: null, error: null });
     } catch (error) {
       const message = userFacingErrorMessage(error);
+      set({ status: "signed_out", session: null, me: null, error: message });
+      throw new Error(message);
+    }
+  },
+
+  signInWithNativeApple: async (input) => {
+    set({ status: "loading", error: null });
+
+    try {
+      const response = await snapquoteApi.completeNativeOAuth({
+        provider: "apple",
+        ...input
+      });
+      await applyAuthResponse(response, set);
+    } catch (error) {
+      const message = userFacingErrorMessage(error);
+      console.warn("SnapQuote native Apple sign-in failed", error);
       set({ status: "signed_out", session: null, me: null, error: message });
       throw new Error(message);
     }

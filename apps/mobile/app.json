@@ -9,13 +9,14 @@
     "newArchEnabled": true,
     "plugins": [
       "expo-router",
-      "expo-audio"
+      "expo-audio",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "ios": {
-      "bundleIdentifier": "com.snapquote.mobile",
+      "bundleIdentifier": "com.tedtes.snapquote",
       "supportsTablet": false
     },
     "android": {

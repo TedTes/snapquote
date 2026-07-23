@@ -187,6 +187,21 @@ export const snapquoteApi = {
       skipAuth: true
     }),
 
+  completeNativeOAuth: (input: {
+    provider: "apple";
+    identityToken: string;
+    authorizationCode?: string | undefined;
+    email?: string | undefined;
+    name?: string | undefined;
+    businessName?: string | undefined;
+    nonce?: string | undefined;
+  }) =>
+    request<AuthResponse>("/v1/auth/oauth/native", {
+      method: "POST",
+      body: input,
+      skipAuth: true
+    }),
+
   me: () => request<MeResponse>("/v1/me"),
 
   updateMe: (input: {
