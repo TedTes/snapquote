@@ -169,8 +169,13 @@ type MvpState = {
   confirmPriceBookItem: (itemId: string, pricing: PriceBookPricing) => void;
   updatePriceBookItem: (
     itemId: string,
-    patch: { name?: string; pricing?: PriceBookPricing },
+    patch: {
+      name?: string;
+      description?: string;
+      pricing?: PriceBookPricing;
+    },
   ) => void;
+  archivePriceBookItem: (itemId: string) => void;
   addPriceBookItem: (input: {
     name: string;
     description: string;
@@ -424,7 +429,12 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       return {
         priceBookItems: state.priceBookItems.map((item) =>
           item.id === priceBookItemId
-            ? { ...item, confirmedAt: now, updatedAt: now }
+            ? {
+                ...item,
+                confirmedAt: now,
+                usageCount: item.usageCount + 1,
+                updatedAt: now,
+              }
             : item,
         ),
         quotes: state.quotes.map((candidate) =>
@@ -648,10 +658,19 @@ export const useMvpStore = create<MvpState>((set, get) => ({
         return {
           ...item,
           ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.description !== undefined
+            ? { description: patch.description }
+            : {}),
           ...(patch.pricing !== undefined ? { pricing: patch.pricing } : {}),
           updatedAt: now,
         };
       }),
+    }));
+  },
+
+  archivePriceBookItem: (itemId) => {
+    set((state) => ({
+      priceBookItems: state.priceBookItems.filter((item) => item.id !== itemId),
     }));
   },
 
@@ -760,7 +779,10 @@ export const useMvpStore = create<MvpState>((set, get) => ({
           "50% deposit due to schedule the job, balance due on completion.",
         quoteValidDays: input.me.org.quoteValidDays ?? 14,
         setupCompletedAt: input.me.org.setupCompletedAt,
-        priceBookItems: mergeById(input.priceBookItems, localPriceBookItems),
+        priceBookItems: mergePriceBookItems(
+          input.priceBookItems,
+          localPriceBookItems,
+        ),
         customers: mergeById(input.customers, localCustomers),
         quotes: mergeById(remoteQuotes, localQuotes),
         events: [...remoteEvents, ...localEvents],
@@ -858,6 +880,27 @@ function mergeById<T extends { id: string }>(
 ): T[] {
   const remoteIds = new Set(remoteItems.map((item) => item.id));
   const uniqueLocalItems = localItems.filter((item) => !remoteIds.has(item.id));
+  return [...remoteItems, ...uniqueLocalItems];
+}
+
+function mergePriceBookItems(
+  remoteItems: PriceBookItem[],
+  localItems: PriceBookItem[],
+): PriceBookItem[] {
+  const remoteIds = new Set(remoteItems.map((item) => item.id));
+  const remoteKeys = new Set(
+    remoteItems
+      .map((item) => item.key)
+      .filter((key): key is string => key !== null && key.length > 0),
+  );
+  const uniqueLocalItems = localItems.filter((item) => {
+    if (remoteIds.has(item.id)) {
+      return false;
+    }
+
+    return item.key === null || !remoteKeys.has(item.key);
+  });
+
   return [...remoteItems, ...uniqueLocalItems];
 }
 

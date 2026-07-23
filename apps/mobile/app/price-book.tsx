@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Archive,
   BookOpen,
   Check,
   CircleAlert,
@@ -47,12 +48,16 @@ export default function PriceBookScreen() {
     (state) => state.confirmPriceBookItem,
   );
   const updatePriceBookItem = useMvpStore((state) => state.updatePriceBookItem);
+  const archivePriceBookItem = useMvpStore(
+    (state) => state.archivePriceBookItem,
+  );
   const upsertPriceBookItem = useMvpStore((state) => state.upsertPriceBookItem);
 
   const [query, setQuery] = useState("");
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [archivingItemId, setArchivingItemId] = useState<string | null>(null);
   const [savingNewItem, setSavingNewItem] = useState(false);
   const showSearch = priceBookItems.length > searchThreshold;
 
@@ -81,10 +86,15 @@ export default function PriceBookScreen() {
     (item) => item.confirmedAt === null,
   ).length;
   const hasItems = priceBookItems.length > 0;
+  const hasConfirmedPrices = confirmedCount > 0;
 
   async function saveExistingPrice(
     item: PriceBookItem,
-    pricing: PriceBookItem["pricing"],
+    input: {
+      name: string;
+      description: string;
+      pricing: PriceBookItem["pricing"];
+    },
   ) {
     if (savingItemId !== null) {
       return;
@@ -94,14 +104,14 @@ export default function PriceBookScreen() {
 
     try {
       if (authStatus !== "signed_in") {
-        confirmPriceBookItem(item.id, pricing);
-        updatePriceBookItem(item.id, { pricing });
+        confirmPriceBookItem(item.id, input.pricing);
+        updatePriceBookItem(item.id, input);
         setEditingItemId(null);
         return;
       }
 
       const updated = await snapquoteApi.updatePriceBookItem(item.id, {
-        pricing,
+        ...input,
         confirmed: true,
       });
       upsertPriceBookItem(updated);
@@ -111,6 +121,45 @@ export default function PriceBookScreen() {
     } finally {
       setSavingItemId(null);
     }
+  }
+
+  async function archiveExistingPrice(item: PriceBookItem) {
+    if (archivingItemId !== null || savingItemId !== null) {
+      return;
+    }
+
+    setArchivingItemId(item.id);
+
+    try {
+      if (authStatus !== "signed_in") {
+        archivePriceBookItem(item.id);
+        setEditingItemId(null);
+        return;
+      }
+
+      await snapquoteApi.archivePriceBookItem(item.id);
+      archivePriceBookItem(item.id);
+      setEditingItemId(null);
+    } catch (error) {
+      Alert.alert("Could not archive item", userFacingErrorMessage(error));
+    } finally {
+      setArchivingItemId(null);
+    }
+  }
+
+  function confirmArchive(item: PriceBookItem) {
+    Alert.alert(
+      "Archive price item?",
+      `${item.name} will stop matching future quotes. Existing quotes keep their saved line prices.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Archive",
+          style: "destructive",
+          onPress: () => void archiveExistingPrice(item),
+        },
+      ],
+    );
   }
 
   async function saveNewItem(input: {
@@ -190,6 +239,13 @@ export default function PriceBookScreen() {
               </View>
             ) : null}
 
+            {!hasConfirmedPrices && query.trim().length === 0 ? (
+              <ZeroRealPricesCard
+                onAddManual={() => setShowAddModal(true)}
+                onStarterSetup={() => router.push("/onboarding")}
+              />
+            ) : null}
+
             {active.length === 0 && inactive.length === 0 ? (
               <NoPriceBookMatches />
             ) : null}
@@ -251,9 +307,14 @@ export default function PriceBookScreen() {
           <PriceItemModal
             item={editingItem}
             onClose={() => setEditingItemId(null)}
-            saving={savingItemId === editingItem.id}
-            onSave={(pricing) => {
-              void saveExistingPrice(editingItem, pricing);
+            archiving={archivingItemId === editingItem.id}
+            saving={
+              savingItemId === editingItem.id ||
+              archivingItemId === editingItem.id
+            }
+            onArchive={() => confirmArchive(editingItem)}
+            onSave={(input) => {
+              void saveExistingPrice(editingItem, input);
             }}
           />
         ) : null}
@@ -353,6 +414,42 @@ function EmptyPriceBookState(props: {
         <Text style={styles.emptyLockText}>
           Prices come only from your book or you
         </Text>
+      </View>
+    </View>
+  );
+}
+
+function ZeroRealPricesCard(props: {
+  onStarterSetup: () => void;
+  onAddManual: () => void;
+}) {
+  return (
+    <View style={styles.zeroRealCard}>
+      <View style={styles.zeroRealIcon}>
+        <BookOpen color={colors.green} size={22} strokeWidth={2} />
+      </View>
+      <View style={styles.zeroRealBody}>
+        <Text style={styles.zeroRealTitle}>No confirmed prices yet</Text>
+        <Text style={styles.zeroRealText}>
+          Confirm starter prices or add one custom item. Only confirmed prices
+          can match green on quotes.
+        </Text>
+      </View>
+      <View style={styles.zeroRealActions}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={props.onStarterSetup}
+          style={styles.zeroRealPrimary}
+        >
+          <Text style={styles.zeroRealPrimaryText}>Setup</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={props.onAddManual}
+          style={styles.zeroRealSecondary}
+        >
+          <Plus color={colors.ink2} size={14} strokeWidth={2.4} />
+        </Pressable>
       </View>
     </View>
   );
@@ -486,13 +583,21 @@ function unitBadgeLabel(item: PriceBookItem): string {
 
 function PriceItemModal(props: {
   item: PriceBookItem;
+  archiving: boolean;
+  onArchive: () => void;
   onClose: () => void;
-  onSave: (pricing: PriceBookItem["pricing"]) => void;
+  onSave: (input: {
+    name: string;
+    description: string;
+    pricing: PriceBookItem["pricing"];
+  }) => void;
   saving: boolean;
 }) {
   const { item } = props;
   const pricing = item.pricing;
   const isRoomSize = pricing.type === "room_size";
+  const [name, setName] = useState(item.name);
+  const [description, setDescription] = useState(item.description);
   const [small, setSmall] = useState(
     pricing.type === "room_size" ? centsToDollars(pricing.prices.small) : "",
   );
@@ -504,28 +609,55 @@ function PriceItemModal(props: {
   const [large, setLarge] = useState(
     pricing.type === "room_size" ? centsToDollars(pricing.prices.large) : "",
   );
+  const canSave = name.trim().length > 0 && medium.trim().length > 0;
 
   function save() {
+    if (!canSave || props.saving) {
+      return;
+    }
+
     if (isRoomSize) {
       props.onSave({
-        type: "room_size",
-        prices: {
-          small: dollarsToCents(small),
-          medium: dollarsToCents(medium),
-          large: dollarsToCents(large),
+        name: name.trim(),
+        description: description.trim(),
+        pricing: {
+          type: "room_size",
+          prices: {
+            small: dollarsToCents(small),
+            medium: dollarsToCents(medium),
+            large: dollarsToCents(large),
+          },
         },
       });
       return;
     }
 
-    props.onSave({ type: "fixed", unitPriceCents: dollarsToCents(medium) });
+    props.onSave({
+      name: name.trim(),
+      description: description.trim(),
+      pricing: { type: "fixed", unitPriceCents: dollarsToCents(medium) },
+    });
   }
 
   return (
     <AnimatedSheetContent style={styles.sheet}>
       <View style={styles.grabber} />
-      <Text style={styles.sheetTitle}>{item.name}</Text>
-      <Text style={styles.sheetSubtitle}>{item.description}</Text>
+      <Text style={styles.sheetTitle}>
+        {item.confirmedAt === null ? "Confirm starter price" : "Edit price"}
+      </Text>
+      <Text style={styles.sheetSubtitle}>
+        {item.confirmedAt === null
+          ? "Review the details once. Confirmed items match green next time."
+          : "Keep the item name and price current for future quotes."}
+      </Text>
+
+      <Field label="Item name" onChangeText={setName} value={name} />
+      <Field
+        label="Description"
+        onChangeText={setDescription}
+        placeholder="Optional note for matching and context"
+        value={description}
+      />
 
       {isRoomSize ? (
         <View style={styles.row}>
@@ -564,10 +696,27 @@ function PriceItemModal(props: {
       )}
 
       <PrimaryButton
-        disabled={props.saving}
-        label={props.saving ? "Saving..." : "Save price"}
+        disabled={!canSave || props.saving}
+        label={
+          props.saving
+            ? props.archiving
+              ? "Archiving..."
+              : "Saving..."
+            : item.confirmedAt === null
+              ? "Confirm price"
+              : "Save changes"
+        }
         onPress={save}
       />
+      <Pressable
+        accessibilityRole="button"
+        disabled={props.saving}
+        onPress={props.onArchive}
+        style={styles.archiveLink}
+      >
+        <Archive color={colors.red} size={14} strokeWidth={2.4} />
+        <Text style={styles.archiveLinkText}>Archive item</Text>
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         disabled={props.saving}
@@ -1022,6 +1171,67 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  zeroRealCard: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    padding: 14,
+  },
+  zeroRealIcon: {
+    alignItems: "center",
+    backgroundColor: colors.greenBg,
+    borderRadius: 10,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  zeroRealBody: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  zeroRealTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  zeroRealText: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+  zeroRealActions: {
+    alignItems: "center",
+    gap: 8,
+  },
+  zeroRealPrimary: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: 8,
+    height: 32,
+    justifyContent: "center",
+    paddingHorizontal: 13,
+  },
+  zeroRealPrimaryText: {
+    color: colors.onDark,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  zeroRealSecondary: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
   modalBackdrop: {
     backgroundColor: "rgba(18,22,28,0.35)",
     flex: 1,
@@ -1096,5 +1306,17 @@ const styles = StyleSheet.create({
     color: colors.ink3,
     fontSize: 13,
     fontWeight: "600",
+  },
+  archiveLink: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    paddingTop: spacing.xs,
+  },
+  archiveLinkText: {
+    color: colors.red,
+    fontSize: 13,
+    fontWeight: "800",
   },
 });

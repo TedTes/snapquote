@@ -250,6 +250,11 @@ export const snapquoteApi = {
     }
   ) => request<PriceBookItem>(`/v1/price-book/${id}`, { method: "PATCH", body: input }),
 
+  archivePriceBookItem: (id: string) =>
+    request<{ id: string; archived: boolean }>(`/v1/price-book/${id}/archive`, {
+      method: "POST"
+    }),
+
   listCustomers: () => request<{ customers: ApiCustomer[] }>("/v1/customers"),
 
   createCustomer: (input: CreateCustomerInput) =>
