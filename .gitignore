@@ -10,5 +10,9 @@ coverage
 apps/mobile/.expo
 apps/mobile/.expo-shared
 apps/mobile/web-build
+mobile/.expo
+mobile/.expo-shared
+mobile/web-build
 infra/.data
 supabase/**/.temp
+infra/supabase/**/.temp

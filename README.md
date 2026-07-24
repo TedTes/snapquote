@@ -1,25 +1,29 @@
 # SnapQuote
 
-Same-day AI quoting for home-service trades.
+Same-day quoting for home-service trades. The app helps a contractor capture a job, generate a priced draft from their own price book, send the quote, and track whether the customer viewed or accepted it.
 
-This repo is scaffolded around the product spec in the initial request. The current implementation targets M0:
+## Active Structure
 
-- pnpm + Turbo monorepo
-- strict TypeScript packages
-- shared Zod schemas and quote-total computation
-- Fastify API healthcheck plus versioned route skeletons
-- BullMQ worker skeleton for the `process_job` pipeline
-- Expo Router mobile shell
-- local Postgres + pgvector, Redis, and LocalStack compose file
-- CI for lint, typecheck, and tests
+This repo now follows the production path we are actually building:
 
-## Current Version Pins
+- `mobile/src/app` - Expo Router route tree; route files stay thin when feature code belongs elsewhere.
+- `mobile/src/api` - mobile API client for the Supabase Edge Function.
+- `mobile/src/auth` - login screen, auth store, OAuth callback UI, and app-level auth gate.
+- `mobile/src/components` - reusable mobile components, motion helpers, and theme tokens.
+- `mobile/src/state` - quote/workspace store and quote selectors.
+- `mobile/src/utils` - formatting and general utility helpers.
+- `shared` - shared TypeScript domain logic, schemas, pricing rules, matching, and tests.
+- `infra/supabase/functions/snapquote` - Supabase Edge Function API.
+- `infra/supabase/migrations` - Postgres schema, views, grants, auth/setup migrations, and storage setup.
 
-- Node: `>=22.13.0 <25`
-- Expo SDK: `54.0.0`
-- Claude model default: `claude-sonnet-4-6`
+Removed scaffold:
 
-The product spec asks for the latest Expo SDK, but this scaffold is pinned to SDK 54 so it can run in the current physical-device Expo Go app during the SDK 57 transition. The spec names `expo-av`; this scaffold uses `expo-audio`, and the capture layer is isolated for the M2 implementation.
+- local Fastify API
+- BullMQ/Redis worker
+- standalone prompts package
+- local Docker Postgres/Redis/LocalStack stack
+
+The mobile app calls the Supabase Edge Function directly through `EXPO_PUBLIC_API_URL`.
 
 ## Local Development
 
@@ -29,22 +33,16 @@ Install dependencies:
 pnpm install
 ```
 
-Start local services:
-
-```sh
-docker compose -f infra/docker-compose.yml up
-```
-
-Run the API:
-
-```sh
-pnpm dev:api
-```
-
 Run the mobile app:
 
 ```sh
 pnpm dev:mobile
+```
+
+Clear the Expo cache:
+
+```sh
+pnpm dev:mobile:clear
 ```
 
 Run verification:
@@ -55,39 +53,18 @@ pnpm typecheck
 pnpm test
 ```
 
-## Supabase Deployment Path
+## Supabase
 
-The MVP can run on **Supabase Postgres + Edge Functions** without creating a new Supabase project. Use an existing Supabase project and keep SnapQuote isolated in its own Postgres schema:
+The app runs on Supabase Postgres + Edge Functions. SnapQuote data is isolated in the `snapquote` schema with public views for the Edge Function.
 
-```sql
-snapquote.*
-```
-
-The schema lives in:
+Link an existing Supabase project:
 
 ```sh
-supabase/migrations/20260721170000_create_snapquote_schema.sql
-```
-
-It creates:
-
-- `snapquote.orgs`
-- `snapquote.org_members`
-- `snapquote.customers`
-- `snapquote.price_book_items`
-- `snapquote.quotes`
-- `snapquote.quote_line_items`
-- `snapquote.quote_events`
-- `snapquote.quote_public_links`
-
-Link one of your existing Supabase projects:
-
-```sh
-cd supabase
+cd infra/supabase
 supabase link --project-ref <existing-project-ref>
 ```
 
-Push the SnapQuote schema:
+Apply migrations:
 
 ```sh
 pnpm supabase:db:push
@@ -110,33 +87,10 @@ pnpm supabase:functions:deploy
 Point Expo at the Edge Function:
 
 ```sh
-EXPO_PUBLIC_API_URL=http://127.0.0.1:54321/functions/v1/snapquote
-```
-
-For cloud:
-
-```sh
 EXPO_PUBLIC_API_URL=https://<project-ref>.functions.supabase.co/snapquote
 ```
 
-The Edge Function uses `SUPABASE_SERVICE_ROLE_KEY`, so do not expose that key in the mobile app.
-
-### Social auth
-
-The mobile app uses the Expo scheme configured in `apps/mobile/app.json`:
-
-```sh
-snapquote://auth/callback
-```
-
-Add this URL to Supabase Auth redirect URLs. For Expo Go/development builds, also add the redirect URL printed by `Linking.createURL("auth/callback")` if it differs.
-
-Then enable the Google and Apple providers in Supabase Auth after creating their credentials in the Google Cloud Console and Apple Developer Console. The mobile buttons call:
-
-- `POST /v1/auth/oauth/start`
-- `POST /v1/auth/oauth/complete`
-
-Optional Edge Function secrets:
+Required or optional Edge Function secrets:
 
 ```sh
 supabase secrets set OPENAI_API_KEY=<key>
@@ -146,24 +100,33 @@ supabase secrets set SNAPQUOTE_EMAIL_WEBHOOK_URL=https://your-email-worker.examp
 supabase secrets set SNAPQUOTE_DEFAULT_ORG_ID=00000000-0000-4000-8000-000000000001
 ```
 
-The `snapquote` Edge Function exposes:
+## Auth Redirects
+
+The standalone/dev-client app scheme is:
+
+```sh
+snapquote://auth/callback
+```
+
+For Expo Go, add the redirect URL printed in Metro logs by `Linking.createURL("auth/callback")`, for example:
+
+```sh
+exp://<LAN-IP>:<port>/--/auth/callback
+```
+
+Add the active redirect URLs to Supabase Auth URL Configuration. Enable Google and Apple providers in Supabase after creating their provider credentials.
+
+## Edge Function Routes
+
+The `snapquote` Edge Function currently owns the API surface, including:
 
 - `GET /health`
-- `POST /v1/auth/sign-up`
-- `POST /v1/auth/sign-in`
-- `POST /v1/auth/refresh`
-- `POST /v1/auth/oauth/start`
-- `POST /v1/auth/oauth/complete`
-- `POST /v1/onboarding/painter`
-- `GET|POST /v1/price-book`
-- `PATCH /v1/price-book/:id`
-- `GET|POST /v1/customers`
-- `GET|POST /v1/quotes`
-- `GET|PATCH /v1/quotes/:id`
-- `POST /v1/quotes/:id/lines/:lineId/confirm`
-- `POST /v1/quotes/:id/lines/:lineId/save-price-book`
-- `POST /v1/quotes/:id/send`
-- `POST /v1/quotes/:id/follow-up`
-- `POST /v1/ai/extract`
-- `GET /public/quotes/:token`
-- `POST /public/quotes/:token/respond`
+- auth OAuth start/complete/refresh/logout helpers
+- onboarding/setup
+- price book CRUD
+- customer CRUD
+- quote creation, update, review, send, follow-up
+- AI extraction/transcription
+- public quote view/respond
+
+The mobile API wrapper is `mobile/src/api/client.ts`; it builds typed requests to this Edge Function.

@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "SnapQuote",
+    "slug": "snapquote",
+    "scheme": "snapquote",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow SnapQuote to record job notes for quote drafting."
+        }
+      ],
+      "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SnapQuote to choose a business logo from your photo library."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "bundleIdentifier": "com.tedtes.snapquote",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.snapquote.mobile"
+    }
+  }
+}

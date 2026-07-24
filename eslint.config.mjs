@@ -7,10 +7,10 @@ export default [
       "**/dist/**",
       "**/coverage/**",
       "**/node_modules/**",
-      "apps/mobile/.expo/**",
-      "apps/mobile/babel.config.cjs",
-      "apps/mobile/metro.config.cjs",
-      "supabase/functions/**"
+      "mobile/.expo/**",
+      "mobile/babel.config.cjs",
+      "mobile/metro.config.cjs",
+      "infra/supabase/functions/**"
     ]
   },
   js.configs.recommended,
