@@ -287,11 +287,11 @@ export function SwatchTab(props: { tone: MatchTone }) {
   return (
     <View style={[styles.swatchTab, { backgroundColor: palette.fg }]}>
       {props.tone === "green" ? (
-        <Check color={colors.onDark} size={16} strokeWidth={2.6} />
+        <Check color={colors.onDark} size={14} strokeWidth={2.4} />
       ) : props.tone === "yellow" ? (
-        <AlertTriangle color={colors.onDark} size={16} strokeWidth={2.3} />
+        <AlertTriangle color={colors.onDark} size={14} strokeWidth={2.1} />
       ) : (
-        <CircleDollarSign color={colors.onDark} size={16} strokeWidth={2.3} />
+        <CircleDollarSign color={colors.onDark} size={14} strokeWidth={2.1} />
       )}
       <View style={[styles.swatchNotch, styles.swatchNotchOne]} />
       <View style={[styles.swatchNotch, styles.swatchNotchTwo]} />
@@ -591,6 +591,7 @@ const styles = StyleSheet.create({
   },
   swatchTab: {
     alignItems: "center",
+    alignSelf: "stretch",
     justifyContent: "center",
     position: "relative",
     width: 43

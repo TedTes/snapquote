@@ -3,7 +3,7 @@ import {
   Archive,
   BookOpen,
   Check,
-  CircleAlert,
+  ChevronRight,
   Lock,
   Plus,
   Search,
@@ -31,6 +31,7 @@ import {
   PrimaryButton,
   Screen,
   SegmentedControl,
+  SwatchTab,
 } from "../src/ui/components";
 import { colors, radius, shadowLg, spacing } from "../src/ui/theme";
 import { centsToDollars, dollarsToCents, useMvpStore } from "../src/state/mvp";
@@ -274,7 +275,15 @@ export default function PriceBookScreen() {
                   <StarterPriceItem
                     key={item.id}
                     item={item}
-                    onPress={() => setEditingItemId(item.id)}
+                    onEdit={() => setEditingItemId(item.id)}
+                    onConfirm={(pricing) => {
+                      void saveExistingPrice(item, {
+                        name: item.name,
+                        description: item.description,
+                        pricing,
+                      });
+                    }}
+                    saving={savingItemId === item.id}
                   />
                 ))}
               </PriceBookSection>
@@ -367,11 +376,6 @@ function BookStrengthCard(props: {
           />
         ))}
       </View>
-      <Text style={styles.strengthCopy}>
-        {props.starterCount > 0
-          ? `Confirm the ${props.starterCount} starters below so they auto-match on your next quote.`
-          : "Every item is confirmed and ready to match green on your next quote."}
-      </Text>
     </View>
   );
 }
@@ -479,9 +483,7 @@ function ActivePriceItem(props: { item: PriceBookItem; onPress: () => void }) {
         onPress={props.onPress}
         style={styles.priceCard}
       >
-        <View style={styles.checkBadge}>
-          <Check color={colors.green} size={15} strokeWidth={2.8} />
-        </View>
+        <SwatchTab tone="green" />
         <View style={styles.priceBody}>
           <Text style={styles.itemName} numberOfLines={1}>
             {props.item.name}
@@ -501,35 +503,87 @@ function ActivePriceItem(props: { item: PriceBookItem; onPress: () => void }) {
           </View>
         </View>
         <Text style={styles.itemPrice}>{priceAmountLabel(props.item)}</Text>
+        <ChevronRight color={colors.ink3} size={16} strokeWidth={2.2} />
       </Pressable>
     </AnimatedCard>
   );
 }
 
-function StarterPriceItem(props: { item: PriceBookItem; onPress: () => void }) {
+function StarterPriceItem(props: {
+  item: PriceBookItem;
+  onConfirm: (pricing: PriceBookItem["pricing"]) => void;
+  onEdit: () => void;
+  saving: boolean;
+}) {
+  const [price, setPrice] = useState(centsToDollars(basePriceCents(props.item)));
+  const priceCents = price.trim().length > 0 ? dollarsToCents(price) : null;
+  const canConfirm = priceCents !== null && priceCents > 0 && !props.saving;
+
+  function confirm() {
+    if (!canConfirm || priceCents === null) {
+      return;
+    }
+
+    props.onConfirm(pricingWithBasePrice(props.item, priceCents));
+  }
+
   return (
     <AnimatedCard>
-      <Pressable
-        accessibilityRole="button"
-        onPress={props.onPress}
-        style={styles.starterCard}
-      >
-        <View style={styles.alertBadge}>
-          <CircleAlert color={colors.amber} size={14} strokeWidth={2.5} />
+      <View style={styles.starterCard}>
+        <SwatchTab tone="yellow" />
+        <View style={styles.starterEditor}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={props.onEdit}
+            style={styles.starterTopRow}
+          >
+            <View style={styles.priceBody}>
+              <Text style={styles.starterName} numberOfLines={1}>
+                {props.item.name}
+              </Text>
+              <View style={styles.itemMetaRow}>
+                <Text style={styles.unitBadge}>{unitBadgeLabel(props.item)}</Text>
+                {props.item.pricing.type === "room_size" ? (
+                  <Text style={styles.itemSub} numberOfLines={1}>
+                    {roomSizeSummary(props.item.pricing)}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            <ChevronRight color={colors.ink3} size={16} strokeWidth={2.2} />
+          </Pressable>
+
+          <View style={styles.starterPriceRow}>
+            <View style={styles.starterInputWrap}>
+              <Text style={styles.starterCurrency}>$</Text>
+              <TextInput
+                accessibilityLabel={`${props.item.name} starter price`}
+                editable={!props.saving}
+                keyboardType="decimal-pad"
+                onChangeText={setPrice}
+                placeholder="0"
+                placeholderTextColor={colors.amber}
+                style={styles.starterInput}
+                value={price}
+              />
+            </View>
+            <Pressable
+              accessibilityLabel={
+                props.saving ? "Saving starter price" : "Confirm starter price"
+              }
+              accessibilityRole="button"
+              disabled={!canConfirm}
+              onPress={confirm}
+              style={[
+                styles.confirmButton,
+                !canConfirm ? styles.confirmButtonDisabled : null,
+              ]}
+            >
+              <Check color={colors.onDark} size={13} strokeWidth={2.5} />
+            </Pressable>
+          </View>
         </View>
-        <View style={styles.priceBody}>
-          <Text style={styles.starterName} numberOfLines={1}>
-            {props.item.name}
-          </Text>
-          <Text style={styles.starterSub} numberOfLines={1}>
-            {priceAmountLabel(props.item)} suggested
-          </Text>
-        </View>
-        <View style={styles.confirmButton}>
-          <Check color={colors.amber} size={13} strokeWidth={2.5} />
-          <Text style={styles.confirmButtonText}>Confirm</Text>
-        </View>
-      </Pressable>
+      </View>
     </AnimatedCard>
   );
 }
@@ -546,11 +600,46 @@ function NoPriceBookMatches() {
 }
 
 function priceAmountLabel(item: PriceBookItem): string {
+  return formatMoney(basePriceCents(item));
+}
+
+function basePriceCents(item: PriceBookItem): number {
   if (item.pricing.type === "fixed") {
-    return formatMoney(item.pricing.unitPriceCents);
+    return item.pricing.unitPriceCents;
   }
 
-  return formatMoney(item.pricing.prices.medium);
+  return item.pricing.prices.medium;
+}
+
+function pricingWithBasePrice(
+  item: PriceBookItem,
+  baseCents: number,
+): PriceBookItem["pricing"] {
+  if (item.pricing.type === "fixed") {
+    return { type: "fixed", unitPriceCents: baseCents };
+  }
+
+  const currentMedium = item.pricing.prices.medium;
+
+  if (currentMedium <= 0) {
+    return {
+      type: "room_size",
+      prices: {
+        small: baseCents,
+        medium: baseCents,
+        large: baseCents,
+      },
+    };
+  }
+
+  return {
+    type: "room_size",
+    prices: {
+      small: Math.round(baseCents * (item.pricing.prices.small / currentMedium)),
+      medium: baseCents,
+      large: Math.round(baseCents * (item.pricing.prices.large / currentMedium)),
+    },
+  };
 }
 
 function roomSizeSummary(
@@ -562,7 +651,7 @@ function roomSizeSummary(
     return `S ${formatMoney(small)} · L ${formatMoney(large)}`;
   }
 
-  return `S ×${(small / medium).toFixed(1)} · L ×${(large / medium).toFixed(1)}`;
+  return `S ${formatMoney(small)} · L ${formatMoney(large)}`;
 }
 
 function unitBadgeLabel(item: PriceBookItem): string {
@@ -843,9 +932,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: 12,
+    gap: 16,
     padding: 20,
-    paddingBottom: 92,
+    paddingBottom: 148,
   },
   emptyScreen: {
     flex: 1,
@@ -864,32 +953,32 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 25,
-    fontWeight: "900",
+    fontSize: 28,
+    fontWeight: "800",
     letterSpacing: 0,
   },
   itemCount: {
     color: colors.ink3,
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
   },
   addButton: {
     alignItems: "center",
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    height: 38,
+    height: 48,
     justifyContent: "center",
-    width: 38,
+    width: 48,
   },
   strengthCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: 11,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 9,
-    padding: 14,
+    gap: 12,
+    padding: 18,
   },
   strengthTop: {
     alignItems: "center",
@@ -898,30 +987,24 @@ const styles = StyleSheet.create({
   },
   strengthLabel: {
     color: colors.ink2,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.4,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1.9,
     textTransform: "uppercase",
   },
   strengthCount: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "900",
+    fontSize: 15,
+    fontWeight: "800",
   },
   strengthBars: {
     flexDirection: "row",
-    gap: 4,
+    gap: 6,
   },
   strengthBar: {
-    borderRadius: 2,
+    borderRadius: 4,
     flex: 1,
-    height: 11,
-  },
-  strengthCopy: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "600",
-    lineHeight: 14,
+    height: 12,
   },
   searchBox: {
     alignItems: "center",
@@ -941,8 +1024,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   section: {
-    gap: 8,
-    marginTop: 10,
+    gap: 10,
+    marginTop: 12,
   },
   sectionHeader: {
     alignItems: "center",
@@ -951,9 +1034,9 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     color: colors.ink3,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.45,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.9,
     textTransform: "uppercase",
   },
   sectionCount: {
@@ -962,70 +1045,55 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     color: colors.ink3,
-    fontSize: 9,
-    fontWeight: "900",
-    minWidth: 17,
+    fontSize: 11,
+    fontWeight: "800",
+    minWidth: 23,
     overflow: "hidden",
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     textAlign: "center",
   },
   sectionCards: {
-    gap: 8,
+    gap: 12,
   },
   priceCard: {
     alignItems: "center",
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: 10,
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 11,
-    minHeight: 67,
-    paddingHorizontal: 13,
+    gap: 14,
+    minHeight: 82,
+    overflow: "hidden",
+    paddingRight: 14,
   },
   starterCard: {
     alignItems: "center",
-    backgroundColor: "rgba(255,254,250,0.55)",
-    borderColor: colors.border,
-    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderColor: colors.amberBorder,
+    borderRadius: 18,
     borderStyle: "dashed",
     borderWidth: 1,
     flexDirection: "row",
-    gap: 11,
-    minHeight: 67,
-    paddingHorizontal: 13,
-  },
-  checkBadge: {
-    alignItems: "center",
-    backgroundColor: colors.greenBg,
-    borderRadius: 8,
-    height: 25,
-    justifyContent: "center",
-    width: 25,
-  },
-  alertBadge: {
-    alignItems: "center",
-    backgroundColor: colors.amberBg,
-    borderRadius: 8,
-    height: 25,
-    justifyContent: "center",
-    width: 25,
+    gap: 14,
+    minHeight: 122,
+    overflow: "hidden",
   },
   priceBody: {
     flex: 1,
-    gap: 6,
+    gap: 8,
     minWidth: 0,
   },
   itemName: {
     color: colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "800",
   },
   starterName: {
-    color: colors.ink2,
-    fontSize: 14,
-    fontWeight: "900",
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
   },
   itemMetaRow: {
     alignItems: "center",
@@ -1036,54 +1104,84 @@ const styles = StyleSheet.create({
   unitBadge: {
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
-    borderRadius: 4,
+    borderRadius: 7,
     borderWidth: 1,
     color: colors.ink2,
-    fontSize: 9,
-    fontWeight: "900",
+    fontSize: 10,
+    fontWeight: "800",
     overflow: "hidden",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   itemSub: {
     color: colors.ink3,
     flexShrink: 1,
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
   },
   savedText: {
     color: colors.green,
     flexShrink: 1,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  starterSub: {
-    color: colors.amber,
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   itemPrice: {
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: "900",
+    fontSize: 19,
+    fontWeight: "800",
     textAlign: "right",
+  },
+  starterEditor: {
+    flex: 1,
+    gap: 10,
+    minWidth: 0,
+    paddingBottom: 13,
+    paddingRight: 14,
+    paddingTop: 13,
+  },
+  starterTopRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  starterPriceRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  starterInputWrap: {
+    alignItems: "center",
+    borderColor: colors.amberBorder,
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  starterCurrency: {
+    color: colors.amber,
+    fontSize: 16,
+    fontWeight: "800",
+    marginRight: 8,
+  },
+  starterInput: {
+    color: colors.amber,
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "800",
+    paddingVertical: 0,
   },
   confirmButton: {
     alignItems: "center",
-    backgroundColor: colors.amberBg,
-    borderColor: colors.amberBorder,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 5,
-    height: 34,
+    backgroundColor: colors.amber,
+    borderRadius: 10,
+    height: 44,
     justifyContent: "center",
-    paddingHorizontal: 12,
+    width: 52,
   },
-  confirmButtonText: {
-    color: colors.amber,
-    fontSize: 12,
-    fontWeight: "900",
+  confirmButtonDisabled: {
+    opacity: 0.45,
   },
   noMatches: {
     backgroundColor: colors.surface,

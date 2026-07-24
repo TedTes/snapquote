@@ -884,10 +884,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg
   },
   draftContent: {
-    gap: 11,
+    gap: 12,
     paddingHorizontal: 20,
     paddingBottom: 22,
-    paddingTop: 22
+    paddingTop: 18
   },
   draftNav: {
     alignItems: "center",
@@ -919,15 +919,15 @@ const styles = StyleSheet.create({
   },
   draftNavName: {
     color: colors.ink,
-    fontSize: 19,
-    fontWeight: "900",
+    fontSize: 20,
+    fontWeight: "800",
     letterSpacing: 0,
-    lineHeight: 23
+    lineHeight: 24
   },
   draftNavMeta: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     lineHeight: 18
   },
   draftHeader: {
@@ -975,7 +975,7 @@ const styles = StyleSheet.create({
     color: colors.green,
     flex: 1,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     lineHeight: 17
   },
   coverageHero: {
@@ -1076,13 +1076,13 @@ const styles = StyleSheet.create({
   lineCardShell: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: 10,
     borderWidth: 1,
     overflow: "hidden"
   },
   lineCard: {
     flexDirection: "row",
-    minHeight: 70
+    minHeight: 68
   },
   lineRail: {
     width: 5
@@ -1090,8 +1090,8 @@ const styles = StyleSheet.create({
   lineBody: {
     flex: 1,
     justifyContent: "center",
-    paddingHorizontal: 13,
-    paddingVertical: 10
+    paddingHorizontal: 12,
+    paddingVertical: 9
   },
   lineTop: {
     alignItems: "center",
@@ -1113,8 +1113,8 @@ const styles = StyleSheet.create({
   },
   lineTitle: {
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: "700"
+    fontSize: 14,
+    fontWeight: "800"
   },
   lineSub: {
     color: colors.ink3,
@@ -1125,8 +1125,8 @@ const styles = StyleSheet.create({
   },
   lineAmount: {
     color: colors.ink,
-    fontSize: 17,
-    fontWeight: "900"
+    fontSize: 18,
+    fontWeight: "800"
   },
   lineActionArea: {
     alignItems: "flex-end",
@@ -1149,12 +1149,12 @@ const styles = StyleSheet.create({
   },
   lineActionText: {
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   addLine: {
     alignItems: "center",
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: 10,
     borderStyle: "dashed",
     borderWidth: 1,
     flexDirection: "row",
@@ -1165,7 +1165,7 @@ const styles = StyleSheet.create({
   addLineText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   resolveFooter: {
     backgroundColor: "rgba(255,254,250,0.97)",
