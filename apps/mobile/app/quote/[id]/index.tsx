@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg
   },
   draftContent: {
-    gap: 12,
+    gap: 8,
     paddingHorizontal: 20,
     paddingBottom: 22,
     paddingTop: 18
@@ -953,8 +953,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.md,
     borderWidth: 1,
-    gap: 13,
-    padding: 15
+    gap: 10,
+    padding: 13
   },
   quietCoverageLine: {
     alignItems: "center",
@@ -1070,7 +1070,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 1.8,
-    marginTop: 6,
+    marginTop: 4,
     textTransform: "uppercase"
   },
   lineCardShell: {
@@ -1082,7 +1082,7 @@ const styles = StyleSheet.create({
   },
   lineCard: {
     flexDirection: "row",
-    minHeight: 68
+    minHeight: 62
   },
   lineRail: {
     width: 5
@@ -1091,12 +1091,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     paddingHorizontal: 12,
-    paddingVertical: 9
+    paddingVertical: 7
   },
   lineTop: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     justifyContent: "space-between"
   },
   lineIconBadge: {
@@ -1130,7 +1130,7 @@ const styles = StyleSheet.create({
   },
   lineActionArea: {
     alignItems: "flex-end",
-    gap: 6,
+    gap: 5,
     width: 118
   },
   suggestedPrice: {
@@ -1144,7 +1144,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     gap: 5,
-    minHeight: 33,
+    minHeight: 31,
     paddingHorizontal: 12
   },
   lineActionText: {

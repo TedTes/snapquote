@@ -477,7 +477,7 @@ function chipLabel(matchState: "green" | "yellow" | "red"): string {
 
 const styles = StyleSheet.create({
   content: {
-    gap: spacing.lg,
+    gap: spacing.md,
     padding: spacing.lg,
   },
   notFound: {
@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   suggestedCard: {
-    gap: 4,
+    gap: 3,
   },
   suggestedLabel: {
     color: colors.ink2,
@@ -518,17 +518,17 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: "row",
-    gap: spacing.md,
+    gap: 10,
   },
   rowItem: {
     width: 90,
   },
   rowItemWide: {
     flex: 1,
-    gap: 6,
+    gap: 5,
   },
   field: {
-    gap: 6,
+    gap: 5,
   },
   fieldLabel: {
     color: colors.ink2,
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
   },
   unitRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 5,
     paddingRight: spacing.lg,
   },
   unitChip: {
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
   unitChipActive: {
     backgroundColor: colors.dark,
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: 1,
     flexDirection: "row",
-    minHeight: 48,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
   },
   priceCurrency: {
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: 10,
   },
   totalLabel: {
     color: "rgba(255,255,255,0.6)",
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   previewSection: {
-    gap: 8,
+    gap: 6,
   },
   previewCard: {
     backgroundColor: colors.surface,
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     flexDirection: "row",
-    minHeight: 64,
+    minHeight: 58,
     overflow: "hidden",
   },
   previewBody: {

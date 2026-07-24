@@ -7,6 +7,7 @@ import {
   Lock,
   Plus,
   Search,
+  X,
 } from "lucide-react-native";
 import { router } from "expo-router";
 import {
@@ -21,7 +22,6 @@ import {
 import {
   quoteUnits,
   type PriceBookItem,
-  type QuoteLineItem,
 } from "@snapquote/shared";
 import { AnimatedCard } from "../src/ui/AnimatedCard";
 import { AnimatedSheetContent, SheetModal } from "../src/ui/AnimatedSheet";
@@ -30,7 +30,6 @@ import {
   Field,
   PrimaryButton,
   Screen,
-  SegmentedControl,
   SwatchTab,
 } from "../src/ui/components";
 import { colors, radius, shadowLg, spacing } from "../src/ui/theme";
@@ -40,6 +39,8 @@ import { formatMoney } from "../src/lib/format";
 import { snapquoteApi, userFacingErrorMessage } from "../src/lib/api";
 
 const searchThreshold = 10;
+
+type RoomSize = "small" | "medium" | "large";
 
 export default function PriceBookScreen() {
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
@@ -495,11 +496,6 @@ function ActivePriceItem(props: { item: PriceBookItem; onPress: () => void }) {
                 {roomSizeSummary(props.item.pricing)}
               </Text>
             ) : null}
-            {!props.item.starter ? (
-              <Text style={styles.savedText} numberOfLines={1}>
-                + Saved from a quote
-              </Text>
-            ) : null}
           </View>
         </View>
         <Text style={styles.itemPrice}>{priceAmountLabel(props.item)}</Text>
@@ -830,12 +826,33 @@ function AddItemModal(props: {
   saving: boolean;
 }) {
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
-  const [unit, setUnit] = useState<(typeof quoteUnits)[number]>("flat");
-  const [kind, setKind] = useState<QuoteLineItem["kind"]>("labour");
+  const [unit, setUnit] = useState<(typeof quoteUnits)[number]>("room");
+  const [activeSize, setActiveSize] = useState<RoomSize>("medium");
 
-  const canSave = name.trim().length > 0 && price.trim().length > 0;
+  const trimmedName = name.trim();
+  const isRoomSize = unit === "room";
+  const activeCentsValue = price.trim().length > 0 ? dollarsToCents(price) : 0;
+  const roomSizePrices = isRoomSize
+    ? roomSizePricesFromActive(activeSize, activeCentsValue)
+    : { small: 0, medium: 0, large: 0 };
+  const basePriceCentsValue = isRoomSize ? roomSizePrices.medium : activeCentsValue;
+  const canSave = trimmedName.length > 0 && trimmedName.length <= 60 && basePriceCentsValue > 0;
+
+  function selectSize(size: RoomSize) {
+    if (size === activeSize) {
+      return;
+    }
+
+    const nextCents = roomSizePrices[size];
+    setActiveSize(size);
+    setPrice(nextCents > 0 ? centsToDollars(nextCents) : "");
+  }
+
+  function selectUnit(nextUnit: (typeof quoteUnits)[number]) {
+    setUnit(nextUnit);
+    setActiveSize("medium");
+  }
 
   function save() {
     if (!canSave || props.saving) {
@@ -843,88 +860,273 @@ function AddItemModal(props: {
     }
 
     props.onSave({
-      name: name.trim(),
-      description: description.trim(),
+      name: trimmedName,
+      description: "",
       unit,
-      kind,
-      pricing: { type: "fixed", unitPriceCents: dollarsToCents(price) },
+      kind: "labour",
+      pricing: isRoomSize
+        ? { type: "room_size", prices: roomSizePrices }
+        : { type: "fixed", unitPriceCents: basePriceCentsValue },
     });
     setName("");
-    setDescription("");
     setPrice("");
+    setUnit("room");
+    setActiveSize("medium");
   }
 
   return (
-    <AnimatedSheetContent style={styles.sheet}>
+    <AnimatedSheetContent style={styles.addItemSheet}>
       <View style={styles.grabber} />
-      <Text style={styles.sheetTitle}>Add price book item</Text>
-      <Field
-        label="Name"
-        onChangeText={setName}
-        placeholder="e.g. Pressure wash siding"
-        value={name}
-      />
-      <Field
-        label="Description"
-        onChangeText={setDescription}
-        placeholder="Optional"
-        value={description}
-      />
-      <Field
-        keyboardType="decimal-pad"
-        label="Price ($)"
-        onChangeText={setPrice}
-        value={price}
-      />
-
-      <Text style={styles.fieldLabel}>Unit</Text>
-      <View style={styles.unitRow}>
-        {quoteUnits.map((option) => (
-          <Pressable
-            accessibilityRole="button"
-            key={option}
-            onPress={() => setUnit(option)}
-            style={[
-              styles.unitChip,
-              unit === option ? styles.unitChipActive : null,
-            ]}
-          >
-            <Text
-              style={[
-                styles.unitChipText,
-                unit === option ? styles.unitChipTextActive : null,
-              ]}
-            >
-              {option}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={styles.addSheetHeader}>
+        <Text style={styles.addSheetTitle}>Add price book item</Text>
+        <Pressable
+          accessibilityLabel="Close add price book item"
+          accessibilityRole="button"
+          disabled={props.saving}
+          onPress={props.onClose}
+          style={styles.addSheetClose}
+        >
+          <X color={colors.ink2} size={16} strokeWidth={2.4} />
+        </Pressable>
       </View>
 
-      <SegmentedControl
-        onChange={setKind}
-        options={[
-          { label: "Labour", value: "labour" },
-          { label: "Material", value: "material" },
-        ]}
-        value={kind}
-      />
+      <ScrollView contentContainerStyle={styles.addSheetScroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.addFieldHeader}>
+          <Text style={styles.addFieldLabel}>Name</Text>
+          <Text style={styles.charCount}>{trimmedName.length} / 60</Text>
+        </View>
+        <TextInput
+          accessibilityLabel="Price book item name"
+          autoCorrect={false}
+          maxLength={60}
+          onChangeText={setName}
+          placeholder="Paint accent wall"
+          placeholderTextColor={colors.ink3}
+          returnKeyType="done"
+          style={styles.addNameInput}
+          value={name}
+        />
 
-      <PrimaryButton
-        disabled={!canSave || props.saving}
-        label={props.saving ? "Adding..." : "Add item"}
-        onPress={save}
-      />
-      <Pressable
-        accessibilityRole="button"
-        disabled={props.saving}
-        onPress={props.onClose}
-        style={styles.cancelLink}
-      >
-        <Text style={styles.cancelLinkText}>Cancel</Text>
-      </Pressable>
+        <Text style={styles.addFieldLabel}>Unit</Text>
+        <ScrollView
+          contentContainerStyle={styles.addUnitRow}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {quoteUnits.map((option) => (
+            <UnitChip
+              active={unit === option}
+              key={option}
+              label={unitChipDisplay(option)}
+              onPress={() => selectUnit(option)}
+            />
+          ))}
+        </ScrollView>
+
+        <Text style={styles.addFieldLabel}>
+          {isRoomSize ? `Price per ${activeSize} room` : `Price per ${unitChipDisplay(unit)}`}
+        </Text>
+        <View style={styles.addPriceInputWrap}>
+          <Text style={styles.addCurrency}>$</Text>
+          <TextInput
+            accessibilityLabel="Price"
+            keyboardType="decimal-pad"
+            onChangeText={setPrice}
+            placeholder="240"
+            placeholderTextColor={colors.ink3}
+            style={styles.addPriceInput}
+            value={price}
+          />
+        </View>
+
+        {isRoomSize ? (
+          <RoomSizePricingCard
+            activeSize={activeSize}
+            onSelectSize={selectSize}
+            prices={roomSizePrices}
+          />
+        ) : null}
+
+        {canSave ? (
+          <AddItemPreview
+            isRoomSize={isRoomSize}
+            name={trimmedName}
+            priceCents={basePriceCentsValue}
+            roomPrices={roomSizePrices}
+            unit={unit}
+          />
+        ) : null}
+      </ScrollView>
+
+      <View style={styles.addSheetFooter}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={!canSave || props.saving}
+          onPress={save}
+          style={[styles.addSheetPrimary, !canSave || props.saving ? styles.addSheetPrimaryDisabled : null]}
+        >
+          <Text style={styles.addSheetPrimaryText}>
+            {props.saving ? "Adding..." : "Add to price book"}
+          </Text>
+        </Pressable>
+      </View>
     </AnimatedSheetContent>
   );
+}
+
+function UnitChip(props: { active: boolean; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={props.onPress}
+      style={[styles.addUnitChip, props.active ? styles.addUnitChipActive : null]}
+    >
+      <Text style={[styles.addUnitChipText, props.active ? styles.addUnitChipTextActive : null]}>
+        {props.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function RoomSizePricingCard(props: {
+  activeSize: RoomSize;
+  onSelectSize: (size: RoomSize) => void;
+  prices: { small: number; medium: number; large: number };
+}) {
+  return (
+    <View style={styles.roomPricingCard}>
+      <View style={styles.roomPricingHeader}>
+        <RoomPricingMeterIcon />
+        <Text style={styles.roomPricingTitle}>Room size pricing</Text>
+      </View>
+      <View style={styles.roomSizeRow}>
+        <RoomSizePill
+          active={props.activeSize === "small"}
+          label="Small"
+          onPress={() => props.onSelectSize("small")}
+          value={props.prices.small}
+        />
+        <RoomSizePill
+          active={props.activeSize === "medium"}
+          label="Medium"
+          onPress={() => props.onSelectSize("medium")}
+          value={props.prices.medium}
+        />
+        <RoomSizePill
+          active={props.activeSize === "large"}
+          label="Large"
+          onPress={() => props.onSelectSize("large")}
+          value={props.prices.large}
+        />
+      </View>
+      <Text style={styles.roomPricingHelp}>
+        Tap any size to set it directly. Small and large follow your usual ratios until you change them.
+      </Text>
+    </View>
+  );
+}
+
+function RoomPricingMeterIcon() {
+  return (
+    <View style={styles.meterIcon}>
+      <View style={[styles.meterBar, styles.meterBarShort]} />
+      <View style={[styles.meterBar, styles.meterBarMedium]} />
+      <View style={[styles.meterBar, styles.meterBarTall]} />
+    </View>
+  );
+}
+
+function AddItemPreview(props: {
+  isRoomSize: boolean;
+  name: string;
+  priceCents: number;
+  roomPrices: { small: number; large: number };
+  unit: (typeof quoteUnits)[number];
+}) {
+  return (
+    <View style={styles.addPreviewSection}>
+      <Text style={styles.addFieldLabel}>How it'll look in your book</Text>
+      <View style={styles.addPreviewCard}>
+        <SwatchTab tone="green" />
+        <View style={styles.addPreviewBody}>
+          <View style={styles.addPreviewText}>
+            <Text numberOfLines={1} style={styles.addPreviewTitle}>
+              {props.name}
+            </Text>
+            <View style={styles.itemMetaRow}>
+              <Text style={styles.unitBadge}>
+                {props.isRoomSize ? "PER ROOM" : unitBadgeFromUnit(props.unit)}
+              </Text>
+              {props.isRoomSize ? (
+                <Text numberOfLines={1} style={styles.itemSub}>
+                  S {formatMoney(props.roomPrices.small)} · L {formatMoney(props.roomPrices.large)}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          <Text style={styles.addPreviewAmount}>{formatMoney(props.priceCents)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function RoomSizePill(props: {
+  active?: boolean;
+  label: string;
+  onPress: () => void;
+  value: number;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={props.onPress}
+      style={[styles.roomSizePill, props.active ? styles.roomSizePillActive : null]}
+    >
+      <Text style={[styles.roomSizeLabel, props.active ? styles.roomSizeLabelActive : null]}>
+        {props.label}
+      </Text>
+      <Text style={[styles.roomSizeValue, props.active ? styles.roomSizeValueActive : null]}>
+        {formatMoney(props.value)}
+      </Text>
+    </Pressable>
+  );
+}
+
+const smallRatio = 0.7;
+const largeRatio = 1.6;
+
+function roomSizePricesFromActive(
+  activeSize: RoomSize,
+  activeCents: number,
+): { small: number; medium: number; large: number } {
+  const mediumCents =
+    activeSize === "medium"
+      ? activeCents
+      : activeSize === "small"
+        ? Math.round(activeCents / smallRatio)
+        : Math.round(activeCents / largeRatio);
+
+  return {
+    small: Math.round(mediumCents * smallRatio),
+    medium: mediumCents,
+    large: Math.round(mediumCents * largeRatio),
+  };
+}
+
+function unitChipDisplay(unit: (typeof quoteUnits)[number]) {
+  if (unit === "sqft") return "sq ft";
+  if (unit === "lnft") return "linear ft";
+  return unit;
+}
+
+function unitBadgeFromUnit(unit: (typeof quoteUnits)[number]) {
+  if (unit === "each") return "EACH";
+  if (unit === "hour") return "PER HOUR";
+  if (unit === "day") return "PER DAY";
+  if (unit === "sqft") return "PER SQ FT";
+  if (unit === "lnft") return "PER LINEAR FT";
+  return unit.toUpperCase();
 }
 
 const styles = StyleSheet.create({
@@ -932,7 +1134,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: 16,
+    gap: 12,
     padding: 20,
     paddingBottom: 148,
   },
@@ -977,8 +1179,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
-    gap: 12,
-    padding: 18,
+    gap: 10,
+    padding: 16,
   },
   strengthTop: {
     alignItems: "center",
@@ -1024,8 +1226,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   section: {
-    gap: 10,
-    marginTop: 12,
+    gap: 8,
+    marginTop: 8,
   },
   sectionHeader: {
     alignItems: "center",
@@ -1054,7 +1256,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   sectionCards: {
-    gap: 12,
+    gap: 8,
   },
   priceCard: {
     alignItems: "center",
@@ -1063,8 +1265,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 14,
-    minHeight: 82,
+    gap: 12,
+    minHeight: 76,
     overflow: "hidden",
     paddingRight: 14,
   },
@@ -1076,13 +1278,13 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     borderWidth: 1,
     flexDirection: "row",
-    gap: 14,
-    minHeight: 122,
+    gap: 12,
+    minHeight: 106,
     overflow: "hidden",
   },
   priceBody: {
     flex: 1,
-    gap: 8,
+    gap: 6,
     minWidth: 0,
   },
   itemName: {
@@ -1119,12 +1321,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-  savedText: {
-    color: colors.green,
-    flexShrink: 1,
-    fontSize: 11,
-    fontWeight: "700",
-  },
   itemPrice: {
     color: colors.ink,
     fontSize: 19,
@@ -1133,21 +1329,21 @@ const styles = StyleSheet.create({
   },
   starterEditor: {
     flex: 1,
-    gap: 10,
+    gap: 8,
     minWidth: 0,
-    paddingBottom: 13,
+    paddingBottom: 10,
     paddingRight: 14,
-    paddingTop: 13,
+    paddingTop: 10,
   },
   starterTopRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
   starterPriceRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
   starterInputWrap: {
     alignItems: "center",
@@ -1156,7 +1352,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     flexDirection: "row",
-    minHeight: 44,
+    minHeight: 40,
     paddingHorizontal: 14,
   },
   starterCurrency: {
@@ -1176,7 +1372,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.amber,
     borderRadius: 10,
-    height: 44,
+    height: 40,
     justifyContent: "center",
     width: 52,
   },
@@ -1329,6 +1525,262 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: "center",
     width: 32,
+  },
+  addItemSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: "88%",
+    overflow: "hidden",
+    paddingTop: 10,
+  },
+  addSheetScroll: {
+    gap: 15,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+    paddingTop: 2,
+  },
+  addSheetHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  addSheetTitle: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  addSheetClose: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  addFieldHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  addFieldLabel: {
+    color: colors.ink3,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.9,
+    textTransform: "uppercase",
+  },
+  charCount: {
+    color: colors.ink3,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  addNameInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 13,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "600",
+    height: 46,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
+  },
+  addUnitRow: {
+    gap: 8,
+    paddingRight: 28,
+  },
+  addUnitChip: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: "center",
+    minWidth: 84,
+    paddingHorizontal: 16,
+  },
+  addUnitChipActive: {
+    backgroundColor: colors.dark,
+    borderColor: colors.dark,
+  },
+  addUnitChipText: {
+    color: colors.ink2,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  addUnitChipTextActive: {
+    color: colors.onDark,
+  },
+  addPriceInputWrap: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 13,
+    borderWidth: 1,
+    flexDirection: "row",
+    height: 46,
+    paddingHorizontal: 16,
+  },
+  addCurrency: {
+    color: colors.ink3,
+    fontSize: 18,
+    fontWeight: "800",
+    marginRight: 8,
+  },
+  addPriceInput: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "800",
+    paddingVertical: 0,
+  },
+  roomPricingCard: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: 15,
+    borderWidth: 1,
+    gap: 13,
+    padding: 14,
+  },
+  roomPricingHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  roomPricingTitle: {
+    color: colors.ink2,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  meterIcon: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: 2,
+    height: 12,
+  },
+  meterBar: {
+    backgroundColor: colors.ink3,
+    borderRadius: 1,
+    width: 2.5,
+  },
+  meterBarShort: {
+    height: 5,
+  },
+  meterBarMedium: {
+    height: 8,
+  },
+  meterBarTall: {
+    height: 12,
+  },
+  roomSizeRow: {
+    flexDirection: "row",
+    gap: 9,
+  },
+  roomSizePill: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 11,
+    borderWidth: 1,
+    flex: 1,
+    gap: 3,
+    minHeight: 52,
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+  roomSizePillActive: {
+    backgroundColor: colors.dark,
+    borderColor: colors.dark,
+  },
+  roomSizeLabel: {
+    color: colors.ink3,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  roomSizeLabelActive: {
+    color: "rgba(255,255,255,0.72)",
+  },
+  roomSizeValue: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  roomSizeValueActive: {
+    color: colors.onDark,
+  },
+  roomPricingHelp: {
+    color: colors.ink3,
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+  },
+  addPreviewSection: {
+    gap: 8,
+  },
+  addPreviewCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    minHeight: 74,
+    overflow: "hidden",
+  },
+  addPreviewBody: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+  },
+  addPreviewText: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
+  },
+  addPreviewTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  addPreviewAmount: {
+    color: colors.ink,
+    fontSize: 19,
+    fontWeight: "800",
+  },
+  addSheetFooter: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+  },
+  addSheetPrimary: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: 14,
+    height: 56,
+    justifyContent: "center",
+  },
+  addSheetPrimaryDisabled: {
+    opacity: 0.45,
+  },
+  addSheetPrimaryText: {
+    color: colors.onDark,
+    fontSize: 18,
+    fontWeight: "900",
   },
   modalBackdrop: {
     backgroundColor: "rgba(18,22,28,0.35)",

@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { File } from "expo-file-system";
-import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import {
@@ -19,6 +18,7 @@ import {
   User
 } from "lucide-react-native";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { getTradeConfig } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../../src/lib/api";
 import { useAuthStore } from "../../src/state/auth";
 import { getQuoteStatus, useMvpStore } from "../../src/state/mvp";
@@ -27,8 +27,11 @@ import { QuoteMark } from "../../src/ui/QuoteMark";
 import { Screen } from "../../src/ui/components";
 import { colors, radius } from "../../src/ui/theme";
 
+type ImagePickerModule = typeof import("expo-image-picker");
+
 export default function ProfileScreen() {
   const businessName = useMvpStore((state) => state.businessName);
+  const activeTrade = useMvpStore((state) => state.activeTrade);
   const quotes = useMvpStore((state) => state.quotes);
   const events = useMvpStore((state) => state.events);
   const me = useAuthStore((state) => state.me);
@@ -46,6 +49,7 @@ export default function ProfileScreen() {
   const email = me?.user.email ?? "Not signed in";
   const logoUrl = me?.org.logoUrl ?? null;
   const contactDetail = contactSummary(me?.org.contactPhone ?? null, me?.org.website ?? null);
+  const tradeConfig = getTradeConfig(activeTrade);
 
   async function uploadLogo() {
     if (authStatus !== "signed_in") {
@@ -54,6 +58,16 @@ export default function ProfileScreen() {
     }
 
     if (uploadingLogo) {
+      return;
+    }
+
+    const ImagePicker = await loadImagePicker();
+
+    if (!ImagePicker) {
+      Alert.alert(
+        "Logo upload unavailable",
+        "This app build does not include photo picking yet. Rebuild the app after installing expo-image-picker."
+      );
       return;
     }
 
@@ -225,7 +239,7 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
           <Text style={styles.businessName}>{displayBusinessName(businessName, "Add business name")}</Text>
-          <Text style={styles.businessMeta}>Business identity</Text>
+          <Text style={styles.businessMeta}>{tradeConfig.businessCategory} · {tradeConfig.label}</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push("/settings/business")}
@@ -411,6 +425,15 @@ function normalizeImageContentType(contentType: string | null | undefined): "ima
   }
 
   return "image/jpeg";
+}
+
+async function loadImagePicker(): Promise<ImagePickerModule | null> {
+  try {
+    return await import("expo-image-picker");
+  } catch (error) {
+    console.warn("SnapQuote image picker unavailable", error);
+    return null;
+  }
 }
 
 const styles = StyleSheet.create({
