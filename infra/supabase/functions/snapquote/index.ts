@@ -14,8 +14,12 @@ import {
   lineInsert,
   priceBookInsert,
   priceBookItemFromRow,
+  pricingRegionFromRow,
+  pricingVersionFromRow,
   publicToken,
   quoteLineFromRow,
+  servicePriceSuggestionFromRows,
+  serviceTemplateFromRow,
   starterDefinitions,
   toDiscount,
   totalsColumns,
@@ -24,10 +28,14 @@ import {
   type PriceBookItem,
   type PriceBookPricing,
   type PriceBookRow,
+  type PricingRegionRow,
+  type PricingVersionRow,
   type QuoteDiscount,
   type QuoteEvent,
   type QuoteLineItem,
-  type QuoteRow
+  type QuoteRow,
+  type ServicePriceSuggestionRow,
+  type ServiceTemplateRow
 } from "./domain.ts";
 
 const corsHeaders = {
@@ -227,6 +235,14 @@ const sendSchema = z.object({
   channels: z.array(z.literal("email")).min(1).max(1).default(["email"])
 });
 
+const pricingSuggestionQuerySchema = z.object({
+  trade: z.string().trim().min(1).max(80).default("painting"),
+  regionKey: z.string().trim().min(1).max(120).optional(),
+  country: z.string().trim().min(2).max(3).optional(),
+  region: z.string().trim().min(1).max(80).optional(),
+  metro: z.string().trim().min(1).max(160).optional()
+});
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -282,6 +298,10 @@ Deno.serve(async (request) => {
 
     if (route.method === "POST" && route.path === "/v1/onboarding/painter") {
       return json(await onboardPainter(db, request));
+    }
+
+    if (route.method === "GET" && route.path === "/v1/pricing-suggestions") {
+      return json(await listPricingSuggestions(db, request));
     }
 
     if (route.method === "GET" && route.path === "/v1/price-book") {
@@ -806,6 +826,172 @@ async function seedStarterPriceBook(
   }
 }
 
+async function listPricingSuggestions(db: SupabaseClient, request: Request) {
+  const query = parse(pricingSuggestionQuerySchema, Object.fromEntries(new URL(request.url).searchParams.entries()));
+  const versionRow = await maybeSingle(db
+    .from("snapquote_pricing_versions")
+    .select("*")
+    .eq("trade", query.trade)
+    .eq("status", "published")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(1));
+
+  if (!versionRow) {
+    return {
+      version: null,
+      region: null,
+      suggestions: []
+    };
+  }
+
+  const regionRow = await resolvePricingRegion(db, query);
+
+  if (!regionRow) {
+    return {
+      version: pricingVersionFromRow(versionRow as PricingVersionRow),
+      region: null,
+      suggestions: []
+    };
+  }
+
+  let suggestionRows = await suggestionRowsForRegion(db, String(versionRow.id), String(regionRow.id));
+  let selectedRegionRow = regionRow;
+
+  if (suggestionRows.length === 0 && regionRow.key !== "global") {
+    const fallbackRegion = await pricingRegionByKey(db, "global");
+
+    if (fallbackRegion) {
+      selectedRegionRow = fallbackRegion;
+      suggestionRows = await suggestionRowsForRegion(db, String(versionRow.id), String(fallbackRegion.id));
+    }
+  }
+
+  const templateRows = await serviceTemplatesByIds(
+    db,
+    suggestionRows.map((row) => row.service_template_id)
+  );
+  const templateById = new Map(templateRows.map((row) => [row.id, row]));
+
+  return {
+    version: pricingVersionFromRow(versionRow as PricingVersionRow),
+    region: pricingRegionFromRow(selectedRegionRow),
+    suggestions: suggestionRows
+      .map((row) => {
+        const template = templateById.get(row.service_template_id);
+        return template ? servicePriceSuggestionFromRows(row, template, selectedRegionRow, versionRow as PricingVersionRow) : null;
+      })
+      .filter((suggestion) => suggestion !== null)
+  };
+}
+
+async function resolvePricingRegion(
+  db: SupabaseClient,
+  query: z.infer<typeof pricingSuggestionQuerySchema>
+): Promise<PricingRegionRow | null> {
+  if (query.regionKey) {
+    const explicit = await pricingRegionByKey(db, query.regionKey);
+
+    if (explicit) {
+      return explicit;
+    }
+  }
+
+  if (query.country && query.region && query.metro) {
+    const metro = await maybeSingle(db
+      .from("snapquote_pricing_regions")
+      .select("*")
+      .eq("country_code", query.country.toUpperCase())
+      .eq("region_code", query.region.toUpperCase())
+      .ilike("metro_name", query.metro)
+      .eq("active", true)
+      .limit(1));
+
+    if (metro) {
+      return metro as PricingRegionRow;
+    }
+  }
+
+  if (query.country && query.region) {
+    const stateRegion = await maybeSingle(db
+      .from("snapquote_pricing_regions")
+      .select("*")
+      .eq("country_code", query.country.toUpperCase())
+      .eq("region_code", query.region.toUpperCase())
+      .is("metro_name", null)
+      .eq("active", true)
+      .limit(1));
+
+    if (stateRegion) {
+      return stateRegion as PricingRegionRow;
+    }
+  }
+
+  return await pricingRegionByKey(db, "global");
+}
+
+async function pricingRegionByKey(db: SupabaseClient, key: string): Promise<PricingRegionRow | null> {
+  const row = await maybeSingle(db
+    .from("snapquote_pricing_regions")
+    .select("*")
+    .eq("key", key)
+    .eq("active", true)
+    .limit(1));
+
+  return row as PricingRegionRow | null;
+}
+
+async function suggestionRowsForRegion(
+  db: SupabaseClient,
+  versionId: string,
+  regionId: string
+): Promise<ServicePriceSuggestionRow[]> {
+  const { data, error } = await db
+    .from("snapquote_service_price_suggestions")
+    .select("*")
+    .eq("version_id", versionId)
+    .eq("region_id", regionId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return data as ServicePriceSuggestionRow[];
+}
+
+async function serviceTemplatesByIds(db: SupabaseClient, ids: string[]): Promise<ServiceTemplateRow[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await db
+    .from("snapquote_service_templates")
+    .select("*")
+    .in("id", ids);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as ServiceTemplateRow[]).map((row) => {
+    const template = serviceTemplateFromRow(row);
+    return {
+      id: template.id,
+      trade: template.trade,
+      key: template.key,
+      name: template.name,
+      description: template.description,
+      unit: template.unit,
+      kind: template.kind,
+      default_pricing_type: template.defaultPricingType,
+      aliases: template.aliases,
+      active: template.active,
+      created_at: template.createdAt,
+      updated_at: template.updatedAt
+    };
+  });
+}
+
 async function listPriceBook(db: SupabaseClient, orgId: string): Promise<PriceBookItem[]> {
   const { data, error } = await db.from("snapquote_price_book_items").select("*").eq("org_id", orgId)
     .is("archived_at", null)
@@ -1130,6 +1316,7 @@ async function listQuotes(db: SupabaseClient, orgId: string) {
 async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: string) {
   await refreshStatuses(db, orgId);
   const quote = await single(db.from("snapquote_quotes").select("*").eq("org_id", orgId).eq("id", quoteId)) as QuoteRow;
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", quote.org_id));
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
   const lineItems = await listLines(db, quote.id);
   const publicLink = await single(db.from("snapquote_quote_public_links").select("*").eq("quote_id", quote.id));
@@ -1145,12 +1332,14 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
   return {
     id: quote.id,
     orgId: quote.org_id,
+    org: orgResponse(org),
     customerId: quote.customer_id,
     customer: customerResponse(customer),
     address: quote.address,
     jobTitle: quote.job_title,
     status: quote.status,
     publicToken: publicLink.token,
+    publicUrl: publicQuoteUrl(publicLink.token),
     validUntil: quote.valid_until,
     lineItems,
     discount: toDiscount(quote.discount_type, quote.discount_value),
@@ -1315,15 +1504,12 @@ async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) 
     discount: toDiscount(quote.discount_type, quote.discount_value),
     taxRate: Number(quote.tax_rate)
   });
-  const now = new Date().toISOString();
-  must(await db.from("snapquote_quotes").update({
-    sent_at: now,
-    status: "sent",
-    ...totalsColumns(totals)
-  }).eq("id", quoteId).eq("org_id", orgId));
+  must(await db.from("snapquote_quotes").update(totalsColumns(totals)).eq("id", quoteId).eq("org_id", orgId));
 
+  const delivery = await deliverQuoteNotification("quote_sent", await getQuoteResponse(db, orgId, quoteId));
+  const now = new Date().toISOString();
+  must(await db.from("snapquote_quotes").update({ sent_at: now, status: "sent" }).eq("id", quoteId).eq("org_id", orgId));
   const response = await getQuoteResponse(db, orgId, quoteId);
-  const delivery = await deliverQuoteNotification("quote_sent", response);
   await createEvent(db, quoteId, "sent", { channel: "email", ...delivery });
 
   return response;
@@ -1548,9 +1734,12 @@ async function createEvent(db: SupabaseClient, quoteId: string, type: QuoteEvent
   must(await db.from("snapquote_quote_events").insert({ quote_id: quoteId, type, meta }));
 }
 
-async function deliverQuoteNotification(kind: "quote_sent" | "quote_follow_up", quote: Record<string, any>) {
+type QuoteNotificationKind = "quote_sent" | "quote_follow_up";
+
+async function deliverQuoteNotification(kind: QuoteNotificationKind, quote: Record<string, any>) {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
   const webhookUrl = Deno.env.get("SNAPQUOTE_EMAIL_WEBHOOK_URL");
-  const publicUrl = publicQuoteUrl(String(quote.publicToken));
+  const publicUrl = typeof quote.publicUrl === "string" ? quote.publicUrl : publicQuoteUrl(String(quote.publicToken));
   const payload = {
     kind,
     quoteId: quote.id,
@@ -1562,6 +1751,43 @@ async function deliverQuoteNotification(kind: "quote_sent" | "quote_follow_up", 
     totals: quote.totals,
     validUntil: quote.validUntil
   };
+
+  if (resendKey) {
+    const from = Deno.env.get("SNAPQUOTE_FROM_EMAIL");
+
+    if (!from) {
+      throw new HttpError(500, "Quote email sender is not configured");
+    }
+
+    if (!publicUrl.startsWith("http://") && !publicUrl.startsWith("https://")) {
+      throw new HttpError(500, "Public quote host is not configured");
+    }
+
+    const email = quoteEmail(kind, quote, publicUrl);
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${resendKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        from,
+        to: [quote.customer.email],
+        reply_to: Deno.env.get("SNAPQUOTE_REPLY_TO_EMAIL") ?? undefined,
+        subject: email.subject,
+        html: email.html,
+        text: email.text
+      })
+    });
+
+    if (!response.ok) {
+      console.warn("SnapQuote Resend delivery failed", response.status, await response.text());
+      throw new HttpError(502, "Quote email could not be sent");
+    }
+
+    const body = await response.json().catch(() => ({})) as { id?: string };
+    return { delivery: "resend", provider: "resend", messageId: body.id ?? null, publicUrl };
+  }
 
   if (!webhookUrl) {
     return { delivery: "simulated", publicUrl };
@@ -1584,10 +1810,107 @@ function publicQuoteUrl(token: string) {
   const baseUrl = Deno.env.get("SNAPQUOTE_PUBLIC_BASE_URL");
 
   if (!baseUrl) {
-    return `/public/quotes/${token}`;
+    return `/q/${token}`;
   }
 
-  return `${baseUrl.replace(/\/$/, "")}/public/quotes/${token}`;
+  return `${baseUrl.replace(/\/$/, "")}/q/${token}`;
+}
+
+function quoteEmail(kind: QuoteNotificationKind, quote: Record<string, any>, publicUrl: string) {
+  const orgName = String(quote.org?.name ?? "SnapQuote");
+  const customerName = String(quote.customer?.name ?? "there");
+  const total = formatEmailMoney(quote.totals?.totalCents ?? null);
+  const validUntil = formatEmailDate(String(quote.validUntil));
+  const subject = kind === "quote_sent"
+    ? `Quote from ${orgName}`
+    : `Reminder: quote from ${orgName}`;
+  const intro = kind === "quote_sent"
+    ? `${orgName} sent you a quote for ${total}.`
+    : `${orgName} is following up on your quote for ${total}.`;
+  const lines = Array.isArray(quote.lineItems) ? quote.lineItems : [];
+  const lineText = lines
+    .map((line: Record<string, any>) => `- ${line.description}: ${formatEmailMoney(line.unitPriceCents === null ? null : Math.round(Number(line.quantity) * Number(line.unitPriceCents)))}`)
+    .join("\n");
+  const lineRows = lines
+    .map((line: Record<string, any>) => {
+      const amount = line.unitPriceCents === null ? null : Math.round(Number(line.quantity) * Number(line.unitPriceCents));
+      return `<tr><td>${escapeHtml(String(line.description))}<br><span>${escapeHtml(describeEmailQuantity(Number(line.quantity), line.unit ?? null))}</span></td><td>${escapeHtml(formatEmailMoney(amount))}</td></tr>`;
+    })
+    .join("");
+  const text = [
+    `Hi ${customerName},`,
+    "",
+    intro,
+    `Valid until ${validUntil}.`,
+    "",
+    quote.scopeSummary ? String(quote.scopeSummary) : "",
+    "",
+    lineText,
+    "",
+    `View, accept, or decline the quote: ${publicUrl}`,
+    "",
+    "No account is needed."
+  ].filter((line) => line !== "").join("\n");
+  const html = `
+    <div style="margin:0;background:#ebe9e3;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1d1c19">
+      <div style="max-width:560px;margin:0 auto;background:#fffdfa;border:1px solid #ded9cd;border-radius:16px;overflow:hidden">
+        <div style="padding:24px 24px 16px">
+          <p style="margin:0 0 12px;color:#8d887f;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase">Quote from</p>
+          <h1 style="margin:0 0 8px;font-size:28px;line-height:1.1">${escapeHtml(orgName)}</h1>
+          <p style="margin:0;color:#646058">Hi ${escapeHtml(customerName)}, ${escapeHtml(intro)} Valid until ${escapeHtml(validUntil)}.</p>
+        </div>
+        <div style="padding:0 24px 20px">
+          <a href="${escapeHtml(publicUrl)}" style="display:block;background:#1d1c19;color:#fffdfa;text-align:center;text-decoration:none;font-weight:800;border-radius:10px;padding:14px 18px">View quote</a>
+        </div>
+        ${quote.scopeSummary ? `<div style="padding:0 24px 18px;color:#646058">${escapeHtml(String(quote.scopeSummary))}</div>` : ""}
+        <table style="width:100%;border-collapse:collapse;border-top:1px solid #e5e0d6">
+          <tbody>${lineRows}</tbody>
+        </table>
+        <div style="padding:18px 24px;border-top:1px solid #1d1c19;display:flex;justify-content:space-between;align-items:center">
+          <strong>Total</strong>
+          <strong style="font-size:26px">${escapeHtml(total)}</strong>
+        </div>
+      </div>
+      <p style="max-width:560px;margin:14px auto 0;text-align:center;color:#8d887f;font-size:13px">No account needed. Questions? Reply to this email.</p>
+    </div>
+  `;
+
+  return { subject, text, html };
+}
+
+function formatEmailMoney(cents: number | null) {
+  if (cents === null) return "$--";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(cents / 100);
+}
+
+function formatEmailDate(iso: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(iso));
+}
+
+function describeEmailQuantity(quantity: number, unit: string | null) {
+  const qty = Number.isInteger(quantity) ? String(quantity) : quantity.toFixed(1);
+
+  if (unit === null) return qty;
+  if (unit === "each") return `${qty} each`;
+  if (unit === "flat") return "Flat";
+  if (unit === "sqft") return `${qty} sq ft`;
+  if (unit === "lnft") return `${qty} linear ft`;
+  return `${qty} ${quantity === 1 ? unit : `${unit}s`}`;
+}
+
+function escapeHtml(input: string) {
+  return input.replace(/[&<>"']/g, (char) => {
+    if (char === "&") return "&amp;";
+    if (char === "<") return "&lt;";
+    if (char === ">") return "&gt;";
+    if (char === "\"") return "&quot;";
+    return "&#39;";
+  });
 }
 
 function routeFromRequest(request: Request) {

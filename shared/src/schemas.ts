@@ -41,6 +41,8 @@ export const quoteEventTypeSchema = z.enum(quoteEventTypes);
 export const roomSizeSchema = z.enum(roomSizes);
 export const prepLevelSchema = z.enum(prepLevels);
 export const tradeIdSchema = z.enum(tradeIds);
+export const pricingSourceTypeSchema = z.enum(["curated", "government", "vendor", "import", "llm_draft"]);
+export const pricingVersionStatusSchema = z.enum(["draft", "reviewed", "published", "retired"]);
 
 export const healthResponseSchema = z.object({
   ok: z.literal(true),
@@ -118,6 +120,87 @@ export const priceBookItemSchema = z.object({
   usageCount: z.number().int().min(0),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
+});
+
+export const serviceTemplateSchema = z.object({
+  id: idSchema,
+  trade: z.string().trim().min(1).max(80),
+  key: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(1000),
+  unit: quoteUnitSchema,
+  kind: lineItemKindSchema,
+  defaultPricingType: z.enum(["fixed", "room_size"]),
+  aliases: z.array(z.string().trim().min(1).max(160)),
+  active: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const pricingRegionSchema = z.object({
+  id: idSchema,
+  key: z.string().trim().min(1).max(120),
+  countryCode: z.string().trim().min(2).max(3).nullable(),
+  regionCode: z.string().trim().min(1).max(80).nullable(),
+  metroName: z.string().trim().min(1).max(160).nullable(),
+  currency: z.string().trim().length(3),
+  laborMultiplier: z.number().positive(),
+  materialMultiplier: z.number().positive(),
+  confidence: z.number().min(0).max(1),
+  active: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const pricingSourceSchema = z.object({
+  id: idSchema,
+  key: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(240),
+  sourceType: pricingSourceTypeSchema,
+  sourceUrl: z.string().url().nullable(),
+  collectedAt: z.string().date().nullable(),
+  notes: z.string().trim().max(4000),
+  confidence: z.number().min(0).max(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const pricingVersionSchema = z.object({
+  id: idSchema,
+  key: z.string().trim().min(1).max(120),
+  trade: z.string().trim().min(1).max(80),
+  status: pricingVersionStatusSchema,
+  formulaVersion: z.string().trim().min(1).max(80),
+  publishedAt: z.string().datetime().nullable(),
+  sourceSnapshot: z.record(z.unknown()),
+  notes: z.string().trim().max(4000),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const servicePriceSuggestionSchema = z.object({
+  id: idSchema,
+  versionId: idSchema,
+  serviceTemplateId: idSchema,
+  regionId: idSchema,
+  trade: z.string().trim().min(1).max(80),
+  templateKey: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(1000),
+  unit: quoteUnitSchema,
+  kind: lineItemKindSchema,
+  pricingType: z.enum(["fixed", "room_size"]),
+  lowCents: moneyCentsSchema,
+  medianCents: moneyCentsSchema,
+  highCents: moneyCentsSchema,
+  pricing: priceBookPricingSchema,
+  currency: z.string().trim().length(3),
+  confidence: z.number().min(0).max(1),
+  regionKey: z.string().trim().min(1).max(120),
+  versionKey: z.string().trim().min(1).max(120),
+  formulaVersion: z.string().trim().min(1).max(80),
+  publishedAt: z.string().datetime().nullable(),
+  provenance: z.record(z.unknown())
 });
 
 export const createPriceBookItemSchema = priceBookItemSchema.omit({
@@ -291,6 +374,11 @@ export type OrgProfile = z.infer<typeof orgProfileSchema>;
 export type Customer = z.infer<typeof customerSchema>;
 export type PriceBookItem = z.infer<typeof priceBookItemSchema>;
 export type PriceBookPricing = z.infer<typeof priceBookPricingSchema>;
+export type ServiceTemplate = z.infer<typeof serviceTemplateSchema>;
+export type PricingRegion = z.infer<typeof pricingRegionSchema>;
+export type PricingSource = z.infer<typeof pricingSourceSchema>;
+export type PricingVersion = z.infer<typeof pricingVersionSchema>;
+export type ServicePriceSuggestion = z.infer<typeof servicePriceSuggestionSchema>;
 export type PriceBookCsvRow = z.infer<typeof priceBookCsvRowSchema>;
 export type ExtractedTask = z.infer<typeof extractedTaskSchema>;
 export type ExtractionResult = z.infer<typeof extractionResultSchema>;

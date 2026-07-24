@@ -24,6 +24,74 @@ export type PriceBookItem = {
   updatedAt: string;
 };
 
+export type PricingRegion = {
+  id: string;
+  key: string;
+  countryCode: string | null;
+  regionCode: string | null;
+  metroName: string | null;
+  currency: string;
+  laborMultiplier: number;
+  materialMultiplier: number;
+  confidence: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PricingVersion = {
+  id: string;
+  key: string;
+  trade: string;
+  status: "draft" | "reviewed" | "published" | "retired";
+  formulaVersion: string;
+  publishedAt: string | null;
+  sourceSnapshot: Record<string, unknown>;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ServiceTemplate = {
+  id: string;
+  trade: string;
+  key: string;
+  name: string;
+  description: string;
+  unit: QuoteUnit;
+  kind: LineKind;
+  defaultPricingType: "fixed" | "room_size";
+  aliases: string[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ServicePriceSuggestion = {
+  id: string;
+  versionId: string;
+  serviceTemplateId: string;
+  regionId: string;
+  trade: string;
+  templateKey: string;
+  name: string;
+  description: string;
+  unit: QuoteUnit;
+  kind: LineKind;
+  pricingType: "fixed" | "room_size";
+  lowCents: number;
+  medianCents: number;
+  highCents: number;
+  pricing: PriceBookPricing;
+  currency: string;
+  confidence: number;
+  regionKey: string;
+  versionKey: string;
+  formulaVersion: string;
+  publishedAt: string | null;
+  provenance: Record<string, unknown>;
+};
+
 export type PainterChecklist = {
   rooms: { small: number; medium: number; large: number };
   surfaces: { walls: boolean; ceilings: boolean; trim: boolean };
@@ -91,6 +159,67 @@ export type PriceBookRow = {
   starter: boolean;
   confirmed_at: string | null;
   usage_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PricingRegionRow = {
+  id: string;
+  key: string;
+  country_code: string | null;
+  region_code: string | null;
+  metro_name: string | null;
+  currency: string;
+  labor_multiplier: number | string;
+  material_multiplier: number | string;
+  confidence: number | string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PricingVersionRow = {
+  id: string;
+  key: string;
+  trade: string;
+  status: "draft" | "reviewed" | "published" | "retired";
+  formula_version: string;
+  published_at: string | null;
+  source_snapshot: Record<string, unknown>;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ServiceTemplateRow = {
+  id: string;
+  trade: string;
+  key: string;
+  name: string;
+  description: string;
+  unit: QuoteUnit;
+  kind: LineKind;
+  default_pricing_type: "fixed" | "room_size";
+  aliases: string[];
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ServicePriceSuggestionRow = {
+  id: string;
+  version_id: string;
+  service_template_id: string;
+  region_id: string;
+  unit: QuoteUnit;
+  pricing_type: "fixed" | "room_size";
+  low_cents: number;
+  median_cents: number;
+  high_cents: number;
+  pricing: PriceBookPricing;
+  currency: string;
+  confidence: number | string;
+  provenance: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -231,6 +360,87 @@ export function priceBookInsert(item: Omit<PriceBookItem, "id" | "createdAt" | "
     confirmed_at: item.confirmedAt,
     usage_count: item.usageCount,
     ...pricing
+  };
+}
+
+export function pricingRegionFromRow(row: PricingRegionRow): PricingRegion {
+  return {
+    id: row.id,
+    key: row.key,
+    countryCode: row.country_code,
+    regionCode: row.region_code,
+    metroName: row.metro_name,
+    currency: row.currency,
+    laborMultiplier: Number(row.labor_multiplier),
+    materialMultiplier: Number(row.material_multiplier),
+    confidence: Number(row.confidence),
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export function pricingVersionFromRow(row: PricingVersionRow): PricingVersion {
+  return {
+    id: row.id,
+    key: row.key,
+    trade: row.trade,
+    status: row.status,
+    formulaVersion: row.formula_version,
+    publishedAt: row.published_at,
+    sourceSnapshot: row.source_snapshot,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export function serviceTemplateFromRow(row: ServiceTemplateRow): ServiceTemplate {
+  return {
+    id: row.id,
+    trade: row.trade,
+    key: row.key,
+    name: row.name,
+    description: row.description,
+    unit: row.unit,
+    kind: row.kind,
+    defaultPricingType: row.default_pricing_type,
+    aliases: row.aliases,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export function servicePriceSuggestionFromRows(
+  row: ServicePriceSuggestionRow,
+  template: ServiceTemplateRow,
+  region: PricingRegionRow,
+  version: PricingVersionRow
+): ServicePriceSuggestion {
+  return {
+    id: row.id,
+    versionId: row.version_id,
+    serviceTemplateId: row.service_template_id,
+    regionId: row.region_id,
+    trade: template.trade,
+    templateKey: template.key,
+    name: template.name,
+    description: template.description,
+    unit: row.unit,
+    kind: template.kind,
+    pricingType: row.pricing_type,
+    lowCents: row.low_cents,
+    medianCents: row.median_cents,
+    highCents: row.high_cents,
+    pricing: row.pricing,
+    currency: row.currency,
+    confidence: Number(row.confidence),
+    regionKey: region.key,
+    versionKey: version.key,
+    formulaVersion: version.formula_version,
+    publishedAt: version.published_at,
+    provenance: row.provenance
   };
 }
 
