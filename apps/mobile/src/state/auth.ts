@@ -84,12 +84,14 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   completeOAuthRedirect: async (url) => {
     const result = oauthSessionFromUrl(url);
+    authDiag("callback url:", redactCallbackUrl(url), "parsed as:", result.type);
 
     if (result.type === "ignore") {
       return false;
     }
 
     if (result.type === "error") {
+      authDiag("callback rejected:", result.message);
       set({ status: "signed_out", session: null, me: null, error: result.message });
       return true;
     }
@@ -103,8 +105,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
       pendingOAuthInput = {};
       await applyAuthResponse(response, set);
+      authDiag("completeOAuth succeeded");
     } catch (error) {
       const message = userFacingErrorMessage(error);
+      authDiag("completeOAuth failed:", message);
       set({ status: "signed_out", session: null, me: null, error: message });
       throw new Error(message);
     }
@@ -139,6 +143,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       pendingOAuthInput = input;
       const redirectTo = Linking.createURL("auth/callback");
+      authDiag("redirectTo:", redirectTo);
       const response = await snapquoteApi.startOAuth({ provider, redirectTo });
       await Linking.openURL(response.url);
       set({ status: "signed_out", session: null, me: null, error: null });
@@ -245,6 +250,14 @@ function oauthSessionFromUrl(url: string):
   const refreshToken = params.get("refresh_token");
 
   if (!accessToken || !refreshToken) {
+    if (params.get("code")) {
+      // The edge function's Supabase client is configured with flowType: "implicit"
+      // (see supabase/functions/snapquote/index.ts getDb()), so this should not
+      // happen. Surfaced distinctly so a future flow-type drift is diagnosable
+      // instead of looking identical to a generic parse failure.
+      authDiag("callback returned a PKCE code, not tokens -- unexpected with implicit flow");
+    }
+
     return { type: "error", message: "Could not complete sign in. Try again." };
   }
 
@@ -270,6 +283,25 @@ function oauthSessionFromUrl(url: string):
 function isOAuthReturnUrl(url: string) {
   const lowerUrl = url.toLowerCase();
   return lowerUrl.includes("auth/callback") || lowerUrl.includes("://auth") || lowerUrl.includes("/--/auth");
+}
+
+function authDiag(...args: unknown[]) {
+  if (__DEV__) {
+    console.info("SnapQuote [diag]", ...args);
+  }
+}
+
+/** Logs URL shape and param key names only -- never token values. */
+function redactCallbackUrl(url: string): string {
+  try {
+    const [withoutHash = "", hash] = url.split("#");
+    const [base, query] = withoutHash.split("?");
+    const queryKeys = query ? Array.from(new URLSearchParams(query).keys()) : [];
+    const hashKeys = hash ? Array.from(new URLSearchParams(hash).keys()) : [];
+    return `${base} queryKeys=[${queryKeys.join(",")}] hashKeys=[${hashKeys.join(",")}]`;
+  } catch {
+    return "(unparseable url)";
+  }
 }
 
 function paramsFromUrl(url: string) {
