@@ -1,7 +1,8 @@
 import {
-  buildPainterStarterPriceBook,
+  buildStarterPriceBookForTrade,
   computeQuoteTotals,
-  createPainterDraftLines,
+  createDraftLinesForTrade,
+  getTradeConfig,
   deriveQuoteStatus,
   getQuoteSendBlockers,
   isQuoteStale,
@@ -18,6 +19,7 @@ import {
   type QuoteStatus,
   type SendBlockers,
   type QuoteTotals,
+  type TradeId,
 } from "@snapquote/shared";
 import { create } from "zustand";
 import type { ApiQuote, MeResponse } from "../lib/api";
@@ -68,6 +70,8 @@ export type LineItemFormInput = {
 };
 
 const orgId = "00000000-0000-4000-8000-000000000001";
+const defaultTrade: TradeId = "painting";
+const defaultTradeConfig = getTradeConfig(defaultTrade);
 
 const starterIds: Record<PainterPriceBookKey, string> = {
   paint_walls: "00000000-0000-4000-8000-100000000001",
@@ -118,6 +122,7 @@ function defaultWizard(): WizardState {
 
 type MvpState = {
   onboarded: boolean;
+  activeTrade: TradeId;
   businessName: string;
   defaultTaxRate: number;
   defaultTerms: string;
@@ -195,7 +200,8 @@ type MvpState = {
   }) => void;
 };
 
-const initialPriceBook = buildPainterStarterPriceBook({
+const initialPriceBook = buildStarterPriceBookForTrade({
+  trade: defaultTrade,
   orgId,
   now: new Date().toISOString(),
   makeId: (key) => starterIds[key],
@@ -204,10 +210,10 @@ const initialPriceBook = buildPainterStarterPriceBook({
 
 export const useMvpStore = create<MvpState>((set, get) => ({
   onboarded: false,
+  activeTrade: defaultTrade,
   businessName: "",
   defaultTaxRate: 0.13,
-  defaultTerms:
-    "50% deposit due to schedule the job, balance due on completion.",
+  defaultTerms: defaultTradeConfig.defaultTerms,
   quoteValidDays: 14,
   setupCompletedAt: null,
   priceBookItems: initialPriceBook,
@@ -219,7 +225,8 @@ export const useMvpStore = create<MvpState>((set, get) => ({
   completeOnboarding: (input) => {
     const priceBookItems =
       input.priceBookItems ??
-      buildPainterStarterPriceBook({
+      buildStarterPriceBookForTrade({
+        trade: get().activeTrade,
         orgId,
         now: new Date().toISOString(),
         makeId: (key) => starterIds[key],
@@ -277,7 +284,8 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       createdAt: nowIso,
     };
 
-    const draft = createPainterDraftLines({
+    const draft = createDraftLinesForTrade({
+      trade: state.activeTrade,
       checklist: wizard.checklist,
       transcript: wizard.transcript,
       priceBookItems: state.priceBookItems,
@@ -300,6 +308,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       terms: state.defaultTerms,
       validUntil: addDays(now, state.quoteValidDays),
       scopeSummary: buildScopeSummary(
+        state.activeTrade,
         customer.name,
         wizard.checklist,
         draft.scopeNotes,
@@ -775,13 +784,14 @@ export const useMvpStore = create<MvpState>((set, get) => ({
 
       return {
         onboarded: true,
+        activeTrade: input.me.org.trade,
         businessName: input.me.org.name ?? "",
         defaultTaxRate: Number.isFinite(input.me.org.defaultTaxRate)
           ? input.me.org.defaultTaxRate
           : 0.13,
         defaultTerms:
           input.me.org.defaultTerms ??
-          "50% deposit due to schedule the job, balance due on completion.",
+          getTradeConfig(input.me.org.trade).defaultTerms,
         quoteValidDays: input.me.org.quoteValidDays ?? 14,
         setupCompletedAt: input.me.org.setupCompletedAt,
         priceBookItems: mergePriceBookItems(
@@ -1061,6 +1071,18 @@ function addDays(date: Date, days: number): string {
 }
 
 function buildScopeSummary(
+  trade: TradeId,
+  customerName: string,
+  checklist: PainterChecklist,
+  notes: string[],
+): string {
+  switch (trade) {
+    case "painting":
+      return buildPainterScopeSummary(customerName, checklist, notes);
+  }
+}
+
+function buildPainterScopeSummary(
   customerName: string,
   checklist: PainterChecklist,
   notes: string[],

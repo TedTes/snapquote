@@ -5,7 +5,8 @@ import type {
   PriceBookPricing,
   QuoteDiscount,
   QuoteLineItem,
-  QuoteStatus
+  QuoteStatus,
+  TradeId
 } from "@snapquote/shared";
 
 type ExpoRuntimeProcess = {
@@ -96,7 +97,7 @@ export type MeResponse = {
   org: {
     id: string;
     name: string;
-    trade: "painting";
+    trade: TradeId;
     logoUrl: string | null;
     contactPhone: string | null;
     website: string | null;

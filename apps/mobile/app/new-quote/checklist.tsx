@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Minus, Plus } from "lucide-react-native";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import { prepLevels } from "@snapquote/shared";
+import { getTradeConfig, prepLevels } from "@snapquote/shared";
 import { AnimatedScreenContent } from "../../src/ui/AnimatedScreenContent";
 import { Screen } from "../../src/ui/components";
 import { NewQuoteHeader, NewQuoteTitle, SectionKicker, StickyAction } from "../../src/ui/NewQuoteScaffold";
@@ -14,6 +14,8 @@ type PrepLevel = (typeof prepLevels)[number];
 export default function NewQuoteChecklistScreen() {
   const wizard = useMvpStore((state) => state.wizard);
   const updateWizard = useMvpStore((state) => state.updateWizard);
+  const activeTrade = useMvpStore((state) => state.activeTrade);
+  const tradeConfig = getTradeConfig(activeTrade);
 
   const [small, setSmall] = useState(wizard.checklist.rooms.small);
   const [medium, setMedium] = useState(wizard.checklist.rooms.medium);
@@ -64,37 +66,59 @@ export default function NewQuoteChecklistScreen() {
       <NewQuoteHeader onBack={back} step={2} />
       <AnimatedScreenContent contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <NewQuoteTitle
-          helper="These numbers set your quantities — the prices come later, from your book."
-          title="The job"
+          helper={tradeConfig.checklist.helper}
+          title={tradeConfig.checklist.title}
         />
 
         <View style={styles.group}>
-          <SectionKicker>Rooms by size</SectionKicker>
+          <SectionKicker>{tradeConfig.checklist.quantitySectionLabel}</SectionKicker>
           <View style={styles.card}>
-            <CountRow label="Small" onChange={setSmall} value={small} />
-            <Divider />
-            <CountRow label="Medium" onChange={setMedium} value={medium} />
-            <Divider />
-            <CountRow label="Large" onChange={setLarge} value={large} />
+            {tradeConfig.checklist.quantityRows.map((row, index) => (
+              <View key={row.key}>
+                {index > 0 ? <Divider /> : null}
+                <CountRow
+                  label={row.label}
+                  onChange={(value) => {
+                    if (row.key === "small") setSmall(value);
+                    if (row.key === "medium") setMedium(value);
+                    if (row.key === "large") setLarge(value);
+                  }}
+                  value={{ small, medium, large }[row.key]}
+                />
+              </View>
+            ))}
           </View>
         </View>
 
         <View style={styles.group}>
-          <SectionKicker>Surfaces</SectionKicker>
+          <SectionKicker>{tradeConfig.checklist.toggleSectionLabel}</SectionKicker>
           <View style={styles.card}>
-            <SwitchRow label="Walls" onChange={setWalls} value={walls} />
-            <Divider />
-            <SwitchRow label="Ceilings" onChange={setCeilings} value={ceilings} />
-            <Divider />
-            <SwitchRow label="Trim" onChange={setTrim} value={trim} />
-            <Divider />
-            <CountRow label="Doors" onChange={setDoorCount} value={doorCount} />
+            {tradeConfig.checklist.surfaceRows.map((row, index) => (
+              <View key={row.key}>
+                {index > 0 ? <Divider /> : null}
+                <SwitchRow
+                  label={row.label}
+                  onChange={(value) => {
+                    if (row.key === "walls") setWalls(value);
+                    if (row.key === "ceilings") setCeilings(value);
+                    if (row.key === "trim") setTrim(value);
+                  }}
+                  value={{ walls, ceilings, trim }[row.key]}
+                />
+              </View>
+            ))}
+            {tradeConfig.checklist.countRows.map((row) => (
+              <View key={row.key}>
+                <Divider />
+                <CountRow label={row.label} onChange={setDoorCount} value={doorCount} />
+              </View>
+            ))}
           </View>
         </View>
 
         <View style={styles.twoColumn}>
           <View style={styles.segmentGroup}>
-            <SectionKicker>Coats</SectionKicker>
+            <SectionKicker>{tradeConfig.checklist.coatSectionLabel}</SectionKicker>
             <Segmented
               options={[
                 { label: "1", value: 1 },
@@ -105,11 +129,11 @@ export default function NewQuoteChecklistScreen() {
             />
           </View>
           <View style={styles.segmentGroup}>
-            <SectionKicker>Paint by</SectionKicker>
+            <SectionKicker>{tradeConfig.checklist.suppliedBySectionLabel}</SectionKicker>
             <Segmented
               options={[
-                { label: "Customer", value: "customer" },
-                { label: "Me", value: "me" }
+                { label: tradeConfig.checklist.suppliedByOptions.customer, value: "customer" },
+                { label: tradeConfig.checklist.suppliedByOptions.business, value: "me" }
               ]}
               onChange={(value) => setCustomerSuppliesPaint(value === "customer")}
               value={customerSuppliesPaint ? "customer" : "me"}
@@ -118,7 +142,7 @@ export default function NewQuoteChecklistScreen() {
         </View>
 
         <View style={styles.group}>
-          <SectionKicker>Prep level</SectionKicker>
+          <SectionKicker>{tradeConfig.checklist.prepSectionLabel}</SectionKicker>
           <Segmented
             options={[
               { label: "Light", value: "light" },

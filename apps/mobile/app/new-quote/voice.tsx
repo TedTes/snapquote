@@ -3,29 +3,26 @@ import { Info, Mic, Plus } from "lucide-react-native";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getTradeConfig } from "@snapquote/shared";
 import { AnimatedScreenContent } from "../../src/ui/AnimatedScreenContent";
 import { Screen } from "../../src/ui/components";
 import { NewQuoteHeader, NewQuoteTitle, SectionKicker } from "../../src/ui/NewQuoteScaffold";
 import { colors } from "../../src/ui/theme";
 import { useMvpStore } from "../../src/state/mvp";
 
-const EXTRA_HINTS = [
-  { label: "patch holes", phrase: "patch nail holes" },
-  { label: "wallpaper", phrase: "remove wallpaper" },
-  { label: "primer", phrase: "primer" },
-  { label: "materials", phrase: "material allowance" }
-] as const;
-
 const WAVE_BARS = [18, 28, 20, 31, 16, 24, 35, 22, 30, 17, 26, 21, 32, 19, 27, 15, 24];
 
 export default function NewQuoteVoiceScreen() {
   const wizard = useMvpStore((state) => state.wizard);
   const updateWizard = useMvpStore((state) => state.updateWizard);
+  const activeTrade = useMvpStore((state) => state.activeTrade);
+  const tradeConfig = getTradeConfig(activeTrade);
   const insets = useSafeAreaInsets();
   const [recording, setRecording] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(24);
+  const extraHints = tradeConfig.notes.chips;
   const [selectedExtras, setSelectedExtras] = useState<string[]>(
-    EXTRA_HINTS.filter((hint) => wizard.transcript.toLowerCase().includes(hint.phrase)).map((hint) => hint.phrase)
+    extraHints.filter((hint) => wizard.transcript.toLowerCase().includes(hint.phrase)).map((hint) => hint.phrase)
   );
   const [notes, setNotes] = useState(notesFromTranscript(wizard.transcript, selectedExtras));
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -91,8 +88,8 @@ export default function NewQuoteVoiceScreen() {
       <NewQuoteHeader onBack={() => router.back()} step={3} />
       <AnimatedScreenContent contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <NewQuoteTitle
-          helper="Talk it through, or tap the extras below."
-          title="Anything else on this job?"
+          helper={tradeConfig.notes.helper}
+          title={tradeConfig.notes.title}
         />
 
         <View style={styles.group}>
@@ -131,7 +128,7 @@ export default function NewQuoteVoiceScreen() {
             <Text style={styles.kickerHint}>tap to add</Text>
           </View>
           <View style={styles.chipWrap}>
-            {EXTRA_HINTS.map((hint) => (
+            {extraHints.map((hint) => (
               <ExtraChip
                 key={hint.phrase}
                 active={selectedExtras.includes(hint.phrase)}
@@ -151,7 +148,7 @@ export default function NewQuoteVoiceScreen() {
             <TextInput
               multiline
               onChangeText={setNotes}
-              placeholder="Type anything the checklist didn't cover..."
+              placeholder={tradeConfig.notes.placeholder}
               placeholderTextColor={colors.ink3}
               style={styles.notesInput}
               textAlignVertical="top"

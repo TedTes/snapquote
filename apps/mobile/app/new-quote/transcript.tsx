@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { PainterChecklist } from "@snapquote/shared";
+import { getTradeConfig, type PainterChecklist } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../../src/lib/api";
 import { AnimatedScreenContent } from "../../src/ui/AnimatedScreenContent";
 import { Screen } from "../../src/ui/components";
@@ -23,32 +23,18 @@ import { colors } from "../../src/ui/theme";
 import { useMvpStore } from "../../src/state/mvp";
 import { useAuthStore } from "../../src/state/auth";
 
-const EXTRA_DETECTIONS = [
-  {
-    label: "patch holes",
-    phrase: "patch nail holes",
-    pattern: /\b(patch|fill|repair)\b.*\b(nail\s+holes?|holes?)\b/i
-  },
-  {
-    label: "remove wallpaper",
-    phrase: "remove wallpaper",
-    pattern: /\b(remove|strip|take\s+off)\b.*\bwallpaper\b/i
-  },
-  {
-    label: "primer",
-    phrase: "primer",
-    pattern: /\b(primer|prime|priming)\b/i
-  },
-  {
-    label: "materials",
-    phrase: "material allowance",
-    pattern: /\b(materials?|paint)\b.*\ballowance\b|\ballowance\b.*\b(materials?|paint)\b/i
-  }
-] as const;
+const EXTRA_DETECTION_PATTERNS: Record<string, RegExp> = {
+  "patch nail holes": /\b(patch|fill|repair)\b.*\b(nail\s+holes?|holes?)\b/i,
+  "remove wallpaper": /\b(remove|strip|take\s+off)\b.*\bwallpaper\b/i,
+  primer: /\b(primer|prime|priming)\b/i,
+  "material allowance": /\b(materials?|paint)\b.*\ballowance\b|\ballowance\b.*\b(materials?|paint)\b/i
+};
 
 export default function NewQuoteTranscriptScreen() {
   const wizard = useMvpStore((state) => state.wizard);
   const updateWizard = useMvpStore((state) => state.updateWizard);
+  const activeTrade = useMvpStore((state) => state.activeTrade);
+  const tradeConfig = getTradeConfig(activeTrade);
   const upsertRemoteQuote = useMvpStore((state) => state.upsertRemoteQuote);
   const startNewQuoteWizard = useMvpStore((state) => state.startNewQuoteWizard);
   const generateDraftFromWizard = useMvpStore(
@@ -58,7 +44,11 @@ export default function NewQuoteTranscriptScreen() {
   const insets = useSafeAreaInsets();
   const [editing, setEditing] = useState(false);
   const [transcript, setTranscript] = useState(wizard.transcript.trim());
-  const detectedExtras = useMemo(() => detectExtras(transcript), [transcript]);
+  const extraDetections = tradeConfig.notes.chips;
+  const detectedExtras = useMemo(
+    () => detectExtras(transcript, extraDetections),
+    [extraDetections, transcript],
+  );
   const [confirmedExtras, setConfirmedExtras] = useState<string[]>(detectedExtras);
   const [generating, setGenerating] = useState(false);
   const navigatingToDraftRef = useRef(false);
@@ -160,7 +150,7 @@ export default function NewQuoteTranscriptScreen() {
             <Text style={styles.lockedStrong}>
               {describeChecklist(wizard.checklist)}
             </Text>
-            . Voice only adds the extras below.
+            . {tradeConfig.notes.lockedCopy}
           </Text>
         </View>
 
@@ -206,11 +196,11 @@ export default function NewQuoteTranscriptScreen() {
             <Text style={styles.kickerAction}>confirm before drafting</Text>
           </View>
           <View style={styles.extraWrap}>
-            {EXTRA_DETECTIONS.map((extra) => {
+            {extraDetections.map((extra) => {
               const active = confirmedExtras.includes(extra.phrase);
               const detected = detectedExtras.includes(extra.phrase);
 
-              if (!detected && extra.label !== "primer") {
+              if (!detected && extra.phrase !== "primer") {
                 return null;
               }
 
@@ -298,9 +288,15 @@ function ExtraChip(props: { active: boolean; label: string; onPress: () => void 
   );
 }
 
-function detectExtras(transcript: string) {
-  return EXTRA_DETECTIONS
-    .filter((extra) => extra.pattern.test(transcript))
+function detectExtras(
+  transcript: string,
+  extras: Array<{ phrase: string }>,
+) {
+  return extras
+    .filter((extra) => {
+      const pattern = EXTRA_DETECTION_PATTERNS[extra.phrase];
+      return pattern ? pattern.test(transcript) : transcript.toLowerCase().includes(extra.phrase.toLowerCase());
+    })
     .map((extra) => extra.phrase);
 }
 

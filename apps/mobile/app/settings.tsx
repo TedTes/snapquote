@@ -13,6 +13,7 @@ import {
   Type
 } from "lucide-react-native";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { getTradeConfig } from "@snapquote/shared";
 import { BottomTabBar } from "../src/ui/BottomTabBar";
 import { Screen } from "../src/ui/components";
 import { colors, radius } from "../src/ui/theme";
@@ -26,7 +27,9 @@ export default function SettingsScreen() {
   const defaultTerms = useMvpStore((state) => state.defaultTerms);
   const quoteValidDays = useMvpStore((state) => state.quoteValidDays);
   const priceBookItems = useMvpStore((state) => state.priceBookItems);
+  const activeTrade = useMvpStore((state) => state.activeTrade);
   const me = useAuthStore((state) => state.me);
+  const tradeConfig = getTradeConfig(activeTrade);
 
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const totalCount = priceBookItems.length;
@@ -90,7 +93,7 @@ export default function SettingsScreen() {
             onPress={() => router.push("/onboarding")}
           />
           <SettingsRow
-            customValue={<TradeValue />}
+            customValue={<TradeValue label={tradeConfig.label} />}
             detail="More trades coming soon"
             icon={<Type color={colors.ink2} size={16} strokeWidth={2.1} />}
             label="Trade"
@@ -194,10 +197,10 @@ function VerifiedBadge() {
   );
 }
 
-function TradeValue() {
+function TradeValue(props: { label: string }) {
   return (
     <View style={styles.tradeValue}>
-      <Text style={styles.tradeText}>Flexible</Text>
+      <Text style={styles.tradeText}>{props.label}</Text>
       <Lock color={colors.ink3} size={11} strokeWidth={2.2} />
     </View>
   );

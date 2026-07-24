@@ -12,6 +12,7 @@ import {
   quoteUnits,
   roomSizes
 } from "./constants.js";
+import { tradeIds } from "./trades.js";
 
 export const idSchema = z.string().uuid();
 
@@ -39,6 +40,7 @@ export const customerResponseActionSchema = z.enum(customerResponseActions);
 export const quoteEventTypeSchema = z.enum(quoteEventTypes);
 export const roomSizeSchema = z.enum(roomSizes);
 export const prepLevelSchema = z.enum(prepLevels);
+export const tradeIdSchema = z.enum(tradeIds);
 
 export const healthResponseSchema = z.object({
   ok: z.literal(true),
@@ -50,7 +52,7 @@ export const healthResponseSchema = z.object({
 export const orgProfileSchema = z.object({
   id: idSchema,
   name: z.string().trim().max(120),
-  trade: z.literal("painting"),
+  trade: tradeIdSchema,
   logoUrl: z.string().url().nullable(),
   defaultTaxRate: z.number().min(0).max(1),
   defaultTerms: z.string().trim().max(4000),

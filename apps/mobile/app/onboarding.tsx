@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getTradeConfig, type PainterCorePriceInput } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../src/lib/api";
 import { useAuthStore } from "../src/state/auth";
 import {
@@ -25,26 +26,29 @@ export default function OnboardingScreen() {
   const authMe = useAuthStore((state) => state.me);
   const storedDefaultTerms = useMvpStore((state) => state.defaultTerms);
   const storedQuoteValidDays = useMvpStore((state) => state.quoteValidDays);
+  const activeTrade = useMvpStore((state) => state.activeTrade);
+  const tradeConfig = getTradeConfig(activeTrade);
   const [businessName, setBusinessName] = useState("");
   const [taxRate, setTaxRate] = useState("13");
   const [defaultTerms, setDefaultTerms] = useState(storedDefaultTerms);
   const [quoteValidDays, setQuoteValidDays] = useState(String(storedQuoteValidDays));
-  const [wallsMedium, setWallsMedium] = useState(
-    centsToDollars(defaultCorePrices.paintWalls.medium),
-  );
-  const [ceilingMedium, setCeilingMedium] = useState(
-    centsToDollars(defaultCorePrices.paintCeiling.medium),
-  );
-  const [trimMedium, setTrimMedium] = useState(
-    centsToDollars(defaultCorePrices.paintTrim.medium),
-  );
-  const [doorEach, setDoorEach] = useState(
-    centsToDollars(defaultCorePrices.paintDoorEachCents),
-  );
-  const [prepHourly, setPrepHourly] = useState(
-    centsToDollars(defaultCorePrices.heavyPrepHourlyCents),
-  );
+  const [corePriceValues, setCorePriceValues] = useState<
+    Record<keyof PainterCorePriceInput, string>
+  >({
+    paintWalls: centsToDollars(defaultCorePrices.paintWalls.medium),
+    paintCeiling: centsToDollars(defaultCorePrices.paintCeiling.medium),
+    paintTrim: centsToDollars(defaultCorePrices.paintTrim.medium),
+    paintDoorEachCents: centsToDollars(defaultCorePrices.paintDoorEachCents),
+    heavyPrepHourlyCents: centsToDollars(defaultCorePrices.heavyPrepHourlyCents),
+  });
   const [saving, setSaving] = useState(false);
+
+  function updateCorePrice(
+    key: keyof PainterCorePriceInput,
+    value: string,
+  ) {
+    setCorePriceValues((current) => ({ ...current, [key]: value }));
+  }
 
   async function save() {
     if (saving) {
@@ -56,13 +60,7 @@ export default function OnboardingScreen() {
       defaultTaxRate: Number(taxRate) / 100,
       defaultTerms: defaultTerms.trim(),
       quoteValidDays: Number.parseInt(quoteValidDays, 10) || 14,
-      corePrices: {
-        paintWalls: roomPrices(dollarsToCents(wallsMedium)),
-        paintCeiling: roomPrices(dollarsToCents(ceilingMedium)),
-        paintTrim: roomPrices(dollarsToCents(trimMedium)),
-        paintDoorEachCents: dollarsToCents(doorEach),
-        heavyPrepHourlyCents: dollarsToCents(prepHourly),
-      },
+      corePrices: corePricesFromValues(corePriceValues),
     };
 
     setSaving(true);
@@ -112,13 +110,7 @@ export default function OnboardingScreen() {
       defaultTaxRate: Number(taxRate) / 100,
       defaultTerms: defaultTerms.trim(),
       quoteValidDays: Number.parseInt(quoteValidDays, 10) || 14,
-      corePrices: {
-        paintWalls: roomPrices(dollarsToCents(wallsMedium)),
-        paintCeiling: roomPrices(dollarsToCents(ceilingMedium)),
-        paintTrim: roomPrices(dollarsToCents(trimMedium)),
-        paintDoorEachCents: dollarsToCents(doorEach),
-        heavyPrepHourlyCents: dollarsToCents(prepHourly),
-      },
+      corePrices: corePricesFromValues(corePriceValues),
     });
     router.replace("/");
   }
@@ -127,11 +119,11 @@ export default function OnboardingScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.kicker}>Setup</Text>
-        <Text style={styles.title}>Confirm your core prices</Text>
+        <Text style={styles.title}>{tradeConfig.setup.title}</Text>
         <Text style={styles.helper}>
           {authStatus === "signed_in"
-            ? "Required once before this account can sync and send quotes."
-            : "You can continue offline now. Sign in later to sync these prices."}
+            ? tradeConfig.setup.signedInHelper
+            : tradeConfig.setup.offlineHelper}
         </Text>
 
         <Field
@@ -158,35 +150,17 @@ export default function OnboardingScreen() {
           onChangeText={setDefaultTerms}
           multiline
         />
-        <Field
-          label="Walls, medium room $"
-          value={wallsMedium}
-          onChangeText={setWallsMedium}
-        />
-        <Field
-          label="Ceiling, medium room $"
-          value={ceilingMedium}
-          onChangeText={setCeilingMedium}
-        />
-        <Field
-          label="Trim, medium room $"
-          value={trimMedium}
-          onChangeText={setTrimMedium}
-        />
-        <Field
-          label="Door, each $"
-          value={doorEach}
-          onChangeText={setDoorEach}
-        />
-        <Field
-          label="Heavy prep, hourly $"
-          value={prepHourly}
-          onChangeText={setPrepHourly}
-        />
+        {tradeConfig.setup.corePriceFields.map((field) => (
+          <Field
+            key={field.key}
+            label={field.label}
+            value={corePriceValues[field.key]}
+            onChangeText={(value) => updateCorePrice(field.key, value)}
+          />
+        ))}
 
         <Text style={styles.helper}>
-          Small and large prices are derived from these visible defaults for the
-          demo. The backend stores explicit prices, not AI guesses.
+          {tradeConfig.setup.derivedPriceHelper}
         </Text>
 
         <Pressable
@@ -199,7 +173,7 @@ export default function OnboardingScreen() {
           onPress={() => void save()}
         >
           <Text style={styles.primaryActionText}>
-            {saving ? "Saving..." : "Save Prices"}
+            {saving ? "Saving..." : tradeConfig.setup.saveButtonLabel}
           </Text>
         </Pressable>
         {authStatus === "signed_in" ? null : (
@@ -240,6 +214,18 @@ function Field(props: {
       />
     </View>
   );
+}
+
+function corePricesFromValues(
+  values: Record<keyof PainterCorePriceInput, string>,
+): PainterCorePriceInput {
+  return {
+    paintWalls: roomPrices(dollarsToCents(values.paintWalls)),
+    paintCeiling: roomPrices(dollarsToCents(values.paintCeiling)),
+    paintTrim: roomPrices(dollarsToCents(values.paintTrim)),
+    paintDoorEachCents: dollarsToCents(values.paintDoorEachCents),
+    heavyPrepHourlyCents: dollarsToCents(values.heavyPrepHourlyCents),
+  };
 }
 
 function roomPrices(medium: number) {
