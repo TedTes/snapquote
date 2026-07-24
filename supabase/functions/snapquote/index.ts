@@ -823,6 +823,7 @@ async function createQuote(db: SupabaseClient, request: Request) {
     source: "fallback" as const,
     extraction: fallbackExtraction(input.transcript, input.typedNotes ?? "", input.checklist as PainterChecklist)
   }));
+  console.info("SnapQuote quote extraction source", { source: extractionResult.source });
   const extractedLines = lineItemsFromExtraction({
     tasks: extractionResult.extraction.tasks,
     existingLines: draft.lineItems,
@@ -875,61 +876,69 @@ async function extractScope(request: Request) {
 
 async function extractScopeForInput(input: z.infer<typeof extractScopeSchema>) {
   const openAiKey = Deno.env.get("OPENAI_API_KEY");
+  const fallback = () => ({
+    source: "fallback" as const,
+    extraction: fallbackExtraction(input.transcript, input.typedNotes, input.checklist as PainterChecklist)
+  });
 
   if (!openAiKey) {
-    return {
-      source: "fallback",
-      extraction: fallbackExtraction(input.transcript, input.typedNotes, input.checklist as PainterChecklist)
-    };
+    console.info("SnapQuote extraction source", { source: "fallback", reason: "missing_openai_key" });
+    return fallback();
   }
 
   const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4.1-mini";
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "authorization": `Bearer ${openAiKey}`,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      model,
-      input: [
-        {
-          role: "system",
-          content: [
-            "Extract quote scope for a painting contractor.",
-            "Never invent prices. Extract scope, quantities, assumptions, questions, and site conditions only.",
-            "If a detail is not stated, leave it out or ask a contractor question."
-          ].join(" ")
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            transcript: input.transcript,
-            typedNotes: input.typedNotes,
-            checklist: input.checklist
-          })
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "authorization": `Bearer ${openAiKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        input: [
+          {
+            role: "system",
+            content: [
+              "Extract quote scope for a painting contractor.",
+              "Never invent prices. Extract scope, quantities, assumptions, questions, and site conditions only.",
+              "If a detail is not stated, leave it out or ask a contractor question."
+            ].join(" ")
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              transcript: input.transcript,
+              typedNotes: input.typedNotes,
+              checklist: input.checklist
+            })
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "snapquote_scope_extraction",
+            strict: true,
+            schema: extractionJsonSchema()
+          }
         }
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "snapquote_scope_extraction",
-          strict: true,
-          schema: extractionJsonSchema()
-        }
-      }
-    })
-  });
+      })
+    });
 
-  if (!response.ok) {
-    throw new HttpError(response.status, `OpenAI extraction failed: ${await response.text()}`);
+    if (!response.ok) {
+      throw new Error(`OpenAI extraction failed with ${response.status}`);
+    }
+
+    const body = await response.json();
+    const text = extractResponseText(body);
+    const extraction = parse(extractionResultSchema, JSON.parse(text));
+    console.info("SnapQuote extraction source", { source: "openai", model });
+
+    return { source: "openai" as const, model, extraction };
+  } catch (error) {
+    console.warn("SnapQuote OpenAI extraction failed; using fallback", messageFromError(error));
+    return fallback();
   }
-
-  const body = await response.json();
-  const text = extractResponseText(body);
-  const extraction = parse(extractionResultSchema, JSON.parse(text));
-
-  return { source: "openai", model, extraction };
 }
 
 async function listQuotes(db: SupabaseClient, orgId: string) {
@@ -1503,6 +1512,9 @@ function pricingColumns(pricing: PriceBookPricing) {
 function fallbackExtraction(transcript: string, typedNotes: string, checklist: PainterChecklist): z.infer<typeof extractionResultSchema> {
   const sourceText = [transcript, typedNotes].filter((part) => part.trim().length > 0).join(" ");
   const roomCount = checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
+  const customerSuppliesMaterials =
+    checklist.customerSuppliesPaint ||
+    /\b(customer|client|homeowner)\b.*\b(supplies|provides|provided)\b.*\b(paint|materials?)\b/i.test(sourceText);
   const tasks: z.infer<typeof extractionResultSchema>["tasks"] = [];
 
   if (checklist.surfaces.walls && roomCount > 0) {
@@ -1571,13 +1583,38 @@ function fallbackExtraction(transcript: string, typedNotes: string, checklist: P
     });
   }
 
+  if (/\b(primer|prime|priming)\b/i.test(sourceText)) {
+    tasks.push({
+      description: "Primer coat",
+      quantity: roomCount > 0 ? roomCount : null,
+      unit: roomCount > 0 ? "room" : null,
+      kind: "material",
+      assumptions: ["Transcript mentioned primer."],
+      confidence: 0.8
+    });
+  }
+
+  if (
+    /\b(materials?|paint)\b.*\ballowance\b/i.test(sourceText) ||
+    /\ballowance\b.*\b(materials?|paint)\b/i.test(sourceText)
+  ) {
+    tasks.push({
+      description: "Material allowance",
+      quantity: 1,
+      unit: "flat",
+      kind: "material",
+      assumptions: ["Transcript mentioned a paint or material allowance."],
+      confidence: 0.74
+    });
+  }
+
   return {
     scope_summary:
       sourceText.trim().length > 0
         ? sourceText.trim().slice(0, 1200)
         : `Painting scope from checklist: ${roomCount} rooms, ${checklist.coatCount} coats.`,
     tasks,
-    site_conditions: checklist.customerSuppliesPaint ? ["Customer supplies paint."] : [],
+    site_conditions: customerSuppliesMaterials ? ["Customer supplies paint."] : [],
     questions_for_contractor: tasks.some((task) => task.quantity === null)
       ? ["Confirm quantities for the unmeasured extra work before sending."]
       : []

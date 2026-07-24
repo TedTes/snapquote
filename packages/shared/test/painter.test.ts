@@ -84,7 +84,26 @@ describe("painter draft generation", () => {
     const priceBook = buildPainterStarterPriceBook({
       orgId: "00000000-0000-4000-8000-000000000099",
       now: "2026-07-20T12:00:00.000Z",
-      makeId: (key) => idMap[key]
+      makeId: (key) => idMap[key],
+      corePrices: {
+        paintWalls: {
+          small: 25000,
+          medium: 42000,
+          large: 65000
+        },
+        paintCeiling: {
+          small: 12000,
+          medium: 18000,
+          large: 26000
+        },
+        paintTrim: {
+          small: 9000,
+          medium: 16000,
+          large: 24000
+        },
+        paintDoorEachCents: 9500,
+        heavyPrepHourlyCents: 8500
+      }
     });
 
     const draft = createPainterDraftLines({
@@ -94,5 +113,54 @@ describe("painter draft generation", () => {
     });
 
     expect(draft.conflicts.map((conflict) => conflict.field)).toEqual(["coatCount", "rooms"]);
+  });
+
+  it("covers every painter starter item through checklist or transcript extras", () => {
+    const priceBook = buildPainterStarterPriceBook({
+      orgId: "00000000-0000-4000-8000-000000000099",
+      now: "2026-07-20T12:00:00.000Z",
+      makeId: (key) => idMap[key],
+      corePrices: {
+        paintWalls: {
+          small: 25000,
+          medium: 42000,
+          large: 65000
+        },
+        paintCeiling: {
+          small: 12000,
+          medium: 18000,
+          large: 26000
+        },
+        paintTrim: {
+          small: 9000,
+          medium: 16000,
+          large: 24000
+        },
+        paintDoorEachCents: 9500,
+        heavyPrepHourlyCents: 8500
+      }
+    });
+
+    const draft = createPainterDraftLines({
+      checklist: {
+        ...checklist,
+        prepLevel: "heavy"
+      },
+      transcript:
+        "Patch nail holes, apply primer, include a material allowance, and remove wallpaper.",
+      priceBookItems: priceBook
+    });
+
+    expect(draft.lineItems.map((line) => [line.priceBookItemKey, line.matchState])).toEqual([
+      ["paint_walls", "green"],
+      ["paint_ceiling", "green"],
+      ["paint_trim", "green"],
+      ["paint_door", "green"],
+      ["heavy_wall_prep", "green"],
+      ["patch_nail_holes", "yellow"],
+      ["primer_coat", "yellow"],
+      ["material_allowance", "yellow"],
+      ["remove_wallpaper", "red"]
+    ]);
   });
 });

@@ -299,6 +299,30 @@ export function createPainterDraftLines(params: {
     );
   }
 
+  if (mentionsPrimer(params.transcript)) {
+    const totalRooms = totalRoomCount(params.checklist);
+    lines.push(
+      lineFromPriceBook({
+        item: lookup.get("primer_coat") ?? null,
+        description: "Primer coat",
+        quantity: Math.max(totalRooms, 1),
+        size: dominantRoomSize(params.checklist),
+        position: lines.length
+      })
+    );
+  }
+
+  if (mentionsMaterialAllowance(params.transcript)) {
+    lines.push(
+      lineFromPriceBook({
+        item: lookup.get("material_allowance") ?? null,
+        description: "Material allowance",
+        quantity: 1,
+        position: lines.length
+      })
+    );
+  }
+
   if (mentionsWallpaperRemoval(params.transcript)) {
     lines.push({
       position: lines.length,
@@ -448,6 +472,14 @@ function mentionsPatchNailHoles(transcript: string): boolean {
 
 function mentionsWallpaperRemoval(transcript: string): boolean {
   return /\b(remove|strip|take\s+off)\b.*\bwallpaper\b/i.test(transcript);
+}
+
+function mentionsPrimer(transcript: string): boolean {
+  return /\b(primer|prime|priming)\b/i.test(transcript);
+}
+
+function mentionsMaterialAllowance(transcript: string): boolean {
+  return /\b(materials?|paint)\b.*\ballowance\b/i.test(transcript) || /\ballowance\b.*\b(materials?|paint)\b/i.test(transcript);
 }
 
 function mentionsCustomerSuppliesPaint(transcript: string): boolean {
