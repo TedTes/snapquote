@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   Check,
+  ChevronRight,
   ClipboardList,
   CircleAlert,
   Clock3,
@@ -8,6 +9,7 @@ import {
   ListFilter,
   Lock,
   Mic,
+  RotateCcw,
   Search
 } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -43,29 +45,51 @@ export default function QuotesScreen() {
 
   const [filter, setFilter] = useState<FilterKey>(initialFilter);
   const [query, setQuery] = useState("");
-  const showListTools = rows.length > searchThreshold;
+  const visibleRows = useMemo(() => rows.filter((row) => row.status !== "superseded"), [rows]);
+  const revisionsByQuoteId = useMemo(() => {
+    const groups = new Map<string, QuoteRow[]>();
+
+    for (const row of rows) {
+      const replacementId = row.quote.supersededByQuoteId;
+
+      if (replacementId === null) {
+        continue;
+      }
+
+      const revisions = groups.get(replacementId) ?? [];
+      revisions.push(row);
+      groups.set(replacementId, revisions);
+    }
+
+    for (const revisions of groups.values()) {
+      revisions.sort((a, b) => b.quote.updatedAt.localeCompare(a.quote.updatedAt));
+    }
+
+    return groups;
+  }, [rows]);
+  const showListTools = visibleRows.length > searchThreshold;
   const showSearch = showListTools;
 
   const activeRows = useMemo(
-    () => rows.filter((row) => row.status === "draft" || row.status === "sent" || row.status === "viewed"),
-    [rows]
+    () => visibleRows.filter((row) => row.status === "draft" || row.status === "sent" || row.status === "viewed"),
+    [visibleRows]
   );
 
   const filterCounts = useMemo(
     () => ({
-      all: rows.length,
-      draft: rows.filter((row) => row.status === "draft").length,
-      sent: rows.filter((row) => row.status === "sent").length,
-      viewed: rows.filter((row) => row.status === "viewed").length,
-      stale: rows.filter((row) => row.stale).length,
-      accepted: rows.filter((row) => row.status === "accepted").length
+      all: visibleRows.length,
+      draft: visibleRows.filter((row) => row.status === "draft").length,
+      sent: visibleRows.filter((row) => row.status === "sent").length,
+      viewed: visibleRows.filter((row) => row.status === "viewed").length,
+      stale: visibleRows.filter((row) => row.stale).length,
+      accepted: visibleRows.filter((row) => row.status === "accepted").length
     }),
-    [rows]
+    [visibleRows]
   );
 
   const filtered = useMemo(() => {
     const term = showSearch ? query.trim().toLowerCase() : "";
-    const bySearch = rows.filter((row) => {
+    const bySearch = visibleRows.filter((row) => {
       if (term.length === 0) {
         return true;
       }
@@ -83,7 +107,7 @@ export default function QuotesScreen() {
     }
 
     return bySearch.filter((row) => row.status === filter);
-  }, [rows, query, filter, showSearch]);
+  }, [visibleRows, query, filter, showSearch]);
 
   const grouped = useMemo(() => {
     const needsAttention = filtered.filter(
@@ -99,15 +123,15 @@ export default function QuotesScreen() {
   }, [filtered]);
 
   const simpleRows = useMemo(
-    () => [...rows].sort((a, b) => b.quote.updatedAt.localeCompare(a.quote.updatedAt)),
-    [rows]
+    () => [...visibleRows].sort((a, b) => b.quote.updatedAt.localeCompare(a.quote.updatedAt)),
+    [visibleRows]
   );
 
   function openQuote(quote: QuoteRecord) {
     router.push({ pathname: "/quote/[id]", params: { id: quote.id } });
   }
 
-  if (rows.length === 0) {
+  if (visibleRows.length === 0) {
     return (
       <Screen edges={["top"]}>
         <View style={styles.emptyScreen}>
@@ -185,7 +209,13 @@ export default function QuotesScreen() {
               {grouped.needsAttention.length > 0 ? (
                 <QuoteSection label="Needs attention">
                   {grouped.needsAttention.map((row) => (
-                    <CompactQuoteCard key={row.quote.id} onPress={() => openQuote(row.quote)} row={row} />
+                    <CompactQuoteCard
+                      key={row.quote.id}
+                      onOpenRevision={openQuote}
+                      onPress={() => openQuote(row.quote)}
+                      revisions={revisionsByQuoteId.get(row.quote.id) ?? []}
+                      row={row}
+                    />
                   ))}
                 </QuoteSection>
               ) : null}
@@ -193,13 +223,19 @@ export default function QuotesScreen() {
               {grouped.thisWeek.length > 0 ? (
                 <QuoteSection label={grouped.needsAttention.length > 0 ? "This week" : "All quotes"}>
                   {grouped.thisWeek.map((row) => (
-                    <CompactQuoteCard key={row.quote.id} onPress={() => openQuote(row.quote)} row={row} />
+                    <CompactQuoteCard
+                      key={row.quote.id}
+                      onOpenRevision={openQuote}
+                      onPress={() => openQuote(row.quote)}
+                      revisions={revisionsByQuoteId.get(row.quote.id) ?? []}
+                      row={row}
+                    />
                   ))}
                 </QuoteSection>
               ) : null}
             </>
           ) : (
-            <SimpleQuoteList onOpenQuote={openQuote} rows={simpleRows} />
+            <SimpleQuoteList onOpenQuote={openQuote} revisionsByQuoteId={revisionsByQuoteId} rows={simpleRows} />
           )}
         </ScrollView>
       </View>
@@ -272,7 +308,11 @@ function QuoteSection(props: { label: string; children: React.ReactNode }) {
   );
 }
 
-function SimpleQuoteList(props: { onOpenQuote: (quote: QuoteRecord) => void; rows: QuoteRow[] }) {
+function SimpleQuoteList(props: {
+  onOpenQuote: (quote: QuoteRecord) => void;
+  revisionsByQuoteId: Map<string, QuoteRow[]>;
+  rows: QuoteRow[];
+}) {
   const cardStyle = simpleCardStyle(props.rows.length);
 
   return (
@@ -281,7 +321,9 @@ function SimpleQuoteList(props: { onOpenQuote: (quote: QuoteRecord) => void; row
         <CompactQuoteCard
           cardStyle={cardStyle}
           key={row.quote.id}
+          onOpenRevision={props.onOpenQuote}
           onPress={() => props.onOpenQuote(row.quote)}
+          revisions={props.revisionsByQuoteId.get(row.quote.id) ?? []}
           row={row}
         />
       ))}
@@ -308,46 +350,77 @@ function simpleCardStyle(count: number): StyleProp<ViewStyle> {
   return styles.simpleCardMany;
 }
 
-function CompactQuoteCard(props: { cardStyle?: StyleProp<ViewStyle> | undefined; row: QuoteRow; onPress: () => void }) {
+function CompactQuoteCard(props: {
+  cardStyle?: StyleProp<ViewStyle> | undefined;
+  onOpenRevision: (quote: QuoteRecord) => void;
+  row: QuoteRow;
+  revisions: QuoteRow[];
+  onPress: () => void;
+}) {
   const alert = quoteAlert(props.row);
+  const revisionCount = props.revisions.length;
+  const latestRevision = props.revisions[0];
 
   return (
-    <Pressable accessibilityRole="button" onPress={props.onPress} style={[styles.quoteCard, props.cardStyle]}>
+    <View style={[styles.quoteCard, props.cardStyle]}>
       <View style={[styles.quoteRail, { backgroundColor: alert.color }]} />
-      <View style={styles.quoteBody}>
-        <View style={styles.quoteTop}>
-          <View style={styles.quoteIdentity}>
-            <Text style={styles.quoteCustomer} numberOfLines={1}>
-              {props.row.customer?.name ?? "Unnamed customer"}
-            </Text>
-            <Text style={styles.quoteAddress} numberOfLines={1}>
-              {props.row.quote.address || "No address"}
-            </Text>
-          </View>
-          <View style={styles.amountBlock}>
-            <Text style={styles.quoteAmount}>{props.row.totals ? formatMoney(props.row.totals.totalCents) : "$--"}</Text>
-            <View style={[styles.statusPill, { backgroundColor: alert.bg, borderColor: alert.border }]}>
-              <Text style={[styles.statusPillText, { color: alert.color }]}>{alert.pill}</Text>
+      <View style={styles.quoteCardStack}>
+        <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.quoteBody}>
+          <View style={styles.quoteTop}>
+            <View style={styles.quoteIdentity}>
+              <Text style={styles.quoteCustomer} numberOfLines={1}>
+                {props.row.customer?.name ?? "Unnamed customer"}
+              </Text>
+              <Text style={styles.quoteAddress} numberOfLines={1}>
+                {quoteSubtitle(props.row.quote)}
+              </Text>
+            </View>
+            <View style={styles.amountBlock}>
+              <Text style={styles.quoteAmount}>{props.row.totals ? formatMoney(props.row.totals.totalCents) : "$--"}</Text>
+              <View style={[styles.statusPill, { backgroundColor: alert.bg, borderColor: alert.border }]}>
+                <Text style={[styles.statusPillText, { color: alert.color }]}>{alert.pill}</Text>
+              </View>
             </View>
           </View>
-        </View>
-        <View style={styles.quoteAlertRow}>
-          {alert.icon === "check" ? (
-            <Check color={alert.color} size={12} strokeWidth={2.7} />
-          ) : alert.icon === "eye" ? (
-            <Eye color={alert.color} size={12} strokeWidth={2.4} />
-          ) : alert.icon === "clock" ? (
-            <Clock3 color={alert.color} size={12} strokeWidth={2.4} />
-          ) : (
-            <CircleAlert color={alert.color} size={12} strokeWidth={2.4} />
-          )}
-          <Text style={[styles.quoteAlertText, { color: alert.color }]} numberOfLines={1}>
-            {alert.label}
-          </Text>
-        </View>
+          <View style={styles.quoteAlertRow}>
+            {alert.icon === "check" ? (
+              <Check color={alert.color} size={12} strokeWidth={2.7} />
+            ) : alert.icon === "eye" ? (
+              <Eye color={alert.color} size={12} strokeWidth={2.4} />
+            ) : alert.icon === "clock" ? (
+              <Clock3 color={alert.color} size={12} strokeWidth={2.4} />
+            ) : (
+              <CircleAlert color={alert.color} size={12} strokeWidth={2.4} />
+            )}
+            <Text style={[styles.quoteAlertText, { color: alert.color }]} numberOfLines={1}>
+              {alert.label}
+            </Text>
+          </View>
+        </Pressable>
+        {revisionCount > 0 && latestRevision ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => props.onOpenRevision(latestRevision.quote)}
+            style={styles.revisionRow}
+          >
+            <View style={styles.revisionTextRow}>
+              <RotateCcw color={colors.ink3} size={11} strokeWidth={2.2} />
+              <Text style={styles.revisionText}>
+                {revisionCount} earlier {revisionCount === 1 ? "revision" : "revisions"}
+              </Text>
+            </View>
+            <ChevronRight color={colors.ink3} size={14} strokeWidth={2.2} />
+          </Pressable>
+        ) : null}
       </View>
-    </Pressable>
+    </View>
   );
+}
+
+function quoteSubtitle(quote: QuoteRecord): string {
+  const parts = [quote.address, quote.jobTitle].map((part) => part.trim()).filter((part) => part.length > 0);
+
+  return parts.length > 0 ? parts.join(" · ") : "No address";
 }
 
 function quoteAlert(row: QuoteRow): {
@@ -366,6 +439,17 @@ function quoteAlert(row: QuoteRow): {
       icon: "clock",
       label: "Stale · no reply in 4 days",
       pill: "STALE"
+    };
+  }
+
+  if (row.status === "sent" && row.quote.firstViewedAt === null) {
+    return {
+      bg: colors.surfaceMuted,
+      border: colors.border,
+      color: colors.ink2,
+      icon: "clock",
+      label: "Sent today · not viewed",
+      pill: "SENT"
     };
   }
 
@@ -646,7 +730,7 @@ const styles = StyleSheet.create({
   },
   simpleList: {
     gap: 12,
-    paddingTop: 28
+    paddingTop: 18
   },
   simpleHintRow: {
     alignItems: "center",
@@ -684,8 +768,10 @@ const styles = StyleSheet.create({
   quoteRail: {
     width: 5
   },
+  quoteCardStack: {
+    flex: 1
+  },
   quoteBody: {
-    flex: 1,
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10
@@ -740,5 +826,24 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     fontWeight: "800"
+  },
+  revisionRow: {
+    alignItems: "center",
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 32,
+    paddingHorizontal: 14
+  },
+  revisionTextRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5
+  },
+  revisionText: {
+    color: colors.ink3,
+    fontSize: 11,
+    fontWeight: "700"
   }
 });

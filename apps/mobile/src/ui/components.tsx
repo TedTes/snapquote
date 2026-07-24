@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronLeft, Minus, Plus, X } from "lucide-react-native";
+import { AlertTriangle, Check, ChevronLeft, CircleDollarSign, Minus, Plus, X } from "lucide-react-native";
 import {
   Pressable,
   StyleSheet,
@@ -278,6 +278,26 @@ export function KeyValueRow(props: { label: string; value: string; strong?: bool
 
 export function Divider() {
   return <View style={styles.divider} />;
+}
+
+/** Notched price-trust tab (green/yellow/red) used on quote line rows. */
+export function SwatchTab(props: { tone: MatchTone }) {
+  const palette = toneColors(props.tone);
+
+  return (
+    <View style={[styles.swatchTab, { backgroundColor: palette.fg }]}>
+      {props.tone === "green" ? (
+        <Check color={colors.onDark} size={16} strokeWidth={2.6} />
+      ) : props.tone === "yellow" ? (
+        <AlertTriangle color={colors.onDark} size={16} strokeWidth={2.3} />
+      ) : (
+        <CircleDollarSign color={colors.onDark} size={16} strokeWidth={2.3} />
+      )}
+      <View style={[styles.swatchNotch, styles.swatchNotchOne]} />
+      <View style={[styles.swatchNotch, styles.swatchNotchTwo]} />
+      <View style={[styles.swatchNotch, styles.swatchNotchThree]} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -568,5 +588,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     height: 1,
     marginVertical: spacing.sm
+  },
+  swatchTab: {
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    width: 43
+  },
+  swatchNotch: {
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    height: 7,
+    position: "absolute",
+    right: -3,
+    width: 7
+  },
+  swatchNotchOne: {
+    top: 14
+  },
+  swatchNotchTwo: {
+    top: 31
+  },
+  swatchNotchThree: {
+    top: 48
   }
 });

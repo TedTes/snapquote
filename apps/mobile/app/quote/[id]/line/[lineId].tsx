@@ -6,26 +6,27 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { quoteUnits, type QuoteLineItem } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../../../../src/lib/api";
 import { useAuthStore } from "../../../../src/state/auth";
 import {
-  Banner,
   Card,
   Chip,
   EmptyState,
   Field,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for a possible future re-add of the remove-line action
   GhostButton,
   PrimaryButton,
   Screen,
-  SegmentedControl,
+  SwatchTab,
   ToggleRow,
   TopBar,
 } from "../../../../src/ui/components";
 import { colors, radius, spacing } from "../../../../src/ui/theme";
-import { formatMoney } from "../../../../src/lib/format";
+import { describeQuantity, formatMoney } from "../../../../src/lib/format";
 import {
   centsToDollars,
   dollarsToCents,
@@ -63,16 +64,14 @@ export default function EditLineScreen() {
   );
   const [quantity, setQuantity] = useState(String(existingLine?.quantity ?? 1));
   const [unit, setUnit] = useState<QuoteUnit>(existingLine?.unit ?? "flat");
-  const [kind, setKind] = useState<QuoteLineItem["kind"]>(
-    existingLine?.kind ?? "labour",
-  );
+  const kind: QuoteLineItem["kind"] = existingLine?.kind ?? "labour";
   const [price, setPrice] = useState(
     existingLine?.unitPriceCents !== null &&
       existingLine?.unitPriceCents !== undefined
       ? centsToDollars(existingLine.unitPriceCents)
       : "",
   );
-  const [saveToPriceBook, setSaveToPriceBook] = useState(false);
+  const [saveToPriceBook, setSaveToPriceBook] = useState(true);
   const [saving, setSaving] = useState(false);
 
   if (!id || !quote || (!isNew && !existingLine)) {
@@ -132,11 +131,15 @@ export default function EditLineScreen() {
 
   const quantityNumber = Number(quantity);
   const priceCents = price.trim().length > 0 ? dollarsToCents(price) : null;
-  const canSave =
-    description.trim().length > 0 &&
+  const hasValidQtyPrice =
     Number.isFinite(quantityNumber) &&
     quantityNumber > 0 &&
-    priceCents !== null;
+    priceCents !== null &&
+    priceCents > 0;
+  const previewTotalCents =
+    hasValidQtyPrice && priceCents !== null ? Math.round(quantityNumber * priceCents) : null;
+  const canSave = description.trim().length > 0 && hasValidQtyPrice;
+  const lineTotalCents = canSave ? previewTotalCents : null;
 
   async function handleSave() {
     if (!canSave || priceCents === null) {
@@ -214,6 +217,7 @@ export default function EditLineScreen() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for a possible future re-add of the remove-line action
   function handleRemove() {
     if (!existingLine) {
       return;
@@ -313,9 +317,39 @@ export default function EditLineScreen() {
         <Field
           label="Description"
           onChangeText={setDescription}
-          placeholder="What's this line for?"
+          placeholder="e.g. Remove wallpaper — hallway"
           value={description}
         />
+
+        <View style={styles.field}>
+          <Text style={styles.fieldLabel}>Unit</Text>
+          <ScrollView
+            contentContainerStyle={styles.unitRow}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {quoteUnits.map((option) => (
+              <Pressable
+                accessibilityRole="button"
+                key={option}
+                onPress={() => setUnit(option)}
+                style={[
+                  styles.unitChip,
+                  unit === option ? styles.unitChipActive : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.unitChipText,
+                    unit === option ? styles.unitChipTextActive : null,
+                  ]}
+                >
+                  {unitChipLabel(option)}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
 
         <View style={styles.row}>
           <View style={styles.rowItem}>
@@ -327,75 +361,76 @@ export default function EditLineScreen() {
             />
           </View>
           <View style={styles.rowItemWide}>
-            <Text style={styles.fieldLabel}>Unit</Text>
-            <View style={styles.unitRow}>
-              {quoteUnits.map((option) => (
-                <Pressable
-                  accessibilityRole="button"
-                  key={option}
-                  onPress={() => setUnit(option)}
-                  style={[
-                    styles.unitChip,
-                    unit === option ? styles.unitChipActive : null,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.unitChipText,
-                      unit === option ? styles.unitChipTextActive : null,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </Pressable>
-              ))}
+            <Text style={styles.fieldLabel}>{`Price per ${unitChipLabel(unit)}`}</Text>
+            <View style={styles.priceInputWrap}>
+              <Text style={styles.priceCurrency}>$</Text>
+              <TextInput
+                keyboardType="decimal-pad"
+                onChangeText={setPrice}
+                placeholder="0"
+                placeholderTextColor={colors.ink3}
+                style={styles.priceInput}
+                value={price}
+              />
             </View>
           </View>
         </View>
 
-        <Field
-          keyboardType="decimal-pad"
-          label="Price ($)"
-          onChangeText={setPrice}
-          placeholder="0"
-          value={price}
-        />
-
-        <View>
-          <Text style={styles.fieldLabel}>Line type</Text>
-          <SegmentedControl
-            onChange={setKind}
-            options={[
-              { label: "Labour", value: "labour" },
-              { label: "Material", value: "material" },
-            ]}
-            value={kind}
-          />
+        <View style={styles.totalCard}>
+          <View>
+            <Text style={styles.totalLabel}>Line total</Text>
+            <Text style={styles.totalFormula}>
+              {quantity || 0} × {price ? formatMoney(dollarsToCents(price)) : "$0"}
+            </Text>
+          </View>
+          <Text style={styles.totalAmount}>
+            {previewTotalCents !== null ? formatMoney(previewTotalCents) : "$0"}
+          </Text>
         </View>
 
         <Card>
           <ToggleRow
-            helper={`Next time "${description || "this item"}" matches automatically as green.`}
+            helper={`Next time "${description || "this item"}" matches automatically.`}
             label="Save to price book"
             onChange={setSaveToPriceBook}
             value={saveToPriceBook}
           />
         </Card>
 
-        <Banner tone="neutral">Line total updates the quote instantly.</Banner>
-
-        {existingLine ? (
-          <GhostButton
-            label="Remove line"
-            onPress={handleRemove}
-            tone="danger"
-          />
+        {canSave ? (
+          <View style={styles.previewSection}>
+            <Text style={styles.fieldLabel}>How it'll look</Text>
+            <View style={styles.previewCard}>
+              <SwatchTab tone="green" />
+              <View style={styles.previewBody}>
+                <View style={styles.previewTextBlock}>
+                  <Text numberOfLines={1} style={styles.previewTitle}>
+                    {description.trim()}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.previewSub}>
+                    {describeQuantity(quantityNumber, unit)} · you priced this
+                  </Text>
+                </View>
+                <Text style={styles.previewAmount}>
+                  {formatMoney(lineTotalCents)}
+                </Text>
+              </View>
+            </View>
+          </View>
         ) : null}
       </ScrollView>
       <View style={styles.footer}>
         <PrimaryButton
           disabled={!canSave || saving}
-          label={saving ? "Saving..." : "Save line"}
+          label={
+            saving
+              ? "Saving..."
+              : lineTotalCents !== null
+                ? `${isNew ? "Add line" : "Save line"} · ${formatMoney(lineTotalCents)}`
+                : isNew
+                  ? "Add line"
+                  : "Save line"
+          }
           onPress={() => void handleSave()}
         />
       </View>
@@ -414,6 +449,18 @@ function findPatchedLine(
       line.quantity === target.quantity &&
       line.unitPriceCents === target.unitPriceCents,
   );
+}
+
+function unitChipLabel(unit: QuoteUnit): string {
+  if (unit === "sqft") {
+    return "sq ft";
+  }
+
+  if (unit === "lnft") {
+    return "linear ft";
+  }
+
+  return unit;
 }
 
 function chipLabel(matchState: "green" | "yellow" | "red"): string {
@@ -480,6 +527,9 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
+  field: {
+    gap: 6,
+  },
   fieldLabel: {
     color: colors.ink2,
     fontSize: 13,
@@ -487,15 +537,15 @@ const styles = StyleSheet.create({
   },
   unitRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 6,
+    paddingRight: spacing.lg,
   },
   unitChip: {
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
   },
   unitChipActive: {
     backgroundColor: colors.dark,
@@ -508,6 +558,96 @@ const styles = StyleSheet.create({
   },
   unitChipTextActive: {
     color: colors.onDark,
+  },
+  priceInputWrap: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    flexDirection: "row",
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+  },
+  priceCurrency: {
+    color: colors.ink3,
+    fontSize: 16,
+    fontWeight: "700",
+    marginRight: 4,
+  },
+  priceInput: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "700",
+    paddingVertical: 0,
+  },
+  totalCard: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: radius.md,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  totalLabel: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  totalFormula: {
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 3,
+  },
+  totalAmount: {
+    color: colors.onDark,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  previewSection: {
+    gap: 8,
+  },
+  previewCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    minHeight: 64,
+    overflow: "hidden",
+  },
+  previewBody: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.sm,
+  },
+  previewTextBlock: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+    paddingRight: spacing.sm,
+  },
+  previewTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  previewSub: {
+    color: colors.ink3,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  previewAmount: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
   },
   footer: {
     padding: spacing.lg,

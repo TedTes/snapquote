@@ -64,6 +64,7 @@ function quoteWithYellowLine(priceBookItemId: string): QuoteRecord {
     conflicts: [],
     checklist: defaultChecklist,
     transcript: "",
+    publicToken: null,
     sentAt: null,
     firstViewedAt: null,
     respondedAt: null,

@@ -40,6 +40,7 @@ export type QuoteRecord = {
   conflicts: DraftConflict[];
   checklist: PainterChecklist;
   transcript: string;
+  publicToken: string | null;
   sentAt: string | null;
   firstViewedAt: string | null;
   respondedAt: string | null;
@@ -264,7 +265,10 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       id: makeId("cust"),
       orgId,
       name: wizard.customerName.trim() || "Unnamed customer",
-      email: wizard.customerEmail.trim(),
+      email:
+        wizard.customerEmail.trim().length > 0
+          ? wizard.customerEmail.trim()
+          : null,
       phone:
         wizard.customerPhone.trim().length > 0
           ? wizard.customerPhone.trim()
@@ -304,6 +308,7 @@ export const useMvpStore = create<MvpState>((set, get) => ({
       conflicts: draft.conflicts,
       checklist: wizard.checklist,
       transcript: wizard.transcript,
+      publicToken: null,
       sentAt: null,
       firstViewedAt: null,
       respondedAt: null,
@@ -808,6 +813,7 @@ function remoteQuoteToLocal(quote: ApiQuote): QuoteRecord {
     conflicts: quote.conflicts,
     checklist: quote.checklist,
     transcript: quote.transcript,
+    publicToken: quote.publicToken,
     sentAt: quote.sentAt,
     firstViewedAt: quote.firstViewedAt,
     respondedAt: quote.respondedAt,
@@ -1020,6 +1026,7 @@ function cloneQuoteAsDraft(
     ...quote,
     id: newId,
     lineItems: quote.lineItems.map((line) => ({ ...line, id: makeId("line") })),
+    publicToken: null,
     sentAt: null,
     firstViewedAt: null,
     respondedAt: null,

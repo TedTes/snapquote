@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, MessageCircle } from "lucide-react-native";
+import { ArrowLeft, Edit3, Eye, Mail, MessageCircle, Send } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   Alert,
@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { QuoteDiscount } from "@snapquote/shared";
 import {
   AnimatedSheetContent,
@@ -19,17 +20,14 @@ import {
   Banner,
   Card,
   Chip,
-  Divider,
   EmptyState,
   GhostButton,
-  KeyValueRow,
   PrimaryButton,
   Screen,
   SegmentedControl,
-  TopBar,
 } from "../../../src/ui/components";
 import { colors, radius, spacing } from "../../../src/ui/theme";
-import { formatLongDate, formatMoney, initials } from "../../../src/lib/format";
+import { describeQuantity, formatLongDate, formatMoney, initials } from "../../../src/lib/format";
 import { snapquoteApi, userFacingErrorMessage } from "../../../src/lib/api";
 import { useAuthStore } from "../../../src/state/auth";
 import {
@@ -46,6 +44,7 @@ type DiscountMode = QuoteDiscount["type"];
 export default function QuotePreviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const businessName = useMvpStore((state) => state.businessName);
+  const defaultTerms = useMvpStore((state) => state.defaultTerms);
   const quote = useMvpStore((state) =>
     state.quotes.find((candidate) => candidate.id === id),
   );
@@ -55,6 +54,8 @@ export default function QuotePreviewScreen() {
   const updateQuoteDiscount = useMvpStore((state) => state.updateQuoteDiscount);
   const removeRemoteQuote = useMvpStore((state) => state.removeRemoteQuote);
   const upsertRemoteQuote = useMvpStore((state) => state.upsertRemoteQuote);
+  const me = useAuthStore((state) => state.me);
+  const insets = useSafeAreaInsets();
 
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDiscountSheet, setShowDiscountSheet] = useState(false);
@@ -74,7 +75,17 @@ export default function QuotePreviewScreen() {
   if (!id || !quote) {
     return (
       <Screen>
-        <TopBar title="Preview" onBack={() => router.replace("/")} />
+        <View style={styles.previewNav}>
+          <Pressable accessibilityRole="button" onPress={() => router.replace("/")} style={styles.backButton}>
+            <ArrowLeft color={colors.ink} size={16} strokeWidth={2.4} />
+            <Text style={styles.backText}>Back</Text>
+          </Pressable>
+          <View style={styles.navCenter}>
+            <Text style={styles.navEyebrow}>As customer sees it</Text>
+            <Text style={styles.navTitle}>Preview</Text>
+          </View>
+          <View style={styles.navSpacer} />
+        </View>
         <View style={styles.notFound}>
           <EmptyState
             text="It may have been deleted."
@@ -92,6 +103,9 @@ export default function QuotePreviewScreen() {
   const sortedLines = [...quote.lineItems].sort(
     (a, b) => a.position - b.position,
   );
+  const senderEmail = me?.user.email ?? "quotes@snapquote.app";
+  const proposalNumber = quote.id.replace(/[^a-z0-9]/gi, "").slice(-4).toUpperCase() || "1042";
+  const terms = quote.terms.trim().length > 0 ? quote.terms : defaultTerms;
   const canSend =
     status === "draft" && blockers.reasons.length === 0 && totals !== null;
 
@@ -198,103 +212,122 @@ export default function QuotePreviewScreen() {
   }
 
   return (
-    <Screen>
-      <TopBar
-        eyebrow="as customer sees it"
-        title="Preview"
-        onBack={() => router.back()}
-      />
-      <ScrollView contentContainerStyle={styles.content}>
-        <Card style={styles.brandCard}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>{initials(businessName)}</Text>
+    <Screen edges={["top"]}>
+      <View style={styles.screen}>
+        <View style={styles.previewNav}>
+          <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft color={colors.ink} size={16} strokeWidth={2.4} />
+            <Text style={styles.backText}>Back</Text>
+          </Pressable>
+          <View style={styles.navCenter}>
+            <Text style={styles.navEyebrow}>As customer sees it</Text>
+            <Text style={styles.navTitle}>Preview</Text>
           </View>
-          <View style={styles.brandText}>
-            <Text style={styles.brandName}>{businessName}</Text>
-            <Text style={styles.brandSub}>
-              Quote for {customer?.name ?? "customer"} · {quote.address}
-            </Text>
-          </View>
-        </Card>
+          <Pressable accessibilityRole="button" onPress={() => setShowDiscountSheet(true)} style={styles.editButton}>
+            <Edit3 color={colors.ink2} size={13} strokeWidth={2.2} />
+            <Text style={styles.editText}>Edit</Text>
+          </Pressable>
+        </View>
 
-        <Card>
-          {sortedLines.map((line, index) => (
-            <View key={line.id}>
-              <KeyValueRow
-                label={line.description}
-                value={formatMoney(
-                  line.unitPriceCents !== null
-                    ? Math.round(line.quantity * line.unitPriceCents)
-                    : null,
-                )}
-              />
-              {index < sortedLines.length - 1 ? <Divider /> : null}
-            </View>
-          ))}
-        </Card>
-
-        <Card>
-          <KeyValueRow
-            label="Subtotal"
-            value={totals ? formatMoney(totals.subtotalCents) : "$--"}
-          />
-          {totals && totals.discountCents > 0 ? (
-            <>
-              <View style={styles.spacer} />
-              <KeyValueRow
-                label="Discount"
-                value={`-${formatMoney(totals.discountCents)}`}
-              />
-            </>
-          ) : null}
-          {status === "draft" ? (
-            <>
-              <View style={styles.spacer} />
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setShowDiscountSheet(true)}
-                style={styles.discountButton}
-              >
-                <Text style={styles.discountButtonText}>
-                  {quote.discount.type === "none"
-                    ? "Add discount"
-                    : "Edit discount"}
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 8) + 88 }]}>
+          <View style={styles.proposalCard}>
+            <View style={styles.businessBlock}>
+              <View style={styles.logo}>
+                <Text style={styles.logoText}>{initials(businessName)}</Text>
+              </View>
+              <View style={styles.brandText}>
+                <Text style={styles.brandName}>{businessName}</Text>
+                <Text style={styles.brandSub} numberOfLines={1}>
+                  {senderEmail}
                 </Text>
-              </Pressable>
-            </>
-          ) : null}
-          <View style={styles.spacer} />
-          <KeyValueRow
-            label={`Tax (${Math.round(quote.taxRate * 100)}%)`}
-            value={totals ? formatMoney(totals.taxCents) : "$--"}
-          />
-          <Divider />
-          <KeyValueRow
-            label="Total"
-            strong
-            value={totals ? formatMoney(totals.totalCents) : "$--"}
-          />
-        </Card>
+              </View>
+            </View>
 
-        <Text style={styles.footnote}>
-          Valid until {formatLongDate(toIso(quote.validUntil))}
-          {quote.scopeNotes.length > 0
-            ? ` · ${quote.scopeNotes.join(" ")}`
-            : ""}
-        </Text>
-      </ScrollView>
-      <View style={styles.footer}>
+            <View style={styles.metaGrid}>
+              <MetaCell label="Quote" value={`#${proposalNumber}`} />
+              <MetaCell label="Issued" value={formatLongDate(quote.createdAt).replace(",", "")} />
+              <MetaCell label="Valid until" value={formatLongDate(toIso(quote.validUntil)).replace(",", "")} />
+            </View>
+
+            <View style={styles.heavyDivider} />
+
+            <View style={styles.documentSection}>
+              <Text style={styles.sectionKicker}>Prepared for</Text>
+              <Text style={styles.customerName}>{customer?.name ?? "Customer"}</Text>
+              <Text style={styles.customerAddress}>{quote.address}</Text>
+            </View>
+
+            <View style={styles.thinDivider} />
+
+            <View style={styles.documentSection}>
+              <Text style={styles.sectionKicker}>Scope of work</Text>
+              <Text style={styles.scopeText}>{quote.scopeSummary}</Text>
+            </View>
+
+            <View style={styles.lineList}>
+              {sortedLines.map((line) => (
+                <View key={line.id} style={styles.proposalLine}>
+                  <View style={styles.proposalLineCopy}>
+                    <Text style={styles.proposalLineTitle}>{proposalLineTitle(line.description, line.quantity, line.unit)}</Text>
+                  </View>
+                  <Text style={styles.proposalLineAmount}>
+                    {formatMoney(
+                      line.unitPriceCents !== null
+                        ? Math.round(line.quantity * line.unitPriceCents)
+                        : null,
+                    )}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.totalBlock}>
+              <ProposalTotal label="Subtotal" value={totals ? formatMoney(totals.subtotalCents) : "$--"} />
+              {totals && totals.discountCents > 0 ? (
+                <ProposalTotal label="Discount" value={`-${formatMoney(totals.discountCents)}`} />
+              ) : null}
+              <ProposalTotal label={`Tax (${Math.round(quote.taxRate * 100)}%)`} value={totals ? formatMoney(totals.taxCents) : "$--"} />
+              <View style={styles.totalDivider} />
+              <ProposalTotal strong label="Total" value={totals ? formatMoney(totals.totalCents) : "$--"} />
+            </View>
+
+            <View style={styles.termsBlock}>
+              <Text style={styles.termsText}>
+                <Text style={styles.termsStrong}>Terms. </Text>
+                {terms}
+                {quote.scopeNotes.length > 0 ? ` ${quote.scopeNotes.join(" ")}` : ""}
+              </Text>
+            </View>
+
+            <View style={styles.customerActions}>
+              <View style={styles.acceptPreviewButton}>
+                <Text style={styles.acceptPreviewText}>Accept quote</Text>
+              </View>
+              <View style={styles.declinePreviewButton}>
+                <Text style={styles.declinePreviewText}>Decline</Text>
+              </View>
+            </View>
+
+            <Text style={styles.customerFootnote}>No account needed · questions? Just reply to the email</Text>
+          </View>
+
+          <View style={styles.previewOnlyRow}>
+            <Eye color={colors.ink3} size={11} strokeWidth={2.1} />
+            <Text style={styles.previewOnlyText}>Preview only — buttons work for your customer</Text>
+          </View>
+        </ScrollView>
+      </View>
+
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         {canSend ? (
-          <PrimaryButton
-            label="Send quote"
-            onPress={() => setShowSendSheet(true)}
-          />
+          <Pressable accessibilityRole="button" onPress={() => setShowSendSheet(true)} style={styles.sendButton}>
+            <Send color={colors.onDark} size={15} strokeWidth={2.4} />
+            <Text style={styles.sendButtonText}>Send quote</Text>
+          </Pressable>
         ) : status === "draft" ? (
-          <PrimaryButton
-            disabled
-            label="Fix pricing before sending"
-            onPress={() => {}}
-          />
+          <Pressable accessibilityRole="button" disabled style={[styles.sendButton, styles.sendButtonDisabled]}>
+            <Text style={styles.sendButtonTextDisabled}>Fix pricing before sending</Text>
+          </Pressable>
         ) : (
           <GhostButton
             label="View quote status"
@@ -307,7 +340,6 @@ export default function QuotePreviewScreen() {
           />
         )}
       </View>
-
       <SheetModal
         onDismiss={() => setShowSendSheet(false)}
         style={styles.modalBackdrop}
@@ -407,84 +439,380 @@ function toIso(date: string): string {
   return `${date}T00:00:00.000Z`;
 }
 
+function MetaCell(props: { label: string; value: string }) {
+  return (
+    <View style={styles.metaCell}>
+      <Text style={styles.metaLabel}>{props.label}</Text>
+      <Text style={styles.metaValue}>{props.value}</Text>
+    </View>
+  );
+}
+
+function ProposalTotal(props: { label: string; value: string; strong?: boolean | undefined }) {
+  return (
+    <View style={styles.totalRow}>
+      <Text style={[styles.totalLabel, props.strong ? styles.totalLabelStrong : null]}>{props.label}</Text>
+      <Text style={[styles.totalValue, props.strong ? styles.totalValueStrong : null]}>{props.value}</Text>
+    </View>
+  );
+}
+
+function proposalLineTitle(description: string, quantity: number, unit: string | null): string {
+  const trimmed = description.trim();
+  const normalized = trimmed.toLowerCase();
+
+  if (normalized.includes("paint walls") && unit === "room") {
+    return `Paint walls in ${describeQuantity(quantity, unit)}`;
+  }
+
+  if (normalized.includes("paint ceilings") && unit === "room") {
+    return `Paint ceilings in ${describeQuantity(quantity, unit)}`;
+  }
+
+  if (normalized.includes("paint trim") && unit === "room") {
+    return `Paint trim in ${describeQuantity(quantity, unit)}`;
+  }
+
+  if (normalized.includes("paint") && normalized.includes("door")) {
+    return `Paint ${describeQuantity(quantity, "each").replace("each", "doors")}`;
+  }
+
+  return trimmed;
+}
+
 const styles = StyleSheet.create({
-  content: {
-    gap: spacing.md,
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+  screen: {
+    flex: 1
   },
-  notFound: {
-    padding: spacing.lg,
-  },
-  brandCard: {
+  previewNav: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.md,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 10
+  },
+  backButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 34
+  },
+  backText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  navCenter: {
+    alignItems: "center",
+    gap: 1,
+    left: 0,
+    position: "absolute",
+    right: 0
+  },
+  navEyebrow: {
+    color: colors.ink3,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.7,
+    textTransform: "uppercase"
+  },
+  navTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  navSpacer: {
+    width: 54
+  },
+  editButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 34
+  },
+  editText: {
+    color: colors.ink2,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  content: {
+    padding: 14,
+    paddingTop: 10
+  },
+  notFound: {
+    padding: spacing.lg
+  },
+  proposalCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    overflow: "hidden"
+  },
+  businessBlock: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 11,
+    padding: 16,
+    paddingBottom: 13
   },
   logo: {
     alignItems: "center",
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    height: 44,
+    backgroundColor: colors.dark,
+    borderRadius: 7,
+    height: 42,
     justifyContent: "center",
-    width: 44,
+    width: 42
   },
   logoText: {
-    color: colors.ink2,
+    color: colors.onDark,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "900"
   },
   brandText: {
     flex: 1,
     gap: 2,
+    minWidth: 0
   },
   brandName: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "900"
   },
   brandSub: {
     color: colors.ink2,
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  metaGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: 14,
+    paddingHorizontal: 16
+  },
+  metaCell: {
+    flex: 1,
+    gap: 3
+  },
+  metaLabel: {
+    color: colors.ink3,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.3,
+    textTransform: "uppercase"
+  },
+  metaValue: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  heavyDivider: {
+    backgroundColor: colors.dark,
+    height: 2
+  },
+  thinDivider: {
+    backgroundColor: colors.border,
+    height: 1
+  },
+  documentSection: {
+    gap: 5,
+    padding: 16
+  },
+  sectionKicker: {
+    color: colors.ink3,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.7,
+    textTransform: "uppercase"
+  },
+  customerName: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  customerAddress: {
+    color: colors.ink2,
     fontSize: 12,
+    fontWeight: "600"
   },
-  spacer: {
-    height: spacing.sm,
+  scopeText: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18
   },
-  discountButton: {
+  lineList: {
+    borderTopColor: colors.border,
+    borderTopWidth: 1
+  },
+  proposalLine: {
     alignItems: "center",
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 40,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+    minHeight: 42,
+    paddingHorizontal: 16
   },
-  discountButtonText: {
+  proposalLineCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  proposalLineTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  proposalLineAmount: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  totalBlock: {
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 16,
+    paddingVertical: 10
+  },
+  totalRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 2
+  },
+  totalLabel: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "600"
+  },
+  totalValue: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  totalLabelStrong: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  totalValueStrong: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  totalDivider: {
+    backgroundColor: colors.dark,
+    height: 1,
+    marginVertical: 4
+  },
+  termsBlock: {
+    padding: 16
+  },
+  termsText: {
+    color: colors.ink2,
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 17
+  },
+  termsStrong: {
+    color: colors.ink,
+    fontWeight: "900"
+  },
+  customerActions: {
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 9,
+    padding: 16,
+    paddingBottom: 10
+  },
+  acceptPreviewButton: {
+    alignItems: "center",
+    backgroundColor: colors.green,
+    borderRadius: 7,
+    flex: 1,
+    height: 40,
+    justifyContent: "center"
+  },
+  acceptPreviewText: {
+    color: colors.onDark,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  declinePreviewButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 7,
+    borderWidth: 1,
+    flex: 1,
+    height: 40,
+    justifyContent: "center"
+  },
+  declinePreviewText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900"
   },
-  footnote: {
+  customerFootnote: {
     color: colors.ink3,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 10,
+    fontWeight: "700",
+    paddingBottom: 14,
+    textAlign: "center"
+  },
+  previewOnlyRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+    justifyContent: "center",
+    paddingTop: 12
+  },
+  previewOnlyText: {
+    color: colors.ink3,
+    fontSize: 10,
+    fontWeight: "700"
   },
   footer: {
-    padding: spacing.lg,
-    paddingTop: spacing.sm,
+    backgroundColor: "rgba(255,254,250,0.97)",
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingHorizontal: 14,
+    paddingTop: 12
+  },
+  sendButton: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 8,
+    height: 46,
+    justifyContent: "center"
+  },
+  sendButtonDisabled: {
+    backgroundColor: "#CCC9BF"
+  },
+  sendButtonText: {
+    color: colors.onDark,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  sendButtonTextDisabled: {
+    color: colors.ink2,
+    fontSize: 14,
+    fontWeight: "900"
   },
   modalBackdrop: {
     backgroundColor: "rgba(18,22,28,0.35)",
     flex: 1,
-    justifyContent: "flex-end",
+    justifyContent: "flex-end"
   },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.sm,
-    padding: spacing.lg,
+    padding: spacing.lg
   },
   grabber: {
     alignSelf: "center",
@@ -492,25 +820,25 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     height: 4,
     marginBottom: spacing.xs,
-    width: 38,
+    width: 38
   },
   sheetTitle: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "800",
+    fontWeight: "800"
   },
   sheetSubtitle: {
     color: colors.ink2,
     fontSize: 13,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.xs
   },
   channelRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: spacing.sm
   },
   channelRowDisabled: {
-    opacity: 0.55,
+    opacity: 0.55
   },
   discountInput: {
     backgroundColor: colors.surface,
@@ -521,7 +849,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     minHeight: 52,
-    paddingHorizontal: 14,
+    paddingHorizontal: 14
   },
   channelIcon: {
     alignItems: "center",
@@ -529,33 +857,33 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     height: 34,
     justifyContent: "center",
-    width: 34,
+    width: 34
   },
   channelText: {
     flex: 1,
-    gap: 2,
+    gap: 2
   },
   channelTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "700"
   },
   channelTitleMuted: {
     color: colors.ink2,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "700"
   },
   channelSub: {
     color: colors.ink3,
-    fontSize: 12,
+    fontSize: 12
   },
   cancelLink: {
     alignItems: "center",
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.xs
   },
   cancelLinkText: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "600",
-  },
+    fontWeight: "600"
+  }
 });
