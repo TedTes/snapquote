@@ -357,6 +357,11 @@ export function userFacingErrorMessage(error: unknown): string {
 
   const message = error.message.trim();
   const lower = message.toLowerCase();
+  const validationMessage = validationErrorMessage(message);
+
+  if (validationMessage) {
+    return validationMessage;
+  }
 
   if (
     lower.includes("permission denied") ||
@@ -374,6 +379,38 @@ export function userFacingErrorMessage(error: unknown): string {
   }
 
   return message.length > 0 ? message : fallback;
+}
+
+function validationErrorMessage(message: string): string | null {
+  if (!message.startsWith("{")) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(message);
+
+    if (!isRecord(parsed) || !isRecord(parsed["fieldErrors"])) {
+      return null;
+    }
+
+    const fields = Object.keys(parsed["fieldErrors"]);
+
+    if (fields.includes("customer")) {
+      return "Check the customer details before continuing.";
+    }
+
+    if (fields.includes("address")) {
+      return "Add a job address before continuing.";
+    }
+
+    if (fields.includes("transcript") || fields.includes("typedNotes")) {
+      return "Check the job notes before continuing.";
+    }
+
+    return "Check the highlighted fields before continuing.";
+  } catch {
+    return null;
+  }
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {

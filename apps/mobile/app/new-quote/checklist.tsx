@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Minus, Plus } from "lucide-react-native";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
@@ -30,7 +30,13 @@ export default function NewQuoteChecklistScreen() {
   const surfaceCount = [walls, ceilings, trim].filter(Boolean).length;
   const canContinue = roomTotal > 0 && surfaceCount > 0;
 
-  function next() {
+  useEffect(() => {
+    if (wizard.address.trim().length === 0) {
+      router.replace("/new-quote");
+    }
+  }, [wizard.address]);
+
+  function persistChecklist() {
     updateWizard({
       checklist: {
         rooms: { small, medium, large },
@@ -41,12 +47,21 @@ export default function NewQuoteChecklistScreen() {
         customerSuppliesPaint
       }
     });
+  }
+
+  function back() {
+    persistChecklist();
+    router.back();
+  }
+
+  function next() {
+    persistChecklist();
     router.push("/new-quote/voice");
   }
 
   return (
     <Screen edges={["top"]}>
-      <NewQuoteHeader onBack={() => router.back()} step={2} />
+      <NewQuoteHeader onBack={back} step={2} />
       <AnimatedScreenContent contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <NewQuoteTitle
           helper="These numbers set your quantities — the prices come later, from your book."

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check, Play } from "lucide-react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, Check, Lock, Mic, Play, Plus } from "lucide-react-native";
 import { router } from "expo-router";
 import {
   Alert,
@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { PainterChecklist } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../../src/lib/api";
 import { AnimatedScreenContent } from "../../src/ui/AnimatedScreenContent";
@@ -16,14 +17,34 @@ import { Screen } from "../../src/ui/components";
 import {
   NewQuoteHeader,
   NewQuoteTitle,
-  StickyAction,
+  SectionKicker,
 } from "../../src/ui/NewQuoteScaffold";
 import { colors } from "../../src/ui/theme";
 import { useMvpStore } from "../../src/state/mvp";
 import { useAuthStore } from "../../src/state/auth";
 
-const sampleTranscript =
-  "Paint two bedrooms, patch nail holes, remove the old wallpaper in the hallway, two coats, customer provides paint.";
+const EXTRA_DETECTIONS = [
+  {
+    label: "patch holes",
+    phrase: "patch nail holes",
+    pattern: /\b(patch|fill|repair)\b.*\b(nail\s+holes?|holes?)\b/i
+  },
+  {
+    label: "remove wallpaper",
+    phrase: "remove wallpaper",
+    pattern: /\b(remove|strip|take\s+off)\b.*\bwallpaper\b/i
+  },
+  {
+    label: "primer",
+    phrase: "primer",
+    pattern: /\b(primer|prime|priming)\b/i
+  },
+  {
+    label: "materials",
+    phrase: "material allowance",
+    pattern: /\b(materials?|paint)\b.*\ballowance\b|\ballowance\b.*\b(materials?|paint)\b/i
+  }
+] as const;
 
 export default function NewQuoteTranscriptScreen() {
   const wizard = useMvpStore((state) => state.wizard);
@@ -34,24 +55,54 @@ export default function NewQuoteTranscriptScreen() {
     (state) => state.generateDraftFromWizard,
   );
   const authStatus = useAuthStore((state) => state.status);
+  const insets = useSafeAreaInsets();
   const [editing, setEditing] = useState(false);
-  const [transcript, setTranscript] = useState(
-    wizard.transcript.trim() || sampleTranscript,
-  );
+  const [transcript, setTranscript] = useState(wizard.transcript.trim());
+  const detectedExtras = useMemo(() => detectExtras(transcript), [transcript]);
+  const [confirmedExtras, setConfirmedExtras] = useState<string[]>(detectedExtras);
   const [generating, setGenerating] = useState(false);
+  const navigatingToDraftRef = useRef(false);
+  const reviewedTranscript = useMemo(
+    () => mergeConfirmedExtras(transcript, confirmedExtras),
+    [confirmedExtras, transcript]
+  );
+
+  useEffect(() => {
+    if (navigatingToDraftRef.current) {
+      return;
+    }
+
+    if (wizard.address.trim().length === 0) {
+      router.replace("/new-quote");
+    }
+  }, [wizard.address]);
+
+  function normalizedTranscript() {
+    return reviewedTranscript.trim().replace(/\s+/g, " ");
+  }
+
+  function toggleExtra(phrase: string) {
+    setConfirmedExtras((current) =>
+      current.includes(phrase)
+        ? current.filter((item) => item !== phrase)
+        : [...current, phrase]
+    );
+  }
 
   async function generate() {
     if (generating) {
       return;
     }
 
-    const currentWizard = { ...wizard, transcript: transcript.trim() };
+    const currentWizard = { ...wizard, transcript: normalizedTranscript() };
 
     if (currentWizard.address.trim().length === 0) {
-      Alert.alert(
-        "Add a job address",
-        "The address is required before drafting.",
-      );
+      router.replace("/new-quote");
+      return;
+    }
+
+    if (currentWizard.transcript.length > 5000) {
+      Alert.alert("Shorten the notes", "Job notes must be 5,000 characters or fewer.");
       return;
     }
 
@@ -60,6 +111,7 @@ export default function NewQuoteTranscriptScreen() {
 
     try {
       if (authStatus !== "signed_in") {
+        navigatingToDraftRef.current = true;
         const quote = generateDraftFromWizard();
         router.replace({ pathname: "/quote/[id]", params: { id: quote.id } });
         return;
@@ -79,6 +131,7 @@ export default function NewQuoteTranscriptScreen() {
       });
 
       upsertRemoteQuote(quote);
+      navigatingToDraftRef.current = true;
       startNewQuoteWizard();
       router.replace({ pathname: "/quote/[id]", params: { id: quote.id } });
     } catch (error) {
@@ -100,51 +153,105 @@ export default function NewQuoteTranscriptScreen() {
           title="Check before drafting"
         />
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setEditing(true)}
-          style={styles.transcriptCard}
-        >
-          {editing ? (
-            <TextInput
-              autoFocus
-              multiline
-              onChangeText={setTranscript}
-              placeholder="Describe the job..."
-              placeholderTextColor={colors.ink3}
-              style={styles.transcriptInput}
-              textAlignVertical="top"
-              value={transcript}
-            />
-          ) : (
-            <HighlightedTranscript transcript={transcript} />
-          )}
-        </Pressable>
-
         <View style={styles.lockedCard}>
-          <Check color={colors.green} size={14} strokeWidth={2.6} />
+          <Lock color={colors.green} size={14} strokeWidth={2.4} />
           <Text style={styles.lockedText}>
             Checklist locked:{" "}
             <Text style={styles.lockedStrong}>
               {describeChecklist(wizard.checklist)}
             </Text>
-            . Voice only adds the extras above.
+            . Voice only adds the extras below.
           </Text>
         </View>
 
+        <View style={styles.group}>
+          <View style={styles.kickerRow}>
+            <SectionKicker>What you said</SectionKicker>
+            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setEditing((value) => !value)}>
+              <Text style={styles.kickerAction}>{editing ? "done" : "tap to edit"}</Text>
+            </Pressable>
+          </View>
+          <View style={styles.transcriptCard}>
+            <View style={styles.audioRow}>
+              <Mic color={colors.ink3} size={11} strokeWidth={2.2} />
+              <Text style={styles.audioTime}>0:24</Text>
+              <View style={styles.audioSpacer} />
+              <Play color={colors.ink2} size={13} strokeWidth={2.1} />
+              <Text style={styles.audioAction}>Re-listen</Text>
+            </View>
+            {editing ? (
+              <TextInput
+                autoFocus
+                multiline
+                onChangeText={setTranscript}
+                placeholder="Type anything the checklist didn't cover..."
+                placeholderTextColor={colors.ink3}
+                style={styles.transcriptInput}
+                textAlignVertical="top"
+                value={transcript}
+              />
+            ) : transcript.trim().length === 0 ? (
+              <Text style={styles.emptyTranscriptText}>
+                No extra notes. The quote will be built from the locked checklist.
+              </Text>
+            ) : (
+              <HighlightedTranscript transcript={transcript} />
+            )}
+          </View>
+        </View>
+
+        <View style={styles.group}>
+          <View style={styles.kickerRow}>
+            <SectionKicker>Extras detected</SectionKicker>
+            <Text style={styles.kickerAction}>confirm before drafting</Text>
+          </View>
+          <View style={styles.extraWrap}>
+            {EXTRA_DETECTIONS.map((extra) => {
+              const active = confirmedExtras.includes(extra.phrase);
+              const detected = detectedExtras.includes(extra.phrase);
+
+              if (!detected && extra.label !== "primer") {
+                return null;
+              }
+
+              return (
+                <ExtraChip
+                  key={extra.phrase}
+                  active={active}
+                  label={extra.label}
+                  onPress={() => toggleExtra(extra.phrase)}
+                />
+              );
+            })}
+          </View>
+        </View>
+      </AnimatedScreenContent>
+
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.listenButton}
+          disabled={generating}
+          onPress={() => void generate()}
+          style={[styles.primaryButton, generating ? styles.primaryButtonDisabled : null]}
         >
-          <Play color={colors.ink2} size={14} strokeWidth={2.1} />
-          <Text style={styles.listenText}>Re-listen · 0:24</Text>
+          <Text style={[styles.primaryText, generating ? styles.primaryTextDisabled : null]}>
+            {generating ? "Generating..." : "Generate draft"}
+          </Text>
+          <ArrowRight
+            color={generating ? colors.ink3 : colors.onDark}
+            size={16}
+            strokeWidth={2.4}
+          />
         </Pressable>
-      </AnimatedScreenContent>
-      <StickyAction
-        label={generating ? "Generating..." : "Generate draft"}
-        onPress={() => void generate()}
-      />
+        <Pressable
+          accessibilityRole="button"
+          disabled={generating}
+          onPress={() => router.back()}
+          style={styles.backToNotes}
+        >
+          <Text style={styles.backToNotesText}>← Back to notes</Text>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
@@ -171,11 +278,49 @@ function Mark(props: { children: string }) {
   return <Text style={styles.mark}>{props.children}</Text>;
 }
 
+function ExtraChip(props: { active: boolean; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: props.active }}
+      onPress={props.onPress}
+      style={[styles.extraChip, props.active ? styles.extraChipActive : null]}
+    >
+      {props.active ? (
+        <Check color={colors.amber} size={13} strokeWidth={2.5} />
+      ) : (
+        <Plus color={colors.ink2} size={13} strokeWidth={2.2} />
+      )}
+      <Text style={[styles.extraChipText, props.active ? styles.extraChipTextActive : null]}>
+        {props.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function detectExtras(transcript: string) {
+  return EXTRA_DETECTIONS
+    .filter((extra) => extra.pattern.test(transcript))
+    .map((extra) => extra.phrase);
+}
+
+function mergeConfirmedExtras(transcript: string, extras: string[]) {
+  const existing = transcript.trim();
+  const missingExtras = extras.filter(
+    (extra) => !existing.toLowerCase().includes(extra.toLowerCase())
+  );
+
+  return [existing, ...missingExtras.map((extra) => `${extra}.`)]
+    .filter((part) => part.trim().length > 0)
+    .join(" ")
+    .trim();
+}
+
 function splitHighlightedTranscript(
   transcript: string,
 ): { highlighted: boolean; text: string }[] {
   const highlights =
-    /(patch (?:nail )?holes|wallpaper|customer (?:provides|supplies) paint)/gi;
+    /(patch (?:nail )?holes|wallpaper|customer (?:provides|supplies) paint|primer|material allowance)/gi;
   const parts: { highlighted: boolean; text: string }[] = [];
   let cursor = 0;
 
@@ -226,37 +371,8 @@ function describeChecklist(checklist: PainterChecklist): string {
 const styles = StyleSheet.create({
   content: {
     gap: 14,
-    paddingBottom: 16,
+    paddingBottom: 14,
     paddingTop: 21,
-  },
-  transcriptCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    minHeight: 384,
-    marginHorizontal: 19,
-    padding: 15,
-  },
-  transcriptText: {
-    color: colors.ink2,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 24,
-  },
-  transcriptInput: {
-    color: colors.ink,
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 24,
-    minHeight: 350,
-    padding: 0,
-  },
-  mark: {
-    backgroundColor: colors.amberBg,
-    color: colors.ink,
-    fontWeight: "900",
   },
   lockedCard: {
     alignItems: "flex-start",
@@ -265,35 +381,150 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 9,
-    marginHorizontal: 19,
+    gap: 10,
+    marginHorizontal: 20,
     padding: 13,
   },
   lockedText: {
     color: colors.green,
     flex: 1,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     lineHeight: 17,
   },
   lockedStrong: {
     fontWeight: "900",
   },
-  listenButton: {
+  group: {
+    gap: 8,
+    paddingHorizontal: 20
+  },
+  kickerRow: {
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  kickerAction: {
+    color: colors.ink3,
+    fontSize: 10,
+    fontWeight: "700"
+  },
+  transcriptCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: 10,
     borderWidth: 1,
+    gap: 10,
+    minHeight: 126,
+    padding: 13,
+  },
+  audioRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5
+  },
+  audioTime: {
+    color: colors.ink3,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  audioSpacer: {
+    flex: 1
+  },
+  audioAction: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  transcriptText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 21,
+  },
+  transcriptInput: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 21,
+    minHeight: 86,
+    padding: 0,
+  },
+  emptyTranscriptText: {
+    color: colors.ink3,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  mark: {
+    backgroundColor: colors.amberBg,
+    color: colors.ink,
+    fontWeight: "900",
+  },
+  extraWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  extraChip: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 34,
+    paddingHorizontal: 12
+  },
+  extraChipActive: {
+    backgroundColor: colors.amberBg,
+    borderColor: colors.amberBorder
+  },
+  extraChipText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  extraChipTextActive: {
+    color: colors.amber,
+    fontWeight: "900"
+  },
+  footer: {
+    backgroundColor: colors.bg,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  primaryButton: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: 10,
     flexDirection: "row",
     gap: 9,
-    height: 39,
-    justifyContent: "center",
-    marginHorizontal: 19,
+    height: 45,
+    justifyContent: "center"
   },
-  listenText: {
+  primaryButtonDisabled: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  primaryText: {
+    color: colors.onDark,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  primaryTextDisabled: {
+    color: colors.ink3
+  },
+  backToNotes: {
+    alignItems: "center",
+    paddingTop: 9,
+  },
+  backToNotesText: {
     color: colors.ink2,
-    fontSize: 13,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "800",
   },
 });
