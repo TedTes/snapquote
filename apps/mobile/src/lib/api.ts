@@ -98,6 +98,8 @@ export type MeResponse = {
     name: string;
     trade: "painting";
     logoUrl: string | null;
+    contactPhone: string | null;
+    website: string | null;
     defaultTaxRate: number;
     defaultTerms: string;
     quoteValidDays: number;
@@ -207,10 +209,26 @@ export const snapquoteApi = {
     defaultTaxRate?: number | undefined;
     defaultTerms?: string | undefined;
     quoteValidDays?: number | undefined;
+    contactPhone?: string | null | undefined;
+    website?: string | null | undefined;
+    logoUrl?: string | null | undefined;
   }) =>
     request<MeResponse>("/v1/me", {
       method: "PATCH",
       body: input
+    }),
+
+  uploadAvatar: (input: { fileName: string; contentType: "image/jpeg" | "image/png" | "image/webp"; base64: string }) =>
+    request<{ org: MeResponse["org"] }>("/v1/profile/avatar", {
+      method: "POST",
+      body: input
+    }),
+
+  billingPortal: () => request<{ url: string | null }>("/v1/billing/portal"),
+
+  deleteAccount: () =>
+    request<{ deleted: boolean }>("/v1/account/delete", {
+      method: "POST"
     }),
 
   onboardPainter: (input: {

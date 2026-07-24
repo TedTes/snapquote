@@ -96,7 +96,16 @@ const orgSettingsSchema = z.object({
   businessName: z.string().trim().max(120).optional(),
   defaultTaxRate: z.number().min(0).max(1).optional(),
   defaultTerms: z.string().trim().max(4000).optional(),
-  quoteValidDays: z.number().int().min(1).max(365).optional()
+  quoteValidDays: z.number().int().min(1).max(365).optional(),
+  contactPhone: z.string().trim().max(80).nullable().optional(),
+  website: z.string().trim().max(240).nullable().optional(),
+  logoUrl: z.string().trim().url().max(1000).nullable().optional()
+});
+
+const avatarUploadSchema = z.object({
+  fileName: z.string().trim().min(1).max(180),
+  contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  base64: z.string().min(1).max(8_000_000)
 });
 
 const oauthProviderSchema = z.enum(["apple", "google"]);
@@ -238,6 +247,18 @@ Deno.serve(async (request) => {
 
     if (route.method === "PATCH" && route.path === "/v1/me") {
       return json(await updateMe(db, request));
+    }
+
+    if (route.method === "POST" && route.path === "/v1/profile/avatar") {
+      return json(await uploadAvatar(db, request));
+    }
+
+    if (route.method === "GET" && route.path === "/v1/billing/portal") {
+      return json(await billingPortal(db, request));
+    }
+
+    if (route.method === "POST" && route.path === "/v1/account/delete") {
+      return json(await deleteAccount(db, request));
     }
 
     if (route.method === "POST" && route.path === "/v1/onboarding/painter") {
@@ -606,12 +627,74 @@ async function updateMe(db: SupabaseClient, request: Request) {
   if (input.defaultTaxRate !== undefined) patch.default_tax_rate = input.defaultTaxRate;
   if (input.defaultTerms !== undefined) patch.default_terms = input.defaultTerms;
   if (input.quoteValidDays !== undefined) patch.quote_valid_days = input.quoteValidDays;
+  if (input.contactPhone !== undefined) patch.contact_phone = input.contactPhone;
+  if (input.website !== undefined) patch.website = input.website;
+  if (input.logoUrl !== undefined) patch.logo_url = input.logoUrl;
 
   if (Object.keys(patch).length > 0) {
     await single(db.from("snapquote_orgs").update(patch).eq("id", orgId).select("*"));
   }
 
   return getMe(db, request);
+}
+
+async function uploadAvatar(db: SupabaseClient, request: Request) {
+  const orgId = orgIdFromRequest(request);
+  const input = parse(avatarUploadSchema, await request.json());
+  const extension = extensionForContentType(input.contentType);
+  const objectPath = `${orgId}/business-logo.${extension}`;
+  const bytes = Uint8Array.from(atob(input.base64), (char) => char.charCodeAt(0));
+  const bucket = "snapquote-avatars";
+
+  const { error: bucketError } = await db.storage.createBucket(bucket, { public: true });
+
+  if (bucketError && !bucketError.message.toLowerCase().includes("already exists")) {
+    throw bucketError;
+  }
+
+  must(await db.storage.from(bucket).upload(objectPath, bytes, {
+    contentType: input.contentType,
+    upsert: true
+  }));
+
+  const { data } = db.storage.from(bucket).getPublicUrl(objectPath);
+  const org = await single(db.from("snapquote_orgs").update({
+    logo_url: `${data.publicUrl}?v=${Date.now()}`
+  }).eq("id", orgId).select("*"));
+
+  return { org: orgResponse(org) };
+}
+
+async function billingPortal(db: SupabaseClient, request: Request) {
+  const member = await memberFromBearer(db, request);
+
+  if (!member?.auth_user_id) {
+    throw new HttpError(401, "Sign in before managing billing.");
+  }
+
+  const url = Deno.env.get("SNAPQUOTE_BILLING_PORTAL_URL") ?? null;
+
+  return { url };
+}
+
+async function deleteAccount(db: SupabaseClient, request: Request) {
+  const member = await memberFromBearer(db, request);
+
+  if (!member || !member.auth_user_id) {
+    throw new HttpError(401, "Sign in before deleting your account.");
+  }
+
+  const authUserId = String(member.auth_user_id);
+  const orgId = String(member.org_id);
+  const { error: authError } = await db.auth.admin.deleteUser(authUserId);
+
+  if (authError) {
+    throw authError;
+  }
+
+  must(await db.from("snapquote_orgs").delete().eq("id", orgId));
+
+  return { deleted: true };
 }
 
 async function memberFromBearer(db: SupabaseClient, request: Request) {
@@ -1469,12 +1552,20 @@ function orgResponse(row: Record<string, unknown>) {
     name: row.name,
     trade: row.trade,
     logoUrl: row.logo_url,
+    contactPhone: row.contact_phone,
+    website: row.website,
     defaultTaxRate: Number(row.default_tax_rate),
     defaultTerms: row.default_terms,
     quoteValidDays: row.quote_valid_days,
     setupCompletedAt: typeof row.setup_completed_at === "string" ? row.setup_completed_at : null,
     plan: row.plan
   };
+}
+
+function extensionForContentType(contentType: "image/jpeg" | "image/png" | "image/webp") {
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  return "jpg";
 }
 
 function customerResponse(row: Record<string, unknown>) {

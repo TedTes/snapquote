@@ -88,6 +88,8 @@ function me(): MeResponse {
       name: "SnapQuote Services",
       trade: "painting",
       logoUrl: null,
+      contactPhone: null,
+      website: null,
       defaultTaxRate: 0.13,
       defaultTerms: "Due on completion.",
       quoteValidDays: 14,
