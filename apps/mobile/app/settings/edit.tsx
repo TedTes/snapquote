@@ -1,4 +1,7 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { File } from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import {
   Building2,
@@ -15,7 +18,8 @@ import {
   Shield,
   User
 } from "lucide-react-native";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { snapquoteApi, userFacingErrorMessage } from "../../src/lib/api";
 import { useAuthStore } from "../../src/state/auth";
 import { getQuoteStatus, useMvpStore } from "../../src/state/mvp";
 import { displayBusinessName } from "../../src/lib/format";
@@ -29,7 +33,10 @@ export default function ProfileScreen() {
   const events = useMvpStore((state) => state.events);
   const me = useAuthStore((state) => state.me);
   const authStatus = useAuthStore((state) => state.status);
+  const setMe = useAuthStore((state) => state.setMe);
   const signOut = useAuthStore((state) => state.signOut);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const statuses = quotes.map((quote) => getQuoteStatus(quote, events));
   const sentCount = statuses.filter((status) => status === "sent" || status === "viewed" || status === "accepted").length;
@@ -37,6 +44,150 @@ export default function ProfileScreen() {
   const winRate = sentCount > 0 ? Math.round((acceptedCount / sentCount) * 100) : 0;
   const userName = me?.user.name ?? "Guest";
   const email = me?.user.email ?? "Not signed in";
+  const logoUrl = me?.org.logoUrl ?? null;
+  const contactDetail = contactSummary(me?.org.contactPhone ?? null, me?.org.website ?? null);
+
+  async function uploadLogo() {
+    if (authStatus !== "signed_in") {
+      router.push({ pathname: "/auth", params: { from: "app" } });
+      return;
+    }
+
+    if (uploadingLogo) {
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert("Photo access needed", "Allow photo access to upload a business logo.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      mediaTypes: ["images"],
+      quality: 0.8
+    });
+
+    if (result.canceled || !result.assets[0]) {
+      return;
+    }
+
+    setUploadingLogo(true);
+
+    try {
+      const asset = result.assets[0];
+      const file = new File(asset.uri);
+      const base64 = await file.base64();
+      const contentType = normalizeImageContentType(asset.mimeType);
+      const response = await snapquoteApi.uploadAvatar({
+        fileName: asset.fileName ?? "business-logo.jpg",
+        contentType,
+        base64
+      });
+
+      if (me) {
+        setMe({ ...me, org: response.org });
+      }
+    } catch (error) {
+      Alert.alert("Could not upload logo", userFacingErrorMessage(error));
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  async function openBillingPortal() {
+    if (authStatus !== "signed_in") {
+      router.push({ pathname: "/auth", params: { from: "app" } });
+      return;
+    }
+
+    try {
+      const response = await snapquoteApi.billingPortal();
+
+      if (!response.url) {
+        Alert.alert("Billing not connected", "Billing portal is not configured for this test build yet.");
+        return;
+      }
+
+      await Linking.openURL(response.url);
+    } catch (error) {
+      Alert.alert("Could not open billing", userFacingErrorMessage(error));
+    }
+  }
+
+  async function openFeedback() {
+    const subject = encodeURIComponent("SnapQuote feedback");
+    const body = encodeURIComponent(`Account: ${email}\n\n`);
+    const url = `mailto:tedtfu@gmail.com?subject=${subject}&body=${body}`;
+    const canOpen = await Linking.canOpenURL(url);
+
+    if (canOpen) {
+      await Linking.openURL(url);
+      return;
+    }
+
+    Alert.alert("Help & feedback", "Email feedback to tedtfu@gmail.com.");
+  }
+
+  function confirmDeleteAccount() {
+    if (authStatus !== "signed_in") {
+      router.push({ pathname: "/auth", params: { from: "app" } });
+      return;
+    }
+
+    Alert.alert(
+      "Delete account?",
+      "This deletes your SnapQuote account, business profile, price book, customers, and quotes.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void deleteAccount();
+          }
+        }
+      ]
+    );
+  }
+
+  async function deleteAccount() {
+    if (deletingAccount) {
+      return;
+    }
+
+    setDeletingAccount(true);
+
+    try {
+      await snapquoteApi.deleteAccount();
+      signOut();
+      router.replace("/");
+    } catch (error) {
+      Alert.alert("Could not delete account", userFacingErrorMessage(error));
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
+
+  function openProfileMenu() {
+    const actions = authStatus === "signed_in"
+      ? [
+          { text: "Change logo", onPress: () => void uploadLogo() },
+          { text: "Contact details", onPress: () => router.push("/settings/contact") },
+          { text: "Manage subscription", onPress: () => void openBillingPortal() },
+          { text: "Delete account", style: "destructive" as const, onPress: confirmDeleteAccount },
+          { text: "Cancel", style: "cancel" as const }
+        ]
+      : [
+          { text: "Sign in", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) },
+          { text: "Cancel", style: "cancel" as const }
+        ];
+
+    Alert.alert("Profile actions", undefined, actions);
+  }
 
   return (
     <Screen edges={["top"]}>
@@ -49,7 +200,7 @@ export default function ProfileScreen() {
           <Pressable
             accessibilityRole="button"
             hitSlop={8}
-            onPress={() => Alert.alert("Profile menu", "More profile actions are coming next.")}
+            onPress={openProfileMenu}
             style={styles.navButton}
           >
             <EllipsisVertical color={colors.ink} size={20} strokeWidth={2.6} />
@@ -58,11 +209,16 @@ export default function ProfileScreen() {
 
         <View style={styles.hero}>
           <View style={styles.logoWrap}>
-            <QuoteMark boxed size={78} />
+            {logoUrl ? (
+              <Image source={{ uri: logoUrl }} style={styles.logoImage} />
+            ) : (
+              <QuoteMark boxed size={78} />
+            )}
             <Pressable
               accessibilityLabel="Change business logo"
               accessibilityRole="button"
-              onPress={() => Alert.alert("Change logo", "Image upload needs the image picker/storage step next.")}
+              disabled={uploadingLogo}
+              onPress={() => void uploadLogo()}
               style={styles.cameraBadge}
             >
               <Camera color={colors.ink2} size={14} strokeWidth={2.2} />
@@ -93,11 +249,11 @@ export default function ProfileScreen() {
             onPress={() => router.push("/settings/business")}
           />
           <ProfileRow
-            detail="(416) 555-0148 · sharpedge.co"
+            detail={contactDetail}
             icon={<Phone color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Contact details"
             last
-            onPress={() => Alert.alert("Contact details", "Contact detail editing is coming next.")}
+            onPress={() => router.push("/settings/contact")}
           />
         </ProfileSection>
 
@@ -107,13 +263,13 @@ export default function ProfileScreen() {
             detail="Renews Aug 21"
             icon={<Shield color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Plan"
-            onPress={() => Alert.alert("Plan", "Solo plan for MVP testing.")}
+            onPress={() => void openBillingPortal()}
           />
           <ProfileRow
             icon={<CreditCard color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Manage subscription"
             last
-            onPress={() => Alert.alert("Subscription", "Billing portal is coming next.")}
+            onPress={() => void openBillingPortal()}
           />
         </ProfileSection>
 
@@ -142,7 +298,7 @@ export default function ProfileScreen() {
           <ProfileRow
             icon={<CircleHelp color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Help & feedback"
-            onPress={() => Alert.alert("Help & feedback", "Send feedback from the test channel for now.")}
+            onPress={() => void openFeedback()}
           />
           {authStatus === "signed_in" ? (
             <ProfileRow
@@ -244,6 +400,19 @@ function VerifiedBadge() {
   );
 }
 
+function contactSummary(phone: string | null, website: string | null) {
+  const parts = [phone, website].map((value) => value?.trim()).filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(" · ") : "Add phone and website";
+}
+
+function normalizeImageContentType(contentType: string | null | undefined): "image/jpeg" | "image/png" | "image/webp" {
+  if (contentType === "image/png" || contentType === "image/webp") {
+    return contentType;
+  }
+
+  return "image/jpeg";
+}
+
 const styles = StyleSheet.create({
   content: {
     gap: 23,
@@ -282,6 +451,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     position: "relative",
     width: 86
+  },
+  logoImage: {
+    borderRadius: 22,
+    height: 78,
+    width: 78
   },
   cameraBadge: {
     alignItems: "center",

@@ -21,6 +21,7 @@ type AuthState = {
   error: string | null;
   initialize: () => Promise<void>;
   completeOAuthRedirect: (url: string) => Promise<boolean>;
+  setMe: (me: MeResponse) => void;
   signInWithNativeApple: (input: {
     identityToken: string;
     authorizationCode?: string | undefined;
@@ -109,6 +110,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     return true;
+  },
+
+  setMe: (me) => {
+    set({ me });
   },
 
   signInWithNativeApple: async (input) => {

@@ -3,6 +3,7 @@ import { ArrowLeft, Edit3, Eye, Mail, MessageCircle, Send } from "lucide-react-n
 import { router, useLocalSearchParams } from "expo-router";
 import {
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -103,7 +104,12 @@ export default function QuotePreviewScreen() {
   const sortedLines = [...quote.lineItems].sort(
     (a, b) => a.position - b.position,
   );
-  const senderEmail = me?.user.email ?? "quotes@snapquote.app";
+  const logoUrl = me?.org.logoUrl ?? null;
+  const senderEmail = me?.user.email ?? "";
+  const senderContact = [me?.org.contactPhone, me?.org.website, senderEmail]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(" · ");
   const proposalNumber = quote.id.replace(/[^a-z0-9]/gi, "").slice(-4).toUpperCase() || "1042";
   const terms = quote.terms.trim().length > 0 ? quote.terms : defaultTerms;
   const canSend =
@@ -233,12 +239,16 @@ export default function QuotePreviewScreen() {
           <View style={styles.proposalCard}>
             <View style={styles.businessBlock}>
               <View style={styles.logo}>
-                <Text style={styles.logoText}>{initials(businessName)}</Text>
+                {logoUrl ? (
+                  <Image source={{ uri: logoUrl }} style={styles.logoImage} />
+                ) : (
+                  <Text style={styles.logoText}>{initials(businessName)}</Text>
+                )}
               </View>
               <View style={styles.brandText}>
                 <Text style={styles.brandName}>{businessName}</Text>
                 <Text style={styles.brandSub} numberOfLines={1}>
-                  {senderEmail}
+                  {senderContact}
                 </Text>
               </View>
             </View>
@@ -568,6 +578,11 @@ const styles = StyleSheet.create({
     color: colors.onDark,
     fontSize: 14,
     fontWeight: "900"
+  },
+  logoImage: {
+    borderRadius: 7,
+    height: 42,
+    width: 42
   },
   brandText: {
     flex: 1,

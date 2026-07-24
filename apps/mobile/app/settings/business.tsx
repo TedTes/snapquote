@@ -10,6 +10,7 @@ import { colors, radius } from "../../src/ui/theme";
 
 export default function BusinessSettingsScreen() {
   const authStatus = useAuthStore((state) => state.status);
+  const setMe = useAuthStore((state) => state.setMe);
   const businessName = useMvpStore((state) => state.businessName);
   const defaultTaxRate = useMvpStore((state) => state.defaultTaxRate);
   const defaultTerms = useMvpStore((state) => state.defaultTerms);
@@ -44,6 +45,7 @@ export default function BusinessSettingsScreen() {
           defaultTerms: response.org.defaultTerms,
           quoteValidDays: response.org.quoteValidDays,
         });
+        setMe(response);
       } else {
         updateOrgSettings(patch);
       }
