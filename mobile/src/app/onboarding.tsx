@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getTradeConfig, type PainterCorePriceInput } from "@snapquote/shared";
+import { getTradeConfig, type PainterCorePriceInput, type ServicePriceSuggestion } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../api/client";
 import { useAuthStore } from "../auth/authStore";
 import {
@@ -28,10 +28,12 @@ export default function OnboardingScreen() {
   const storedQuoteValidDays = useQuoteStore((state) => state.quoteValidDays);
   const activeTrade = useQuoteStore((state) => state.activeTrade);
   const tradeConfig = getTradeConfig(activeTrade);
+  const hasEditedCorePrices = useRef(false);
   const [businessName, setBusinessName] = useState("");
   const [taxRate, setTaxRate] = useState("13");
   const [defaultTerms, setDefaultTerms] = useState(storedDefaultTerms);
   const [quoteValidDays, setQuoteValidDays] = useState(String(storedQuoteValidDays));
+  const [suggestionNotice, setSuggestionNotice] = useState<string | null>(null);
   const [corePriceValues, setCorePriceValues] = useState<
     Record<keyof PainterCorePriceInput, string>
   >({
@@ -43,10 +45,41 @@ export default function OnboardingScreen() {
   });
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (authStatus !== "signed_in") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadPricingSuggestions() {
+      try {
+        const response = await snapquoteApi.listPricingSuggestions({ trade: activeTrade });
+        const suggestedValues = corePriceValuesFromSuggestions(response.suggestions);
+
+        if (!cancelled && suggestedValues && !hasEditedCorePrices.current) {
+          setCorePriceValues(suggestedValues);
+          setSuggestionNotice("Published starter suggestions loaded. Confirm or edit before use.");
+        }
+      } catch {
+        if (!cancelled) {
+          setSuggestionNotice(null);
+        }
+      }
+    }
+
+    void loadPricingSuggestions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTrade, authStatus]);
+
   function updateCorePrice(
     key: keyof PainterCorePriceInput,
     value: string,
   ) {
+    hasEditedCorePrices.current = true;
     setCorePriceValues((current) => ({ ...current, [key]: value }));
   }
 
@@ -125,6 +158,7 @@ export default function OnboardingScreen() {
             ? tradeConfig.setup.signedInHelper
             : tradeConfig.setup.offlineHelper}
         </Text>
+        {suggestionNotice ? <Text style={styles.suggestionNotice}>{suggestionNotice}</Text> : null}
 
         <Field
           label="Business name"
@@ -236,6 +270,51 @@ function roomPrices(medium: number) {
   };
 }
 
+function corePriceValuesFromSuggestions(
+  suggestions: ServicePriceSuggestion[],
+): Record<keyof PainterCorePriceInput, string> | null {
+  const byKey = new Map(suggestions.map((suggestion) => [suggestion.templateKey, suggestion]));
+  const paintWalls = roomMediumPrice(byKey.get("paint_walls"));
+  const paintCeiling = roomMediumPrice(byKey.get("paint_ceiling"));
+  const paintTrim = roomMediumPrice(byKey.get("paint_trim"));
+  const paintDoorEachCents = fixedPrice(byKey.get("paint_door"));
+  const heavyPrepHourlyCents = fixedPrice(byKey.get("heavy_wall_prep"));
+
+  if (
+    paintWalls === null ||
+    paintCeiling === null ||
+    paintTrim === null ||
+    paintDoorEachCents === null ||
+    heavyPrepHourlyCents === null
+  ) {
+    return null;
+  }
+
+  return {
+    paintWalls: centsToDollars(paintWalls),
+    paintCeiling: centsToDollars(paintCeiling),
+    paintTrim: centsToDollars(paintTrim),
+    paintDoorEachCents: centsToDollars(paintDoorEachCents),
+    heavyPrepHourlyCents: centsToDollars(heavyPrepHourlyCents),
+  };
+}
+
+function roomMediumPrice(suggestion: ServicePriceSuggestion | undefined): number | null {
+  if (!suggestion || suggestion.pricing.type !== "room_size") {
+    return null;
+  }
+
+  return suggestion.pricing.prices.medium;
+}
+
+function fixedPrice(suggestion: ServicePriceSuggestion | undefined): number | null {
+  if (!suggestion || suggestion.pricing.type !== "fixed") {
+    return null;
+  }
+
+  return suggestion.pricing.unitPriceCents;
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -282,6 +361,12 @@ const styles = StyleSheet.create({
     color: "#475467",
     fontSize: 14,
     lineHeight: 20,
+  },
+  suggestionNotice: {
+    color: "#2E7D5B",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   primaryAction: {
     alignItems: "center",

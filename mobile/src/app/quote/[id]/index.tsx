@@ -372,7 +372,8 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
   const totals = getQuoteTotals(quote);
   const timeline = useMemo(() => getQuoteEvents(props.events, quote.id), [props.events, quote.id]);
   const sortedLines = useMemo(() => [...quote.lineItems].sort((a, b) => a.position - b.position), [quote.lineItems]);
-  const publicUrl = quote.publicToken ? `${apiBaseUrl}/public/quotes/${quote.publicToken}` : null;
+  const hostedPublicUrl = quote.publicUrl?.startsWith("http") ? quote.publicUrl : null;
+  const publicUrl = hostedPublicUrl ?? (quote.publicToken ? `${apiBaseUrl}/public/quotes/${quote.publicToken}` : null);
   const statusMeta = quoteStatusMeta({ quote, events: timeline });
 
   async function revise() {

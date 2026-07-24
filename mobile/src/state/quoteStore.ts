@@ -46,6 +46,7 @@ export type QuoteRecord = {
   audioContentType: string | null;
   audioDurationSeconds: number | null;
   publicToken: string | null;
+  publicUrl: string | null;
   sentAt: string | null;
   firstViewedAt: string | null;
   respondedAt: string | null;
@@ -334,6 +335,7 @@ export const useQuoteStore = create<QuoteStoreState>((set, get) => ({
       audioContentType: wizard.audioContentType,
       audioDurationSeconds: wizard.audioDurationSeconds,
       publicToken: null,
+      publicUrl: null,
       sentAt: null,
       firstViewedAt: null,
       respondedAt: null,
@@ -843,6 +845,7 @@ function remoteQuoteToLocal(quote: ApiQuote): QuoteRecord {
     audioContentType: quote.audioContentType,
     audioDurationSeconds: quote.audioDurationSeconds,
     publicToken: quote.publicToken,
+    publicUrl: quote.publicUrl,
     sentAt: quote.sentAt,
     firstViewedAt: quote.firstViewedAt,
     respondedAt: quote.respondedAt,
@@ -1056,6 +1059,7 @@ function cloneQuoteAsDraft(
     id: newId,
     lineItems: quote.lineItems.map((line) => ({ ...line, id: makeId("line") })),
     publicToken: null,
+    publicUrl: null,
     sentAt: null,
     firstViewedAt: null,
     respondedAt: null,

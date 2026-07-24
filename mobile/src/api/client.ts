@@ -6,6 +6,9 @@ import type {
   QuoteDiscount,
   QuoteLineItem,
   QuoteStatus,
+  PricingRegion,
+  PricingVersion,
+  ServicePriceSuggestion,
   TradeId
 } from "@snapquote/shared";
 
@@ -50,6 +53,7 @@ export type ApiQuote = {
   jobTitle: string;
   status: QuoteStatus;
   publicToken: string;
+  publicUrl: string;
   validUntil: string;
   lineItems: (QuoteLineItem & { id: string })[];
   discount: QuoteDiscount;
@@ -249,6 +253,19 @@ export const snapquoteApi = {
       method: "POST",
       body: input
     }),
+
+  listPricingSuggestions: (input?: {
+    trade?: TradeId | undefined;
+    regionKey?: string | undefined;
+    country?: string | undefined;
+    region?: string | undefined;
+    metro?: string | undefined;
+  }) =>
+    request<{
+      version: PricingVersion | null;
+      region: PricingRegion | null;
+      suggestions: ServicePriceSuggestion[];
+    }>(`/v1/pricing-suggestions${queryString(input)}`),
 
   listPriceBook: () => request<{ items: PriceBookItem[] }>("/v1/price-book"),
 
@@ -456,6 +473,23 @@ function validationErrorMessage(message: string): string | null {
   } catch {
     return null;
   }
+}
+
+function queryString(input: Record<string, string | undefined> | undefined): string {
+  if (!input) {
+    return "";
+  }
+
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(input)) {
+    if (value && value.trim().length > 0) {
+      params.set(key, value);
+    }
+  }
+
+  const text = params.toString();
+  return text.length > 0 ? `?${text}` : "";
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {

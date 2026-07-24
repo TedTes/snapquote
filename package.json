@@ -12,6 +12,8 @@
     "dev": "turbo run dev --parallel",
     "dev:mobile": "pnpm --filter @snapquote/mobile dev",
     "dev:mobile:clear": "pnpm --filter @snapquote/mobile exec expo start --clear",
+    "dev:web": "pnpm --filter @snapquote/web dev",
+    "build:web": "pnpm --filter @snapquote/web build",
     "supabase:db:push": "cd infra/supabase && supabase db push",
     "supabase:functions:serve": "cd infra/supabase && supabase functions serve snapquote --env-file ../../.env",
     "supabase:functions:deploy": "cd infra/supabase && supabase functions deploy snapquote --use-api --no-verify-jwt",

@@ -68,6 +68,7 @@ function quoteWithYellowLine(priceBookItemId: string): QuoteRecord {
     audioContentType: null,
     audioDurationSeconds: null,
     publicToken: null,
+    publicUrl: null,
     sentAt: null,
     firstViewedAt: null,
     respondedAt: null,

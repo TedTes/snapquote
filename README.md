@@ -90,13 +90,22 @@ Point Expo at the Edge Function:
 EXPO_PUBLIC_API_URL=https://<project-ref>.functions.supabase.co/snapquote
 ```
 
+Build and deploy the public quote host:
+
+```sh
+pnpm build:web
+pnpm --filter @snapquote/web deploy
+```
+
 Required or optional Edge Function secrets:
 
 ```sh
 supabase secrets set OPENAI_API_KEY=<key>
 supabase secrets set OPENAI_MODEL=gpt-4.1-mini
-supabase secrets set SNAPQUOTE_PUBLIC_BASE_URL=https://<project-ref>.functions.supabase.co/snapquote
-supabase secrets set SNAPQUOTE_EMAIL_WEBHOOK_URL=https://your-email-worker.example/send
+supabase secrets set SNAPQUOTE_PUBLIC_BASE_URL=https://quotes.your-domain.com
+supabase secrets set RESEND_API_KEY=<resend-api-key>
+supabase secrets set SNAPQUOTE_FROM_EMAIL='SnapQuote <quotes@your-domain.com>'
+supabase secrets set SNAPQUOTE_REPLY_TO_EMAIL=owner@your-domain.com
 supabase secrets set SNAPQUOTE_DEFAULT_ORG_ID=00000000-0000-4000-8000-000000000001
 ```
 
