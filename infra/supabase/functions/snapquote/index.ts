@@ -1319,7 +1319,7 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", quote.org_id));
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
   const lineItems = await listLines(db, quote.id);
-  const publicLink = await single(db.from("snapquote_quote_public_links").select("*").eq("quote_id", quote.id));
+  const publicLink = await ensurePublicQuoteLink(db, quote.id);
   const totals = quote.total_cents === null
     ? null
     : {
@@ -1369,6 +1369,25 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
       now: new Date()
     })
   };
+}
+
+async function ensurePublicQuoteLink(db: SupabaseClient, quoteId: string) {
+  const existing = await maybeSingle(
+    db.from("snapquote_quote_public_links")
+      .select("*")
+      .eq("quote_id", quoteId)
+      .is("revoked_at", null)
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  return await single(
+    db.from("snapquote_quote_public_links")
+      .insert({ quote_id: quoteId, token: publicToken() })
+      .select("*")
+  );
 }
 
 async function patchQuote(db: SupabaseClient, request: Request, quoteId: string) {
@@ -1817,7 +1836,7 @@ function publicQuoteUrl(token: string) {
 }
 
 function quoteEmail(kind: QuoteNotificationKind, quote: Record<string, any>, publicUrl: string) {
-  const orgName = String(quote.org?.name ?? "SnapQuote");
+  const orgName = String(quote.org?.name ?? "QuoteVan");
   const customerName = String(quote.customer?.name ?? "there");
   const total = formatEmailMoney(quote.totals?.totalCents ?? null);
   const validUntil = formatEmailDate(String(quote.validUntil));
@@ -1834,7 +1853,13 @@ function quoteEmail(kind: QuoteNotificationKind, quote: Record<string, any>, pub
   const lineRows = lines
     .map((line: Record<string, any>) => {
       const amount = line.unitPriceCents === null ? null : Math.round(Number(line.quantity) * Number(line.unitPriceCents));
-      return `<tr><td>${escapeHtml(String(line.description))}<br><span>${escapeHtml(describeEmailQuantity(Number(line.quantity), line.unit ?? null))}</span></td><td>${escapeHtml(formatEmailMoney(amount))}</td></tr>`;
+      return `<tr>
+        <td style="padding:14px 24px;border-top:1px solid #e5e0d6;vertical-align:top;color:#1d1c19;line-height:1.35">
+          <strong style="display:block;font-size:15px;line-height:1.25;font-weight:800;word-break:break-word">${escapeHtml(String(line.description))}</strong>
+          <span style="display:block;margin-top:3px;color:#646058;font-size:14px;line-height:1.25">${escapeHtml(describeEmailQuantity(Number(line.quantity), line.unit ?? null))}</span>
+        </td>
+        <td style="padding:14px 24px 14px 12px;border-top:1px solid #e5e0d6;vertical-align:top;text-align:right;white-space:nowrap;color:#1d1c19;font-weight:800;font-size:15px">${escapeHtml(formatEmailMoney(amount))}</td>
+      </tr>`;
     })
     .join("");
   const text = [
@@ -1863,13 +1888,15 @@ function quoteEmail(kind: QuoteNotificationKind, quote: Record<string, any>, pub
           <a href="${escapeHtml(publicUrl)}" style="display:block;background:#1d1c19;color:#fffdfa;text-align:center;text-decoration:none;font-weight:800;border-radius:10px;padding:14px 18px">View quote</a>
         </div>
         ${quote.scopeSummary ? `<div style="padding:0 24px 18px;color:#646058">${escapeHtml(String(quote.scopeSummary))}</div>` : ""}
-        <table style="width:100%;border-collapse:collapse;border-top:1px solid #e5e0d6">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;table-layout:fixed">
           <tbody>${lineRows}</tbody>
         </table>
-        <div style="padding:18px 24px;border-top:1px solid #1d1c19;display:flex;justify-content:space-between;align-items:center">
-          <strong>Total</strong>
-          <strong style="font-size:26px">${escapeHtml(total)}</strong>
-        </div>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border-top:1px solid #1d1c19">
+          <tr>
+            <td style="padding:18px 24px;color:#1d1c19;font-weight:800">Total</td>
+            <td style="padding:18px 24px;text-align:right;color:#1d1c19;font-size:26px;font-weight:800;white-space:nowrap">${escapeHtml(total)}</td>
+          </tr>
+        </table>
       </div>
       <p style="max-width:560px;margin:14px auto 0;text-align:center;color:#8d887f;font-size:13px">No account needed. Questions? Reply to this email.</p>
     </div>
@@ -2580,10 +2607,10 @@ function publicMessageFromError(error: unknown, status: number) {
   const message = messageFromError(error).toLowerCase();
 
   if (message.includes("permission denied") || message.includes("relation ") || message.includes("schema ")) {
-    return "SnapQuote is still finishing setup. Try again in a moment.";
+    return "QuoteVan is still finishing setup. Try again in a moment.";
   }
 
-  return "SnapQuote hit a server problem. Try again in a moment.";
+  return "QuoteVan hit a server problem. Try again in a moment.";
 }
 
 class HttpError extends Error {

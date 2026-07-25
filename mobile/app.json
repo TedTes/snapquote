@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SnapQuote",
+    "name": "QuoteVan",
     "slug": "snapquote",
     "scheme": "snapquote",
     "version": "0.1.0",
@@ -12,14 +12,14 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow SnapQuote to record job notes for quote drafting."
+          "microphonePermission": "Allow QuoteVan to record job notes for quote drafting."
         }
       ],
       "expo-apple-authentication",
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow SnapQuote to choose a business logo from your photo library."
+          "photosPermission": "Allow QuoteVan to choose a business logo from your photo library."
         }
       ]
     ],

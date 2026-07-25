@@ -433,7 +433,7 @@ export function userFacingErrorMessage(error: unknown): string {
     lower.includes("postgres") ||
     lower.includes("supabase")
   ) {
-    return "SnapQuote is still finishing setup. Try again in a moment.";
+    return "QuoteVan is still finishing setup. Try again in a moment.";
   }
 
   if (lower.includes("network request failed") || lower.includes("failed to fetch")) {

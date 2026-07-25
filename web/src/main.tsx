@@ -222,7 +222,7 @@ function Shell(props: { children: ReactNode }) {
 function Centered(props: { title: string; body: string }) {
   return (
     <main className="centered">
-      <div className="brand-mark large">SQ</div>
+      <div className="brand-mark large">QV</div>
       <h1>{props.title}</h1>
       <p>{props.body}</p>
     </main>
@@ -299,11 +299,11 @@ function initials(name: string) {
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "SQ";
+    .join("") || "QV";
 }
 
 function contactLine(org: PublicOrg) {
-  return [org.contactPhone, org.website].filter(Boolean).join(" - ") || "Quote prepared with SnapQuote";
+  return [org.contactPhone, org.website].filter(Boolean).join(" - ") || "Prepared with QuoteVan";
 }
 
 createRoot(document.getElementById("root")!).render(

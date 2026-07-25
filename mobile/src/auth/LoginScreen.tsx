@@ -142,7 +142,7 @@ export default function LoginScreen() {
             <View style={styles.logoBox}>
               <QuoteMark size={64} />
             </View>
-            <Text style={styles.brandName}>SnapQuote</Text>
+            <Text style={styles.brandName}>QuoteVan</Text>
             <Text style={styles.title}>Quote the job before you leave it</Text>
             <Text style={styles.subtitle}>Every price comes from your book — never guessed.</Text>
           </View>

@@ -142,7 +142,7 @@ export default function ProfileScreen() {
   }
 
   async function openFeedback() {
-    const subject = encodeURIComponent("SnapQuote feedback");
+    const subject = encodeURIComponent("QuoteVan feedback");
     const body = encodeURIComponent(`Account: ${email}\n\n`);
     const url = `mailto:tedtfu@gmail.com?subject=${subject}&body=${body}`;
     const canOpen = await Linking.canOpenURL(url);
@@ -163,7 +163,7 @@ export default function ProfileScreen() {
 
     Alert.alert(
       "Delete account?",
-      "This deletes your SnapQuote account, business profile, price book, customers, and quotes.",
+      "This deletes your QuoteVan account, business profile, price book, customers, and quotes.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -357,7 +357,7 @@ export default function ProfileScreen() {
           )}
         </ProfileSection>
 
-        <Text style={styles.version}>SnapQuote · v0.4.1</Text>
+        <Text style={styles.version}>QuoteVan · v0.4.1</Text>
       </ScrollView>
     </Screen>
   );

@@ -359,7 +359,7 @@ function EmptyPriceBookState(props: {
 
       <Text style={styles.emptyHeadline}>Build your price book</Text>
       <Text style={styles.emptyCopy}>
-        This is where your prices live. SnapQuote drafts the scope of a job, but
+        This is where your prices live. QuoteVan drafts the scope of a job, but
         pulls every dollar from here — so it never guesses.
       </Text>
 

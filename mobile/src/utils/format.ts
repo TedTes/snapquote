@@ -64,7 +64,7 @@ export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
 
   if (parts.length === 0) {
-    return "SQ";
+    return "QV";
   }
 
   return parts

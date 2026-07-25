@@ -87,7 +87,7 @@ export const tradeConfigs = {
     id: painterTrade,
     label: "Painting",
     businessCategory: "Home service",
-    defaultBusinessName: "SnapQuote Services",
+    defaultBusinessName: "QuoteVan Services",
     defaultTerms: "50% deposit due to schedule the job, balance due on completion.",
     starterDefinitions: painterStarterDefinitions,
     corePriceKeys: painterCorePriceKeys,

@@ -72,7 +72,7 @@ export default function BusinessSettingsScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Business details</Text>
           <Text style={styles.subtitle}>
-            These defaults print on quotes and set the totals SnapQuote calculates.
+            These defaults print on quotes and set the totals QuoteVan calculates.
           </Text>
         </View>
 
