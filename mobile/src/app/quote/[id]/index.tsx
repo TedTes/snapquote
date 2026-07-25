@@ -36,8 +36,10 @@ import {
   type StoredLineItem
 } from "../../../state/quoteStore";
 import type { Customer, QuoteEvent } from "@snapquote/shared";
+import { useRemoteQuoteRefresh } from "../../../sync/useRemoteQuoteRefresh";
 
 export default function QuoteScreen() {
+  useRemoteQuoteRefresh({ pollMs: 10000 });
   const { id } = useLocalSearchParams<{ id: string }>();
   const quote = useQuoteStore((state) => state.quotes.find((candidate) => candidate.id === id));
   const customers = useQuoteStore((state) => state.customers);
@@ -461,7 +463,7 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
       return;
     }
 
-    void Linking.openURL(`mailto:${email}?subject=${encodeURIComponent(`Quote from SnapQuote`)}`);
+    void Linking.openURL(`mailto:${email}?subject=${encodeURIComponent("Quote from QuoteVan")}`);
   }
 
   function sharePublicLink() {
@@ -473,6 +475,10 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
     void Share.share({ message: publicUrl, url: publicUrl });
   }
 
+  function closeQuoteDetail() {
+    router.replace("/quotes");
+  }
+
   return (
     <Screen edges={["top"]}>
       <View style={styles.detailScreen}>
@@ -481,7 +487,7 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.draftNav}>
-            <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.navButton}>
+            <Pressable accessibilityRole="button" onPress={closeQuoteDetail} style={styles.navButton}>
               <ChevronLeft color={colors.ink} size={18} strokeWidth={2.5} />
             </Pressable>
             <View style={styles.detailNavIdentity}>

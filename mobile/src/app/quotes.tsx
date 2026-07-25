@@ -21,6 +21,7 @@ import { colors, radius } from "../components/theme";
 import { formatMoney, formatShortDate } from "../utils/format";
 import { useQuoteRows, type QuoteRow } from "../state/useQuoteRows";
 import type { QuoteRecord } from "../state/quoteStore";
+import { useRemoteQuoteRefresh } from "../sync/useRemoteQuoteRefresh";
 
 type FilterKey = "all" | "draft" | "sent" | "viewed" | "accepted" | "stale";
 
@@ -38,6 +39,7 @@ const searchThreshold = 7;
 export default function QuotesScreen() {
   const params = useLocalSearchParams<{ filter?: string }>();
   const rows = useQuoteRows();
+  useRemoteQuoteRefresh({ pollMs: 30000 });
 
   const initialFilter = filterOptions.some((option) => option.key === params.filter)
     ? (params.filter as FilterKey)
@@ -253,7 +255,7 @@ function EmptyQuotesState() {
 
       <Text style={styles.emptyHeadline}>Your first quote starts here</Text>
       <Text style={styles.emptyCopy}>
-        Walk the job, talk it through, and SnapQuote drafts the scope — priced only from your book.
+        Walk the job, talk it through, and QuoteVan drafts the scope — priced only from your book.
       </Text>
 
       <Text style={styles.emptyHint}>Tap the + button below to start.</Text>

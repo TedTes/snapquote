@@ -9,12 +9,14 @@ import { colors, radius } from "../components/theme";
 import { businessInitials, displayBusinessName, formatMoney } from "../utils/format";
 import { useQuoteRows } from "../state/useQuoteRows";
 import { useQuoteStore, type QuoteRecord } from "../state/quoteStore";
+import { useRemoteQuoteRefresh } from "../sync/useRemoteQuoteRefresh";
 
 type QuotesFilter = "draft" | "sent" | "viewed" | "stale" | "accepted";
 
 export default function DashboardScreen() {
   const businessName = useQuoteStore((state) => state.businessName);
   const rows = useQuoteRows();
+  useRemoteQuoteRefresh({ pollMs: 30000 });
   const businessDisplayName = displayBusinessName(businessName, "Add business name");
 
   const metrics = useMemo(() => {
@@ -186,7 +188,7 @@ function EmptyDashboardInfo() {
 
       <Text style={styles.emptyInfoTitle}>Send your first quote</Text>
       <Text style={styles.emptyInfoCopy}>
-        Tap the + below — walk the job, talk it through, and SnapQuote drafts a priced quote from your book.
+        Tap the + below — walk the job, talk it through, and QuoteVan drafts a priced quote from your book.
       </Text>
 
       <View style={styles.emptyLock}>
