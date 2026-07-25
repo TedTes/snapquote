@@ -22,7 +22,9 @@ import {
   type TradeId,
 } from "@snapquote/shared";
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { ApiQuote, MeResponse } from "../api/client";
+import { createFileStorage } from "./fileStorage";
 
 export type StoredLineItem = QuoteLineItem & { id: string };
 
@@ -222,7 +224,23 @@ const initialPriceBook = buildStarterPriceBookForTrade({
   corePrices: defaultCorePrices,
 });
 
-export const useQuoteStore = create<QuoteStoreState>((set, get) => ({
+type PersistedQuoteStoreState = Pick<
+  QuoteStoreState,
+  | "onboarded"
+  | "activeTrade"
+  | "businessName"
+  | "defaultTaxRate"
+  | "defaultTerms"
+  | "quoteValidDays"
+  | "setupCompletedAt"
+  | "priceBookItems"
+  | "customers"
+  | "quotes"
+  | "events"
+  | "wizard"
+>;
+
+export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
   onboarded: false,
   activeTrade: defaultTrade,
   businessName: "",
@@ -821,6 +839,55 @@ export const useQuoteStore = create<QuoteStoreState>((set, get) => ({
         events: [...remoteEvents, ...localEvents],
       };
     });
+  },
+}), {
+  name: "quote-store",
+  version: 1,
+  storage: createJSONStorage(() => createFileStorage()),
+  partialize: (state): PersistedQuoteStoreState => ({
+    onboarded: state.onboarded,
+    activeTrade: state.activeTrade,
+    businessName: state.businessName,
+    defaultTaxRate: state.defaultTaxRate,
+    defaultTerms: state.defaultTerms,
+    quoteValidDays: state.quoteValidDays,
+    setupCompletedAt: state.setupCompletedAt,
+    priceBookItems: state.priceBookItems,
+    customers: state.customers,
+    quotes: state.quotes,
+    events: state.events,
+    wizard: state.wizard,
+  }),
+  merge: (persistedState, currentState) => {
+    const persisted = persistedState as Partial<PersistedQuoteStoreState>;
+
+    return {
+      ...currentState,
+      ...persisted,
+      activeTrade: persisted.activeTrade ?? currentState.activeTrade,
+      businessName: persisted.businessName ?? currentState.businessName,
+      defaultTaxRate: typeof persisted.defaultTaxRate === "number"
+        ? persisted.defaultTaxRate
+        : currentState.defaultTaxRate,
+      defaultTerms: persisted.defaultTerms ?? currentState.defaultTerms,
+      quoteValidDays: typeof persisted.quoteValidDays === "number"
+        ? persisted.quoteValidDays
+        : currentState.quoteValidDays,
+      setupCompletedAt: persisted.setupCompletedAt ?? currentState.setupCompletedAt,
+      priceBookItems: Array.isArray(persisted.priceBookItems)
+        ? persisted.priceBookItems
+        : currentState.priceBookItems,
+      customers: Array.isArray(persisted.customers)
+        ? persisted.customers
+        : currentState.customers,
+      quotes: Array.isArray(persisted.quotes)
+        ? persisted.quotes.map((quote) => ({ ...quote, publicUrl: quote.publicUrl ?? null }))
+        : currentState.quotes,
+      events: Array.isArray(persisted.events)
+        ? persisted.events
+        : currentState.events,
+      wizard: persisted.wizard ?? currentState.wizard,
+    };
   },
 }));
 
