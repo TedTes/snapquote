@@ -32,7 +32,7 @@ export function QuoteCard(props: { row: QuoteRow; onPress: () => void; onFollowU
                 {formatMoney(amountCents)}
                 {partial ? "+" : ""}
               </Text>
-              <Text style={styles.status}>{row.status.toUpperCase()}</Text>
+              <Text style={styles.status}>{cardStatusLabel(row)}</Text>
             </View>
           </View>
 
@@ -104,7 +104,7 @@ function cardAlert(row: QuoteRow): {
 
   if (row.status === "viewed") {
     return {
-      label: "Viewed, waiting on reply",
+      label: `Viewed · ${formatRelativeToNow(row.quote.firstViewedAt ?? row.quote.updatedAt)}`,
       color: colors.amber,
       bg: colors.amberBg,
       kind: "clock"
@@ -120,12 +120,55 @@ function cardAlert(row: QuoteRow): {
     };
   }
 
+  if (row.status === "sent") {
+    return {
+      label: "Sent · not viewed yet",
+      color: colors.ink2,
+      bg: colors.surfaceMuted,
+      kind: "clock"
+    };
+  }
+
+  if (row.status === "declined") {
+    return {
+      label: "Declined by customer",
+      color: colors.red,
+      bg: colors.redBg,
+      kind: "alert"
+    };
+  }
+
+  if (row.status === "superseded") {
+    return {
+      label: "Replaced by a newer quote",
+      color: colors.ink3,
+      bg: colors.surfaceMuted,
+      kind: "clock"
+    };
+  }
+
   return {
     label: `${row.status} · ${formatRelativeToNow(row.quote.updatedAt)}`,
     color: colors.ink3,
     bg: colors.surfaceMuted,
     kind: "clock"
   };
+}
+
+function cardStatusLabel(row: QuoteRow): string {
+  if (row.stale) {
+    return "FOLLOW-UP";
+  }
+
+  if (row.status === "viewed") {
+    return "VIEWED";
+  }
+
+  if (row.status === "superseded") {
+    return "REPLACED";
+  }
+
+  return row.status.toUpperCase();
 }
 
 const styles = StyleSheet.create({

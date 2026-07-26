@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { ArrowLeft, Edit3, Eye, Mail, MessageCircle, Send } from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, Edit3, Eye, Link2, Mail, MessageCircle, Send } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   Alert,
   Image,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -29,7 +30,7 @@ import {
 } from "../../../components/base";
 import { colors, radius, spacing } from "../../../components/theme";
 import { describeQuantity, formatLongDate, formatMoney, initials } from "../../../utils/format";
-import { snapquoteApi, userFacingErrorMessage } from "../../../api/client";
+import { snapquoteApi, userFacingErrorMessage, type ApiQuote } from "../../../api/client";
 import { useAuthStore } from "../../../auth/authStore";
 import {
   getCustomer,
@@ -72,6 +73,7 @@ export default function QuotePreviewScreen() {
   );
   const [sending, setSending] = useState(false);
   const [savingDiscount, setSavingDiscount] = useState(false);
+  const [sentQuote, setSentQuote] = useState<ApiQuote | null>(null);
 
   if (!id || !quote) {
     return (
@@ -124,7 +126,7 @@ export default function QuotePreviewScreen() {
       setShowSendSheet(false);
       Alert.alert(
         "Continue to send",
-        "Use Apple, Google, or an email link to send this quote and track customer views.",
+        "Use Apple or Google to send this quote and track customer views.",
         [
           { text: "Not now", style: "cancel" },
           { text: "Continue", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) },
@@ -175,12 +177,36 @@ export default function QuotePreviewScreen() {
       const updated = await snapquoteApi.sendQuote(quoteIdToSend);
       upsertRemoteQuote(updated);
       setShowSendSheet(false);
-      router.replace({ pathname: "/quote/[id]", params: { id: updated.id } });
+      setSentQuote(updated);
     } catch (error) {
       Alert.alert("Could not send quote", userFacingErrorMessage(error));
     } finally {
       setSending(false);
     }
+  }
+
+  function openSentQuoteDetail() {
+    if (!sentQuote) {
+      return;
+    }
+
+    const sentId = sentQuote.id;
+    setSentQuote(null);
+    router.replace({ pathname: "/quote/[id]", params: { id: sentId } });
+  }
+
+  function openQuotesList() {
+    setSentQuote(null);
+    router.replace("/quotes");
+  }
+
+  async function shareSentQuoteLink() {
+    if (!sentQuote?.publicUrl) {
+      Alert.alert("Link not ready", "QuoteVan is still creating the customer link. Open the quote status screen and try again.");
+      return;
+    }
+
+    await Share.share({ message: sentQuote.publicUrl, url: sentQuote.publicUrl });
   }
 
   async function saveDiscount() {
@@ -411,6 +437,25 @@ export default function QuotePreviewScreen() {
       </SheetModal>
 
       <SheetModal
+        onDismiss={openSentQuoteDetail}
+        style={styles.modalBackdrop}
+        visible={sentQuote !== null}
+      >
+        <AnimatedSheetContent style={styles.sheet}>
+          <View style={styles.grabber} />
+          {sentQuote ? (
+            <SentSuccessContent
+              email={sentQuote.customer?.email ?? customer?.email ?? ""}
+              onOpenQuote={openSentQuoteDetail}
+              onOpenQuotes={openQuotesList}
+              onShareLink={() => void shareSentQuoteLink()}
+              total={sentQuote.totals ? formatMoney(sentQuote.totals.totalCents) : "$--"}
+            />
+          ) : null}
+        </AnimatedSheetContent>
+      </SheetModal>
+
+      <SheetModal
         onDismiss={() => setShowDiscountSheet(false)}
         style={styles.modalBackdrop}
         visible={showDiscountSheet}
@@ -445,6 +490,39 @@ export default function QuotePreviewScreen() {
         </AnimatedSheetContent>
       </SheetModal>
     </Screen>
+  );
+}
+
+function SentSuccessContent(props: {
+  email: string;
+  onOpenQuote: () => void;
+  onOpenQuotes: () => void;
+  onShareLink: () => void;
+  total: string;
+}) {
+  return (
+    <View style={styles.sentSuccess}>
+      <View style={styles.sentSuccessIcon}>
+        <CheckCircle2 color={colors.green} size={36} strokeWidth={2.4} />
+      </View>
+      <Text style={styles.sentSuccessTitle}>Quote sent</Text>
+      <Text style={styles.sentSuccessCopy}>
+        {props.total} was emailed to {props.email || "your customer"}. QuoteVan will mark it viewed when they open the link.
+      </Text>
+
+      <View style={styles.sentActionRow}>
+        <Pressable accessibilityRole="button" onPress={props.onOpenQuote} style={styles.sentAction}>
+          <Eye color={colors.ink} size={18} strokeWidth={2.2} />
+          <Text style={styles.sentActionText}>Status</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={props.onShareLink} style={styles.sentAction}>
+          <Link2 color={colors.ink} size={18} strokeWidth={2.2} />
+          <Text style={styles.sentActionText}>Share link</Text>
+        </Pressable>
+      </View>
+
+      <PrimaryButton label="Back to quotes" onPress={props.onOpenQuotes} />
+    </View>
   );
 }
 
@@ -903,5 +981,54 @@ const styles = StyleSheet.create({
     color: colors.ink3,
     fontSize: 13,
     fontWeight: "600"
+  },
+  sentSuccess: {
+    alignItems: "center",
+    gap: 12,
+    paddingTop: 4
+  },
+  sentSuccessIcon: {
+    alignItems: "center",
+    backgroundColor: colors.greenBg,
+    borderColor: colors.greenBorder,
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 64,
+    justifyContent: "center",
+    width: 64
+  },
+  sentSuccessTitle: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: "900"
+  },
+  sentSuccessCopy: {
+    color: colors.ink2,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 19,
+    maxWidth: 310,
+    textAlign: "center"
+  },
+  sentActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%"
+  },
+  sentAction: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flex: 1,
+    gap: 6,
+    height: 58,
+    justifyContent: "center"
+  },
+  sentActionText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800"
   }
 });
