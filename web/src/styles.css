@@ -14,6 +14,9 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 0%, rgb(255 253 250 / 70%), transparent 28rem),
+    #ebe9e3;
 }
 
 button {
@@ -22,7 +25,7 @@ button {
 
 .page {
   min-height: 100vh;
-  padding: 24px 14px 48px;
+  padding: 28px 14px 48px;
 }
 
 .quote-card,
@@ -51,8 +54,8 @@ button {
   grid-template-columns: 58px 1fr;
   gap: 14px;
   align-items: center;
-  padding-top: 24px;
-  padding-bottom: 18px;
+  padding-top: 26px;
+  padding-bottom: 20px;
 }
 
 .brand-mark {
@@ -65,6 +68,10 @@ button {
   color: #fffdfa;
   font-weight: 800;
   letter-spacing: 0;
+}
+
+.brand-mark.image {
+  object-fit: cover;
 }
 
 .brand-mark.large {
@@ -89,8 +96,9 @@ p {
 }
 
 h1 {
-  font-size: 24px;
+  font-size: 25px;
   line-height: 1.06;
+  letter-spacing: -0.015em;
 }
 
 h2 {
@@ -131,16 +139,38 @@ h2 {
   border-bottom: 1px solid #e5e0d6;
 }
 
+.lines {
+  padding-top: 16px;
+}
+
+.lines-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.lines-heading .section-label {
+  margin-bottom: 0;
+}
+
+.lines-heading span {
+  color: #8d887f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .line-row,
 .total-row {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 20px;
+  gap: 16px;
   align-items: start;
 }
 
 .line-row {
-  padding: 13px 0;
+  padding: 14px 0;
   border-bottom: 1px solid #efebe3;
 }
 
@@ -158,6 +188,16 @@ h2 {
   display: block;
 }
 
+.line-row strong:first-child {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.line-row > strong {
+  font-size: 15px;
+}
+
 .total-row {
   padding: 4px 0;
   color: #646058;
@@ -171,11 +211,14 @@ h2 {
   font-size: 22px;
 }
 
+.response-wrap {
+  padding: 20px 22px 22px;
+}
+
 .actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  padding: 20px 22px 22px;
 }
 
 .actions button {
@@ -202,10 +245,20 @@ h2 {
 }
 
 .response {
-  margin: 20px 22px 22px;
+  display: grid;
+  gap: 4px;
   padding: 15px;
   border-radius: 12px;
-  font-weight: 800;
+  font-weight: 700;
+}
+
+.response strong {
+  font-size: 15px;
+}
+
+.response span {
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .accepted {
@@ -216,6 +269,14 @@ h2 {
 .declined {
   background: #f7e3df;
   color: #b23a2e;
+}
+
+.action-note {
+  margin-top: 10px;
+  color: #8d887f;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
 }
 
 .footnote {
@@ -240,12 +301,18 @@ h2 {
 @media (max-width: 520px) {
   .page {
     padding: 0;
-    background: #fffdfa;
+    background: #ebe9e3;
   }
 
-  .quote-card,
+  .quote-card {
+    min-height: 100svh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
   .centered {
-    min-height: 100vh;
+    min-height: 100svh;
     border: 0;
     border-radius: 0;
     box-shadow: none;
@@ -260,5 +327,31 @@ h2 {
 
   .quote-meta {
     gap: 8px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  .brand-mark {
+    width: 50px;
+    height: 50px;
+  }
+
+  .response-wrap {
+    position: sticky;
+    bottom: 0;
+    background: rgb(255 253 250 / 96%);
+    border-top: 1px solid #ded9cd;
+    box-shadow: 0 -12px 28px rgb(29 28 25 / 8%);
+    padding: 14px 18px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .terms {
+    padding-bottom: 20px;
+  }
+
+  .footnote {
+    display: none;
   }
 }

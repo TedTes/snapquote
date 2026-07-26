@@ -1854,14 +1854,18 @@ function quoteEmail(kind: QuoteNotificationKind, quote: Record<string, any>, pub
     .map((line: Record<string, any>) => {
       const amount = line.unitPriceCents === null ? null : Math.round(Number(line.quantity) * Number(line.unitPriceCents));
       return `<tr>
-        <td style="padding:14px 24px;border-top:1px solid #e5e0d6;vertical-align:top;color:#1d1c19;line-height:1.35">
-          <strong style="display:block;font-size:15px;line-height:1.25;font-weight:800;word-break:break-word">${escapeHtml(String(line.description))}</strong>
-          <span style="display:block;margin-top:3px;color:#646058;font-size:14px;line-height:1.25">${escapeHtml(describeEmailQuantity(Number(line.quantity), line.unit ?? null))}</span>
+        <td style="padding:13px 22px;border-top:1px solid #eee9df;vertical-align:top;color:#1d1c19;line-height:1.35">
+          <strong style="display:block;font-size:14px;line-height:1.25;font-weight:800;word-break:break-word">${escapeHtml(String(line.description))}</strong>
+          <span style="display:block;margin-top:3px;color:#6f6a61;font-size:13px;line-height:1.25">${escapeHtml(describeEmailQuantity(Number(line.quantity), line.unit ?? null))}</span>
         </td>
-        <td style="padding:14px 24px 14px 12px;border-top:1px solid #e5e0d6;vertical-align:top;text-align:right;white-space:nowrap;color:#1d1c19;font-weight:800;font-size:15px">${escapeHtml(formatEmailMoney(amount))}</td>
+        <td style="padding:13px 22px 13px 10px;border-top:1px solid #eee9df;vertical-align:top;text-align:right;white-space:nowrap;color:#1d1c19;font-weight:800;font-size:14px">${escapeHtml(formatEmailMoney(amount))}</td>
       </tr>`;
     })
     .join("");
+  const subtotal = formatEmailMoney(quote.totals?.subtotalCents ?? null);
+  const tax = formatEmailMoney(quote.totals?.taxCents ?? null);
+  const discount = quote.totals && Number(quote.totals.discountCents) > 0 ? formatEmailMoney(Number(quote.totals.discountCents)) : null;
+  const taxLabel = `Tax (${Math.round(Number(quote.taxRate ?? 0) * 100)}%)`;
   const text = [
     `Hi ${customerName},`,
     "",
@@ -1877,28 +1881,44 @@ function quoteEmail(kind: QuoteNotificationKind, quote: Record<string, any>, pub
     "No account is needed."
   ].filter((line) => line !== "").join("\n");
   const html = `
-    <div style="margin:0;background:#ebe9e3;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1d1c19">
-      <div style="max-width:560px;margin:0 auto;background:#fffdfa;border:1px solid #ded9cd;border-radius:16px;overflow:hidden">
-        <div style="padding:24px 24px 16px">
-          <p style="margin:0 0 12px;color:#8d887f;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase">Quote from</p>
-          <h1 style="margin:0 0 8px;font-size:28px;line-height:1.1">${escapeHtml(orgName)}</h1>
-          <p style="margin:0;color:#646058">Hi ${escapeHtml(customerName)}, ${escapeHtml(intro)} Valid until ${escapeHtml(validUntil)}.</p>
-        </div>
-        <div style="padding:0 24px 20px">
-          <a href="${escapeHtml(publicUrl)}" style="display:block;background:#1d1c19;color:#fffdfa;text-align:center;text-decoration:none;font-weight:800;border-radius:10px;padding:14px 18px">View quote</a>
-        </div>
-        ${quote.scopeSummary ? `<div style="padding:0 24px 18px;color:#646058">${escapeHtml(String(quote.scopeSummary))}</div>` : ""}
+    <div style="margin:0;background:#ebe9e3;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#1d1c19">
+      <div style="max-width:560px;margin:0 auto;background:#fffdfa;border:1px solid #ded9cd;border-radius:16px;overflow:hidden;box-shadow:0 12px 34px rgba(29,28,25,.08)">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">
+          <tr>
+            <td style="padding:24px 24px 16px">
+              <p style="margin:0 0 10px;color:#8d887f;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase">Quote from</p>
+              <h1 style="margin:0 0 8px;color:#1d1c19;font-size:24px;line-height:1.1;font-weight:850">${escapeHtml(orgName)}</h1>
+              <p style="margin:0;color:#646058;font-size:14px;line-height:1.45">Hi ${escapeHtml(customerName)}, ${escapeHtml(intro)} Valid until ${escapeHtml(validUntil)}.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 20px">
+              <a href="${escapeHtml(publicUrl)}" style="display:block;background:#1d1c19;color:#fffdfa;text-align:center;text-decoration:none;font-weight:800;border-radius:10px;padding:14px 18px">View quote</a>
+            </td>
+          </tr>
+          ${quote.scopeSummary ? `<tr><td style="padding:0 24px 18px;color:#646058;font-size:14px;line-height:1.45">${escapeHtml(String(quote.scopeSummary))}</td></tr>` : ""}
+        </table>
         <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;table-layout:fixed">
           <tbody>${lineRows}</tbody>
         </table>
-        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border-top:1px solid #1d1c19">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#fbfaf6;border-top:1px solid #ded9cd">
           <tr>
-            <td style="padding:18px 24px;color:#1d1c19;font-weight:800">Total</td>
-            <td style="padding:18px 24px;text-align:right;color:#1d1c19;font-size:26px;font-weight:800;white-space:nowrap">${escapeHtml(total)}</td>
+            <td style="padding:16px 22px 4px;color:#646058;font-size:14px">Subtotal</td>
+            <td style="padding:16px 22px 4px;text-align:right;color:#646058;font-size:14px;font-weight:700;white-space:nowrap">${escapeHtml(subtotal)}</td>
+          </tr>
+          ${discount ? `<tr><td style="padding:4px 22px;color:#646058;font-size:14px">Discount</td><td style="padding:4px 22px;text-align:right;color:#646058;font-size:14px;font-weight:700;white-space:nowrap">-${escapeHtml(discount)}</td></tr>` : ""}
+          <tr>
+            <td style="padding:4px 22px 12px;color:#646058;font-size:14px">${escapeHtml(taxLabel)}</td>
+            <td style="padding:4px 22px 12px;text-align:right;color:#646058;font-size:14px;font-weight:700;white-space:nowrap">${escapeHtml(tax)}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 22px 18px;border-top:1px solid #1d1c19;color:#1d1c19;font-size:18px;font-weight:800">Total</td>
+            <td style="padding:14px 22px 18px;border-top:1px solid #1d1c19;text-align:right;color:#1d1c19;font-size:24px;font-weight:850;white-space:nowrap">${escapeHtml(total)}</td>
           </tr>
         </table>
+        ${quote.terms ? `<div style="padding:16px 22px;border-top:1px solid #e5e0d6;color:#646058;font-size:13px;line-height:1.45"><strong style="color:#1d1c19">Terms.</strong> ${escapeHtml(String(quote.terms))}</div>` : ""}
       </div>
-      <p style="max-width:560px;margin:14px auto 0;text-align:center;color:#8d887f;font-size:13px">No account needed. Questions? Reply to this email.</p>
+      <p style="max-width:560px;margin:14px auto 0;text-align:center;color:#8d887f;font-size:12px;line-height:1.4">No account needed. Questions? Reply to this email. Sent with QuoteVan.</p>
     </div>
   `;
 

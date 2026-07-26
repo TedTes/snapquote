@@ -123,37 +123,43 @@ function App() {
     return <Shell><Centered title="Quote unavailable" body={state.message} /></Shell>;
   }
 
+  const quote = state.quote;
+
   return (
     <Shell>
       <main className="quote-card" aria-label="Quote">
         <header className="quote-header">
-          <div className="brand-mark">{initials(state.quote.org.name)}</div>
+          <BrandMark org={quote.org} />
           <div>
             <p className="eyebrow">Quote from</p>
-            <h1>{state.quote.org.name}</h1>
-            <p>{contactLine(state.quote.org)}</p>
+            <h1>{quote.org.name}</h1>
+            <p>{contactLine(quote.org)}</p>
           </div>
         </header>
 
         <div className="quote-meta">
-          <Meta label="Quote" value={`#${state.quote.id.slice(0, 4).toUpperCase()}`} />
-          <Meta label="Issued" value={formatDate(state.quote.sentAt ?? state.quote.createdAt)} />
-          <Meta label="Valid Until" value={formatDate(state.quote.validUntil)} />
+          <Meta label="Quote" value={`#${quote.id.slice(0, 4).toUpperCase()}`} />
+          <Meta label="Issued" value={formatDate(quote.sentAt ?? quote.createdAt)} />
+          <Meta label="Valid Until" value={formatDate(quote.validUntil)} />
         </div>
 
         <section className="customer-section">
           <p className="section-label">Prepared for</p>
-          <h2>{state.quote.customer?.name ?? "Customer"}</h2>
-          <p>{state.quote.address}</p>
+          <h2>{quote.customer?.name ?? "Customer"}</h2>
+          <p>{quote.address}</p>
         </section>
 
         <section>
           <p className="section-label">Scope of work</p>
-          <p className="scope">{state.quote.scopeSummary || state.quote.jobTitle || "Work described in the line items below."}</p>
+          <p className="scope">{quote.scopeSummary || quote.jobTitle || "Work described in the line items below."}</p>
         </section>
 
         <section className="lines">
-          {state.quote.lineItems.map((line) => (
+          <div className="lines-heading">
+            <p className="section-label">Line items</p>
+            <span>{quote.lineItems.length} {quote.lineItems.length === 1 ? "line" : "lines"}</span>
+          </div>
+          {quote.lineItems.map((line) => (
             <div className="line-row" key={line.id}>
               <div>
                 <strong>{line.description}</strong>
@@ -165,19 +171,19 @@ function App() {
         </section>
 
         <section className="totals">
-          <TotalRow label="Subtotal" value={formatMoney(state.quote.totals?.subtotalCents ?? null)} />
-          {state.quote.totals && state.quote.totals.discountCents > 0 ? (
-            <TotalRow label="Discount" value={`-${formatMoney(state.quote.totals.discountCents)}`} />
+          <TotalRow label="Subtotal" value={formatMoney(quote.totals?.subtotalCents ?? null)} />
+          {quote.totals && quote.totals.discountCents > 0 ? (
+            <TotalRow label="Discount" value={`-${formatMoney(quote.totals.discountCents)}`} />
           ) : null}
-          <TotalRow label={`Tax (${Math.round(state.quote.taxRate * 100)}%)`} value={formatMoney(state.quote.totals?.taxCents ?? null)} />
-          <TotalRow strong label="Total" value={formatMoney(state.quote.totals?.totalCents ?? null)} />
+          <TotalRow label={`Tax (${Math.round(quote.taxRate * 100)}%)`} value={formatMoney(quote.totals?.taxCents ?? null)} />
+          <TotalRow strong label="Total" value={formatMoney(quote.totals?.totalCents ?? null)} />
         </section>
 
         <section className="terms">
-          <strong>Terms.</strong> {state.quote.terms}
+          <strong>Terms.</strong> {quote.terms}
         </section>
 
-        <ResponsePanel quote={state.quote} action={action} onRespond={respond} />
+        <ResponsePanel quote={quote} action={action} onRespond={respond} />
       </main>
       <p className="footnote">No account needed. Questions? Reply to the email.</p>
     </Shell>
@@ -190,27 +196,51 @@ function ResponsePanel(props: {
   onRespond: (action: "accept" | "decline") => Promise<void>;
 }) {
   if (props.quote.status === "accepted") {
-    return <div className="response accepted">Accepted. The sender has been notified.</div>;
+    return (
+      <div className="response-wrap">
+        <div className="response accepted">
+          <strong>Quote accepted</strong>
+          <span>The sender has been notified.</span>
+        </div>
+      </div>
+    );
   }
 
   if (props.quote.status === "declined") {
-    return <div className="response declined">Declined. The sender has been notified.</div>;
+    return (
+      <div className="response-wrap">
+        <div className="response declined">
+          <strong>Quote declined</strong>
+          <span>The sender has been notified.</span>
+        </div>
+      </div>
+    );
   }
 
   const expired = new Date() > new Date(`${props.quote.validUntil}T23:59:59`);
 
   if (expired) {
-    return <div className="response declined">This quote has expired. Ask the sender for a revised quote.</div>;
+    return (
+      <div className="response-wrap">
+        <div className="response declined">
+          <strong>Quote expired</strong>
+          <span>Ask the sender for a revised quote.</span>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="actions">
-      <button className="accept" disabled={props.action !== null} onClick={() => void props.onRespond("accept")}>
-        {props.action === "accept" ? "Accepting..." : "Accept quote"}
-      </button>
-      <button className="decline" disabled={props.action !== null} onClick={() => void props.onRespond("decline")}>
-        {props.action === "decline" ? "Declining..." : "Decline"}
-      </button>
+    <div className="response-wrap">
+      <div className="actions">
+        <button className="accept" disabled={props.action !== null} onClick={() => void props.onRespond("accept")}>
+          {props.action === "accept" ? "Accepting..." : "Accept quote"}
+        </button>
+        <button className="decline" disabled={props.action !== null} onClick={() => void props.onRespond("decline")}>
+          {props.action === "decline" ? "Declining..." : "Decline"}
+        </button>
+      </div>
+      <p className="action-note">Accepting or declining notifies the sender immediately.</p>
     </div>
   );
 }
@@ -236,6 +266,14 @@ function Meta(props: { label: string; value: string }) {
       <strong>{props.value}</strong>
     </div>
   );
+}
+
+function BrandMark(props: { org: PublicOrg }) {
+  if (props.org.logoUrl) {
+    return <img alt="" className="brand-mark image" src={props.org.logoUrl} />;
+  }
+
+  return <div className="brand-mark">{initials(props.org.name)}</div>;
 }
 
 function TotalRow(props: { label: string; value: string; strong?: boolean }) {
