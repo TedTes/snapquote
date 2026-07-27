@@ -143,6 +143,7 @@ type QuoteStoreState = {
   defaultTaxRate: number;
   defaultTerms: string;
   quoteValidDays: number;
+  defaultDepositPercent: number;
   setupCompletedAt: string | null;
 
   priceBookItems: PriceBookItem[];
@@ -165,6 +166,7 @@ type QuoteStoreState = {
     defaultTaxRate?: number;
     defaultTerms?: string;
     quoteValidDays?: number;
+    defaultDepositPercent?: number;
   }) => void;
 
   startNewQuoteWizard: () => void;
@@ -232,6 +234,7 @@ type PersistedQuoteStoreState = Pick<
   | "defaultTaxRate"
   | "defaultTerms"
   | "quoteValidDays"
+  | "defaultDepositPercent"
   | "setupCompletedAt"
   | "priceBookItems"
   | "customers"
@@ -247,6 +250,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
   defaultTaxRate: 0.13,
   defaultTerms: defaultTradeConfig.defaultTerms,
   quoteValidDays: 14,
+  defaultDepositPercent: 50,
   setupCompletedAt: null,
   priceBookItems: initialPriceBook,
   customers: [],
@@ -282,6 +286,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
       defaultTaxRate: input.defaultTaxRate ?? state.defaultTaxRate,
       defaultTerms: input.defaultTerms ?? state.defaultTerms,
       quoteValidDays: input.quoteValidDays ?? state.quoteValidDays,
+      defaultDepositPercent: input.defaultDepositPercent ?? state.defaultDepositPercent,
     }));
   },
 
@@ -829,6 +834,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
           input.me.org.defaultTerms ??
           getTradeConfig(input.me.org.trade).defaultTerms,
         quoteValidDays: input.me.org.quoteValidDays ?? 14,
+        defaultDepositPercent: input.me.org.defaultDepositPercent ?? 50,
         setupCompletedAt: input.me.org.setupCompletedAt,
         priceBookItems: mergePriceBookItems(
           input.priceBookItems,
@@ -851,6 +857,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     defaultTaxRate: state.defaultTaxRate,
     defaultTerms: state.defaultTerms,
     quoteValidDays: state.quoteValidDays,
+    defaultDepositPercent: state.defaultDepositPercent,
     setupCompletedAt: state.setupCompletedAt,
     priceBookItems: state.priceBookItems,
     customers: state.customers,
@@ -873,6 +880,9 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
       quoteValidDays: typeof persisted.quoteValidDays === "number"
         ? persisted.quoteValidDays
         : currentState.quoteValidDays,
+      defaultDepositPercent: typeof persisted.defaultDepositPercent === "number"
+        ? persisted.defaultDepositPercent
+        : currentState.defaultDepositPercent,
       setupCompletedAt: persisted.setupCompletedAt ?? currentState.setupCompletedAt,
       priceBookItems: Array.isArray(persisted.priceBookItems)
         ? persisted.priceBookItems

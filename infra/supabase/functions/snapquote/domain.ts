@@ -138,7 +138,18 @@ export type QuoteTotals = {
 export type QuoteEvent = {
   id: string;
   quoteId: string;
-  type: "created" | "sent" | "viewed" | "accepted" | "declined" | "expired" | "followed_up" | "superseded";
+  type:
+    | "created"
+    | "sent"
+    | "viewed"
+    | "accepted"
+    | "declined"
+    | "expired"
+    | "followed_up"
+    | "superseded"
+    | "payment_started"
+    | "payment_paid"
+    | "payment_failed";
   meta: Record<string, unknown>;
   createdAt: string;
 };
@@ -253,6 +264,14 @@ export type QuoteRow = {
   first_viewed_at: string | null;
   responded_at: string | null;
   superseded_by_quote_id: string | null;
+  payment_status: "not_requested" | "checkout_created" | "paid" | "failed" | "refunded";
+  deposit_percent: number;
+  deposit_amount_cents: number | null;
+  paid_amount_cents: number;
+  payment_currency: string;
+  paid_at: string | null;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
   created_at: string;
   updated_at: string;
 };

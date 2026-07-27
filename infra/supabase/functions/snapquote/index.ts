@@ -40,7 +40,7 @@ import {
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-snapquote-org-id",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-snapquote-org-id, stripe-signature",
   "access-control-allow-methods": "GET,POST,PATCH,OPTIONS"
 };
 
@@ -105,6 +105,7 @@ const orgSettingsSchema = z.object({
   defaultTaxRate: z.number().min(0).max(1).optional(),
   defaultTerms: z.string().trim().max(4000).optional(),
   quoteValidDays: z.number().int().min(1).max(365).optional(),
+  defaultDepositPercent: z.number().min(0).max(100).optional(),
   contactPhone: z.string().trim().max(80).nullable().optional(),
   website: z.string().trim().max(240).nullable().optional(),
   logoUrl: z.string().trim().url().max(1000).nullable().optional()
@@ -235,6 +236,10 @@ const sendSchema = z.object({
   channels: z.array(z.literal("email")).min(1).max(1).default(["email"])
 });
 
+const publicPaymentConfirmSchema = z.object({
+  sessionId: z.string().trim().min(1).max(260)
+});
+
 const pricingSuggestionQuerySchema = z.object({
   trade: z.string().trim().min(1).max(80).default("painting"),
   regionKey: z.string().trim().min(1).max(120).optional(),
@@ -272,6 +277,10 @@ Deno.serve(async (request) => {
       return json(await completeNativeOAuth(db, request));
     }
 
+    if (route.method === "POST" && route.path === "/stripe/webhook") {
+      return json(await handleStripeWebhook(db, request));
+    }
+
     const orgId = await resolveOrgId(db, request);
     requestOrgIds.set(request, orgId);
     await ensureOrg(db, orgId);
@@ -290,6 +299,14 @@ Deno.serve(async (request) => {
 
     if (route.method === "GET" && route.path === "/v1/billing/portal") {
       return json(await billingPortal(db, request));
+    }
+
+    if (route.method === "GET" && route.path === "/v1/payments/connect") {
+      return json(await getPaymentConnectStatus(db, request));
+    }
+
+    if (route.method === "POST" && route.path === "/v1/payments/connect/onboard") {
+      return json(await createPaymentConnectOnboarding(db, request));
     }
 
     if (route.method === "POST" && route.path === "/v1/account/delete") {
@@ -388,6 +405,14 @@ Deno.serve(async (request) => {
 
     if (route.method === "POST" && match(route.path, "/public/quotes/:token/respond")) {
       return json(await respondToPublicQuote(db, request, params(route.path, "/public/quotes/:token/respond").token));
+    }
+
+    if (route.method === "POST" && match(route.path, "/public/quotes/:token/pay")) {
+      return json(await createPublicQuotePayment(db, params(route.path, "/public/quotes/:token/pay").token));
+    }
+
+    if (route.method === "POST" && match(route.path, "/public/quotes/:token/pay/confirm")) {
+      return json(await confirmPublicQuotePayment(db, request, params(route.path, "/public/quotes/:token/pay/confirm").token));
     }
 
     return json({ error: "not_found", message: "Route not found" }, 404);
@@ -670,6 +695,7 @@ async function updateMe(db: SupabaseClient, request: Request) {
   if (input.defaultTaxRate !== undefined) patch.default_tax_rate = input.defaultTaxRate;
   if (input.defaultTerms !== undefined) patch.default_terms = input.defaultTerms;
   if (input.quoteValidDays !== undefined) patch.quote_valid_days = input.quoteValidDays;
+  if (input.defaultDepositPercent !== undefined) patch.default_deposit_percent = input.defaultDepositPercent;
   if (input.contactPhone !== undefined) patch.contact_phone = input.contactPhone;
   if (input.website !== undefined) patch.website = input.website;
   if (input.logoUrl !== undefined) patch.logo_url = input.logoUrl;
@@ -1144,6 +1170,8 @@ async function createQuote(db: SupabaseClient, request: Request) {
     discount_type: discount.type,
     discount_value: discount.value,
     tax_rate: Number(org.default_tax_rate),
+    deposit_percent: Number(org.default_deposit_percent ?? 50),
+    payment_currency: String(org.payment_currency ?? "cad").toLowerCase(),
     notes: input.typedNotes ?? "",
     terms: org.default_terms,
     scope_summary: extractionResult.extraction.scope_summary || buildScopeSummary(customer.name, input.checklist as PainterChecklist, scopeNotes),
@@ -1359,6 +1387,16 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
     firstViewedAt: quote.first_viewed_at,
     respondedAt: quote.responded_at,
     supersededByQuoteId: quote.superseded_by_quote_id,
+    payment: {
+      status: quote.payment_status ?? "not_requested",
+      depositPercent: Number(quote.deposit_percent ?? 50),
+      depositAmountCents: quote.deposit_amount_cents,
+      paidAmountCents: quote.paid_amount_cents ?? 0,
+      currency: String(quote.payment_currency ?? "cad"),
+      paidAt: quote.paid_at,
+      checkoutSessionId: quote.stripe_checkout_session_id,
+      providerConnected: Boolean(org.stripe_charges_enabled && org.stripe_payouts_enabled && org.stripe_account_id)
+    },
     createdAt: quote.created_at,
     updatedAt: quote.updated_at,
     sendBlockers: getQuoteSendBlockers(lineItems),
@@ -1619,6 +1657,14 @@ async function cloneQuoteAsDraft(db: SupabaseClient, orgId: string, quoteId: str
     audio_storage_path: source.audio_storage_path ?? null,
     audio_content_type: source.audio_content_type ?? null,
     audio_duration_seconds: source.audio_duration_seconds ?? null,
+    payment_status: "not_requested",
+    deposit_percent: Number(source.deposit_percent ?? org.default_deposit_percent ?? 50),
+    deposit_amount_cents: null,
+    paid_amount_cents: 0,
+    payment_currency: String(source.payment_currency ?? org.payment_currency ?? "cad").toLowerCase(),
+    paid_at: null,
+    stripe_checkout_session_id: null,
+    stripe_payment_intent_id: null,
     sent_at: null,
     first_viewed_at: null,
     responded_at: null,
@@ -1673,6 +1719,288 @@ async function respondToPublicQuote(db: SupabaseClient, request: Request, token:
   await createEvent(db, quote.id, input.action === "accept" ? "accepted" : "declined");
 
   return publicQuoteResponse(await getQuoteResponse(db, quote.org_id, quote.id));
+}
+
+async function getPaymentConnectStatus(db: SupabaseClient, request: Request) {
+  const orgId = orgIdFromRequest(request);
+  const org = await refreshStripeAccountStatus(db, orgId);
+
+  return {
+    provider: "stripe",
+    accountId: org.stripe_account_id ?? null,
+    chargesEnabled: Boolean(org.stripe_charges_enabled),
+    payoutsEnabled: Boolean(org.stripe_payouts_enabled),
+    connected: Boolean(org.stripe_account_id && org.stripe_charges_enabled && org.stripe_payouts_enabled),
+    currency: org.payment_currency ?? "cad",
+    defaultDepositPercent: Number(org.default_deposit_percent ?? 50)
+  };
+}
+
+async function createPaymentConnectOnboarding(db: SupabaseClient, request: Request) {
+  const orgId = orgIdFromRequest(request);
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  const member = await single(db.from("snapquote_org_members").select("*").eq("org_id", orgId).limit(1));
+  let accountId = typeof org.stripe_account_id === "string" ? org.stripe_account_id : "";
+
+  if (!accountId) {
+    const account = await stripePost("accounts", {
+      type: "express",
+      country: Deno.env.get("STRIPE_CONNECT_COUNTRY") ?? "CA",
+      email: String(member.email),
+      "capabilities[card_payments][requested]": "true",
+      "capabilities[transfers][requested]": "true",
+      "business_profile[name]": String(org.name ?? "QuoteVan provider")
+    });
+    accountId = String(account.id);
+    must(await db.from("snapquote_orgs").update({ stripe_account_id: accountId }).eq("id", orgId));
+  }
+
+  const returnUrl = Deno.env.get("QUOTEVAN_CONNECT_RETURN_URL") ?? Deno.env.get("SNAPQUOTE_CONNECT_RETURN_URL") ?? "snapquote://settings";
+  const refreshUrl = Deno.env.get("QUOTEVAN_CONNECT_REFRESH_URL") ?? Deno.env.get("SNAPQUOTE_CONNECT_REFRESH_URL") ?? returnUrl;
+  const link = await stripePost("account_links", {
+    account: accountId,
+    type: "account_onboarding",
+    return_url: returnUrl,
+    refresh_url: refreshUrl
+  });
+
+  return {
+    provider: "stripe",
+    accountId,
+    url: link.url
+  };
+}
+
+async function createPublicQuotePayment(db: SupabaseClient, token: string) {
+  const link = await single(db.from("snapquote_quote_public_links").select("*").eq("token", token).is("revoked_at", null));
+  const quote = await single(db.from("snapquote_quotes").select("*").eq("id", link.quote_id)) as QuoteRow;
+  const org = await refreshStripeAccountStatus(db, quote.org_id);
+  const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
+
+  if (!quote.total_cents || quote.total_cents <= 0) {
+    throw new HttpError(409, "This quote is not ready for payment");
+  }
+
+  if (quote.status === "declined" || quote.status === "expired" || quote.status === "superseded") {
+    throw new HttpError(409, "This quote is not payable");
+  }
+
+  if (new Date() > new Date(`${quote.valid_until}T23:59:59.999Z`)) {
+    throw new HttpError(409, "Expired quotes cannot be paid");
+  }
+
+  const connectedAccountId = typeof org.stripe_account_id === "string" ? org.stripe_account_id : "";
+
+  if (!connectedAccountId || !org.stripe_charges_enabled || !org.stripe_payouts_enabled) {
+    throw new HttpError(409, "This provider has not enabled online deposits yet");
+  }
+
+  const depositPercent = Number(quote.deposit_percent ?? org.default_deposit_percent ?? 50);
+  const amountCents = quote.deposit_amount_cents ?? Math.max(100, Math.round(Number(quote.total_cents) * (depositPercent / 100)));
+  const currency = String(quote.payment_currency ?? org.payment_currency ?? "cad").toLowerCase();
+  const publicUrl = publicQuoteUrl(token);
+
+  if (!/^https?:\/\//i.test(publicUrl)) {
+    throw new HttpError(500, "Public quote host is not configured");
+  }
+
+  const successUrl = `${publicUrl}${publicUrl.includes("?") ? "&" : "?"}payment=success&session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = `${publicUrl}${publicUrl.includes("?") ? "&" : "?"}payment=cancelled`;
+
+  const session = await stripePost("checkout/sessions", {
+    mode: "payment",
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    customer_email: customer.email ? String(customer.email) : undefined,
+    "line_items[0][quantity]": "1",
+    "line_items[0][price_data][currency]": currency,
+    "line_items[0][price_data][unit_amount]": String(amountCents),
+    "line_items[0][price_data][product_data][name]": `Deposit for quote #${quote.id.slice(0, 4).toUpperCase()}`,
+    "line_items[0][price_data][product_data][description]": `${Math.round(depositPercent)}% deposit for ${String(org.name ?? "your service provider")}`,
+    "metadata[quote_id]": quote.id,
+    "metadata[public_token]": token,
+    "metadata[kind]": "quote_deposit",
+    "payment_intent_data[metadata][quote_id]": quote.id,
+    "payment_intent_data[metadata][public_token]": token
+  }, { stripeAccount: connectedAccountId });
+
+  must(await db.from("snapquote_quote_payments").upsert({
+    quote_id: quote.id,
+    provider: "stripe",
+    provider_account_id: connectedAccountId,
+    provider_checkout_session_id: session.id,
+    provider_payment_intent_id: session.payment_intent ?? null,
+    amount_cents: amountCents,
+    currency,
+    status: "checkout_created",
+    checkout_url: session.url ?? null,
+    expires_at: session.expires_at ? new Date(Number(session.expires_at) * 1000).toISOString() : null,
+    raw_event: { created_from: "public_quote" }
+  }, { onConflict: "provider_checkout_session_id" }));
+
+  must(await db.from("snapquote_quotes").update({
+    payment_status: "checkout_created",
+    deposit_amount_cents: amountCents,
+    deposit_percent: depositPercent,
+    payment_currency: currency,
+    stripe_checkout_session_id: session.id,
+    stripe_payment_intent_id: session.payment_intent ?? null
+  }).eq("id", quote.id));
+  await createEvent(db, quote.id, "payment_started", { provider: "stripe", sessionId: session.id, amountCents, currency });
+
+  return {
+    provider: "stripe",
+    checkoutUrl: session.url,
+    sessionId: session.id,
+    amountCents,
+    currency
+  };
+}
+
+async function confirmPublicQuotePayment(db: SupabaseClient, request: Request, token: string) {
+  const input = parse(publicPaymentConfirmSchema, await request.json());
+  const link = await single(db.from("snapquote_quote_public_links").select("*").eq("token", token).is("revoked_at", null));
+  const quote = await single(db.from("snapquote_quotes").select("*").eq("id", link.quote_id)) as QuoteRow;
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", quote.org_id));
+  const connectedAccountId = typeof org.stripe_account_id === "string" ? org.stripe_account_id : "";
+  const session = await stripeGet(`checkout/sessions/${encodeURIComponent(input.sessionId)}`, { stripeAccount: connectedAccountId || undefined });
+
+  if (String(session.metadata?.quote_id ?? "") !== quote.id) {
+    throw new HttpError(403, "Payment session does not match this quote");
+  }
+
+  if (session.payment_status === "paid" || session.status === "complete") {
+    await markQuotePaymentPaid(db, quote, {
+      sessionId: String(session.id),
+      paymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+      amountCents: Number(session.amount_total ?? quote.deposit_amount_cents ?? 0),
+      currency: String(session.currency ?? quote.payment_currency ?? "cad"),
+      rawEvent: { confirmed_from: "public_return", session }
+    });
+  }
+
+  return publicQuoteResponse(await getQuoteResponse(db, quote.org_id, quote.id));
+}
+
+async function handleStripeWebhook(db: SupabaseClient, request: Request) {
+  const body = await request.text();
+  const signature = request.headers.get("stripe-signature") ?? "";
+  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+
+  if (secret) {
+    await verifyStripeSignature(body, signature, secret);
+  }
+
+  const event = JSON.parse(body) as Record<string, any>;
+  const object = event.data?.object as Record<string, any> | undefined;
+
+  if (!object || object.object !== "checkout.session") {
+    return { received: true };
+  }
+
+  const quoteId = String(object.metadata?.quote_id ?? "");
+
+  if (!quoteId) {
+    return { received: true };
+  }
+
+  const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId)) as QuoteRow;
+
+  if (event.type === "checkout.session.completed" || object.payment_status === "paid") {
+    await markQuotePaymentPaid(db, quote, {
+      sessionId: String(object.id),
+      paymentIntentId: typeof object.payment_intent === "string" ? object.payment_intent : null,
+      amountCents: Number(object.amount_total ?? quote.deposit_amount_cents ?? 0),
+      currency: String(object.currency ?? quote.payment_currency ?? "cad"),
+      rawEvent: event
+    });
+  } else if (event.type === "checkout.session.expired" || event.type === "checkout.session.async_payment_failed") {
+    await markQuotePaymentFailed(db, quote, String(object.id), event);
+  }
+
+  return { received: true };
+}
+
+async function markQuotePaymentPaid(db: SupabaseClient, quote: QuoteRow, input: {
+  sessionId: string;
+  paymentIntentId: string | null;
+  amountCents: number;
+  currency: string;
+  rawEvent: Record<string, unknown>;
+}) {
+  const now = new Date().toISOString();
+  const paidAmountCents = input.amountCents > 0 ? input.amountCents : quote.deposit_amount_cents ?? 0;
+  const paymentPatch: Record<string, unknown> = {
+    status: "paid",
+    provider_payment_intent_id: input.paymentIntentId,
+    currency: input.currency.toLowerCase(),
+    paid_at: now,
+    raw_event: input.rawEvent
+  };
+
+  if (paidAmountCents > 0) {
+    paymentPatch.amount_cents = paidAmountCents;
+  }
+
+  must(await db.from("snapquote_quote_payments").update(paymentPatch).eq("provider_checkout_session_id", input.sessionId));
+
+  const patch: Record<string, unknown> = {
+    payment_status: "paid",
+    paid_amount_cents: paidAmountCents,
+    paid_at: now,
+    stripe_checkout_session_id: input.sessionId,
+    stripe_payment_intent_id: input.paymentIntentId,
+    status: quote.status === "declined" || quote.status === "superseded" ? quote.status : "accepted"
+  };
+
+  if (!quote.responded_at) {
+    patch.responded_at = now;
+  }
+
+  must(await db.from("snapquote_quotes").update(patch).eq("id", quote.id));
+  await createEvent(db, quote.id, "payment_paid", {
+    provider: "stripe",
+    sessionId: input.sessionId,
+    paymentIntentId: input.paymentIntentId,
+    amountCents: paidAmountCents,
+    currency: input.currency.toLowerCase()
+  });
+
+  if (!quote.responded_at && quote.status !== "accepted") {
+    await createEvent(db, quote.id, "accepted", { source: "payment" });
+  }
+}
+
+async function markQuotePaymentFailed(db: SupabaseClient, quote: QuoteRow, sessionId: string, rawEvent: Record<string, unknown>) {
+  must(await db.from("snapquote_quote_payments").update({
+    status: "failed",
+    raw_event: rawEvent
+  }).eq("provider_checkout_session_id", sessionId));
+  must(await db.from("snapquote_quotes").update({ payment_status: "failed" }).eq("id", quote.id));
+  await createEvent(db, quote.id, "payment_failed", { provider: "stripe", sessionId });
+}
+
+async function refreshStripeAccountStatus(db: SupabaseClient, orgId: string) {
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  const accountId = typeof org.stripe_account_id === "string" ? org.stripe_account_id : "";
+
+  if (!accountId || !Deno.env.get("STRIPE_SECRET_KEY")) {
+    return org;
+  }
+
+  const account = await stripeGet(`accounts/${encodeURIComponent(accountId)}`);
+  const chargesEnabled = Boolean(account.charges_enabled);
+  const payoutsEnabled = Boolean(account.payouts_enabled);
+
+  if (chargesEnabled !== Boolean(org.stripe_charges_enabled) || payoutsEnabled !== Boolean(org.stripe_payouts_enabled)) {
+    const updated = await single(db.from("snapquote_orgs").update({
+      stripe_charges_enabled: chargesEnabled,
+      stripe_payouts_enabled: payoutsEnabled
+    }).eq("id", orgId).select("*"));
+    return updated;
+  }
+
+  return org;
 }
 
 function publicQuoteResponse<T extends {
@@ -1960,6 +2288,105 @@ function escapeHtml(input: string) {
   });
 }
 
+async function stripePost(path: string, params: Record<string, string | number | boolean | null | undefined>, options: { stripeAccount?: string | undefined } = {}) {
+  return await stripeRequest(path, {
+    method: "POST",
+    params,
+    stripeAccount: options.stripeAccount
+  });
+}
+
+async function stripeGet(path: string, options: { stripeAccount?: string | undefined } = {}) {
+  return await stripeRequest(path, {
+    method: "GET",
+    params: {},
+    stripeAccount: options.stripeAccount
+  });
+}
+
+async function stripeRequest(path: string, input: {
+  method: "GET" | "POST";
+  params: Record<string, string | number | boolean | null | undefined>;
+  stripeAccount?: string | undefined;
+}) {
+  const secretKey = Deno.env.get("STRIPE_SECRET_KEY");
+
+  if (!secretKey) {
+    throw new HttpError(500, "Stripe payments are not configured");
+  }
+
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(input.params)) {
+    if (value !== undefined && value !== null) {
+      params.set(key, String(value));
+    }
+  }
+
+  const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method: input.method,
+    headers: {
+      authorization: `Bearer ${secretKey}`,
+      ...(input.stripeAccount ? { "stripe-account": input.stripeAccount } : {}),
+      ...(input.method === "POST" ? { "content-type": "application/x-www-form-urlencoded" } : {})
+    },
+    body: input.method === "POST" ? params : undefined
+  });
+
+  const body = await response.json().catch(() => ({})) as Record<string, any>;
+
+  if (!response.ok) {
+    const message = typeof body.error?.message === "string" ? body.error.message : "Stripe request failed";
+    throw new HttpError(response.status >= 500 ? 502 : 400, message);
+  }
+
+  return body;
+}
+
+async function verifyStripeSignature(body: string, header: string, secret: string) {
+  const parts = Object.fromEntries(
+    header.split(",").map((part) => {
+      const [key, value] = part.split("=");
+      return [key, value];
+    })
+  );
+  const timestamp = parts.t;
+  const signature = parts.v1;
+
+  if (!timestamp || !signature) {
+    throw new HttpError(400, "Invalid Stripe signature");
+  }
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(`${timestamp}.${body}`));
+  const expected = Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+  if (!timingSafeEqualHex(expected, signature)) {
+    throw new HttpError(400, "Invalid Stripe signature");
+  }
+}
+
+function timingSafeEqualHex(left: string, right: string) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  let result = 0;
+
+  for (let index = 0; index < left.length; index += 1) {
+    result |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+
+  return result === 0;
+}
+
 function routeFromRequest(request: Request) {
   const url = new URL(request.url);
   let path = url.pathname.replace(/^\/functions\/v1/, "");
@@ -2039,7 +2466,10 @@ function orgResponse(row: Record<string, unknown>) {
     defaultTerms: row.default_terms,
     quoteValidDays: row.quote_valid_days,
     setupCompletedAt: typeof row.setup_completed_at === "string" ? row.setup_completed_at : null,
-    plan: row.plan
+    plan: row.plan,
+    paymentCurrency: row.payment_currency ?? "cad",
+    defaultDepositPercent: Number(row.default_deposit_percent ?? 50),
+    paymentsConnected: Boolean(row.stripe_charges_enabled && row.stripe_payouts_enabled && row.stripe_account_id)
   };
 }
 

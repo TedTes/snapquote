@@ -64,6 +64,16 @@ export type ApiQuote = {
     taxCents: number;
     totalCents: number;
   } | null;
+  payment?: {
+    status: "not_requested" | "checkout_created" | "paid" | "failed" | "refunded";
+    depositPercent: number;
+    depositAmountCents: number | null;
+    paidAmountCents: number;
+    currency: string;
+    paidAt: string | null;
+    checkoutSessionId: string | null;
+    providerConnected: boolean;
+  } | undefined;
   notes: string;
   terms: string;
   scopeSummary: string;
@@ -113,6 +123,9 @@ export type MeResponse = {
     quoteValidDays: number;
     setupCompletedAt: string | null;
     plan: "trial" | "solo" | "crew" | "expired";
+    paymentCurrency?: string | undefined;
+    defaultDepositPercent?: number | undefined;
+    paymentsConnected?: boolean | undefined;
   };
   entitlements: {
     canSendQuotes: boolean;
@@ -220,6 +233,7 @@ export const snapquoteApi = {
     defaultTaxRate?: number | undefined;
     defaultTerms?: string | undefined;
     quoteValidDays?: number | undefined;
+    defaultDepositPercent?: number | undefined;
     contactPhone?: string | null | undefined;
     website?: string | null | undefined;
     logoUrl?: string | null | undefined;
@@ -236,6 +250,22 @@ export const snapquoteApi = {
     }),
 
   billingPortal: () => request<{ url: string | null }>("/v1/billing/portal"),
+
+  paymentConnectStatus: () =>
+    request<{
+      provider: "stripe";
+      accountId: string | null;
+      chargesEnabled: boolean;
+      payoutsEnabled: boolean;
+      connected: boolean;
+      currency: string;
+      defaultDepositPercent: number;
+    }>("/v1/payments/connect"),
+
+  startPaymentConnectOnboarding: () =>
+    request<{ provider: "stripe"; accountId: string; url: string }>("/v1/payments/connect/onboard", {
+      method: "POST"
+    }),
 
   deleteAccount: () =>
     request<{ deleted: boolean }>("/v1/account/delete", {

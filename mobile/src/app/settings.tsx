@@ -4,6 +4,7 @@ import {
   Book,
   CalendarDays,
   ChevronRight,
+  CreditCard,
   FileText,
   Lock,
   Mail,
@@ -12,7 +13,7 @@ import {
   RotateCcw,
   Type
 } from "lucide-react-native";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { getTradeConfig } from "@snapquote/shared";
 import { BottomTabBar } from "../components/BottomTabBar";
 import { Screen } from "../components/base";
@@ -20,20 +21,39 @@ import { colors, radius } from "../components/theme";
 import { businessInitials } from "../utils/format";
 import { useQuoteStore } from "../state/quoteStore";
 import { useAuthStore } from "../auth/authStore";
+import { snapquoteApi, userFacingErrorMessage } from "../api/client";
 
 export default function SettingsScreen() {
   const businessName = useQuoteStore((state) => state.businessName);
   const defaultTaxRate = useQuoteStore((state) => state.defaultTaxRate);
   const defaultTerms = useQuoteStore((state) => state.defaultTerms);
   const quoteValidDays = useQuoteStore((state) => state.quoteValidDays);
+  const defaultDepositPercent = useQuoteStore((state) => state.defaultDepositPercent);
   const priceBookItems = useQuoteStore((state) => state.priceBookItems);
   const activeTrade = useQuoteStore((state) => state.activeTrade);
   const me = useAuthStore((state) => state.me);
   const tradeConfig = getTradeConfig(activeTrade);
+  const paymentsConnected = Boolean(me?.org.paymentsConnected);
 
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const totalCount = priceBookItems.length;
   const senderEmail = me?.user.email ?? "quotes@sharpedge.co";
+
+  async function openPaymentSetup() {
+    try {
+      const status = await snapquoteApi.paymentConnectStatus();
+
+      if (status.connected) {
+        Alert.alert("Online deposits connected", "Customers can pay quote deposits from the quote link.");
+        return;
+      }
+
+      const onboarding = await snapquoteApi.startPaymentConnectOnboarding();
+      await Linking.openURL(onboarding.url);
+    } catch (error) {
+      Alert.alert("Could not open payment setup", userFacingErrorMessage(error));
+    }
+  }
 
   return (
     <Screen edges={["top"]}>
@@ -62,6 +82,12 @@ export default function SettingsScreen() {
             label="Quote valid for"
             onPress={() => router.push("/settings/business")}
             value={`${quoteValidDays} days`}
+          />
+          <SettingsRow
+            icon={<CreditCard color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Deposit due"
+            onPress={() => router.push("/settings/business")}
+            value={`${Math.round(defaultDepositPercent)}%`}
           />
           <SettingsRow
             detail={defaultTerms}
@@ -104,6 +130,13 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         <SettingsSection label="Sending">
+          <SettingsRow
+            customValue={<ConnectionBadge connected={paymentsConnected} />}
+            detail={paymentsConnected ? "Customers can pay quote deposits" : "Connect Stripe to collect deposits"}
+            icon={<CreditCard color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Online deposits"
+            onPress={() => void openPaymentSetup()}
+          />
           <SettingsRow
             customValue={<VerifiedBadge />}
             detail={senderEmail}
@@ -193,6 +226,16 @@ function VerifiedBadge() {
   return (
     <View style={styles.verifiedBadge}>
       <Text style={styles.verifiedText}>Verified</Text>
+    </View>
+  );
+}
+
+function ConnectionBadge(props: { connected: boolean }) {
+  return (
+    <View style={[styles.verifiedBadge, props.connected ? null : styles.pendingBadge]}>
+      <Text style={[styles.verifiedText, props.connected ? null : styles.pendingText]}>
+        {props.connected ? "On" : "Setup"}
+      </Text>
     </View>
   );
 }
@@ -335,6 +378,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "900",
     textTransform: "uppercase"
+  },
+  pendingBadge: {
+    backgroundColor: colors.amberBg,
+    borderColor: colors.amberBorder
+  },
+  pendingText: {
+    color: colors.amber
   },
   tradeValue: {
     alignItems: "center",

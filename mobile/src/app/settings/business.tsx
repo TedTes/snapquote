@@ -15,9 +15,11 @@ export default function BusinessSettingsScreen() {
   const defaultTaxRate = useQuoteStore((state) => state.defaultTaxRate);
   const defaultTerms = useQuoteStore((state) => state.defaultTerms);
   const quoteValidDays = useQuoteStore((state) => state.quoteValidDays);
+  const defaultDepositPercent = useQuoteStore((state) => state.defaultDepositPercent);
   const updateOrgSettings = useQuoteStore((state) => state.updateOrgSettings);
   const [name, setName] = useState(businessName);
   const [taxRate, setTaxRate] = useState(String(Math.round(defaultTaxRate * 100)));
+  const [depositPercent, setDepositPercent] = useState(String(Math.round(defaultDepositPercent)));
   const [validDays, setValidDays] = useState(String(quoteValidDays));
   const [terms, setTerms] = useState(defaultTerms);
   const [saving, setSaving] = useState(false);
@@ -30,6 +32,7 @@ export default function BusinessSettingsScreen() {
     const patch = {
       businessName: name.trim(),
       defaultTaxRate: (Number(taxRate) || 0) / 100,
+      defaultDepositPercent: clampPercent(Number(depositPercent) || 0),
       defaultTerms: terms.trim(),
       quoteValidDays: Number.parseInt(validDays, 10) || 14,
     };
@@ -44,6 +47,7 @@ export default function BusinessSettingsScreen() {
           defaultTaxRate: response.org.defaultTaxRate,
           defaultTerms: response.org.defaultTerms,
           quoteValidDays: response.org.quoteValidDays,
+          defaultDepositPercent: response.org.defaultDepositPercent ?? patch.defaultDepositPercent,
         });
         setMe(response);
       } else {
@@ -87,7 +91,13 @@ export default function BusinessSettingsScreen() {
             />
             <Field
               keyboardType="numeric"
-              label="Quote valid days"
+              label="Deposit %"
+              onChangeText={setDepositPercent}
+              value={depositPercent}
+            />
+            <Field
+              keyboardType="numeric"
+              label="Valid days"
               onChangeText={setValidDays}
               value={validDays}
             />
@@ -106,6 +116,14 @@ export default function BusinessSettingsScreen() {
       </ScrollView>
     </Screen>
   );
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, value));
 }
 
 function Field(props: {
