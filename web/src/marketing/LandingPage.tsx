@@ -61,7 +61,10 @@ export function LandingPage() {
               <h2>The quote lands where customers already are.</h2>
               <p>
                 Send a private quote link by email. Customers open the proposal in a browser, accept or decline, and
-                reply with questions without installing anything.
+                reply with questions.
+              </p>
+              <p className="email-no-install">
+                <span aria-hidden="true">✓</span> Nothing to install — it opens in any browser
               </p>
             </div>
           </div>
@@ -72,21 +75,26 @@ export function LandingPage() {
             <p className="landing-eyebrow">How it works</p>
             <h2>Checklist. Talk it through. Send.</h2>
           </div>
-          <div className="how-grid">
-            <HowCard step="01" title="Walk the job" text="Capture customer details, address, rooms, surfaces, and quantities." />
-            <HowCard step="02" title="Review the quote" text="Line items assemble from the walkthrough and match against your price book." />
-            <HowCard step="03" title="Send and track" text="Email a private quote link and see when it is viewed, accepted, or stale." />
-          </div>
+          <ol className="how-rail" aria-label="Three steps from job walkthrough to sent quote">
+            <HowStep index="01" title="Walk the job" text="Capture details, rooms, and quantities." />
+            <HowStep index="02" title="Review the quote" text="Lines match your price book." />
+            <HowStep index="03" title="Send and track" text="See when it's viewed or accepted." />
+          </ol>
         </section>
 
         <section className="customer-section" id="customer">
           <div className="section-copy">
             <p className="landing-eyebrow">Customer experience</p>
-            <h2>A clean proposal your customer can act on.</h2>
+            <h2>A clean quote page your customer can act on.</h2>
             <p>
-              They open a private link from email, review the scope, accept or decline, and pay a deposit when payments
-              are enabled.
+              They open the private link, review the scope, accept or decline, and pay a deposit when payments are
+              enabled.
             </p>
+            <ul className="customer-proof-list">
+              <li><span aria-hidden="true">✓</span> No customer account required</li>
+              <li><span aria-hidden="true">✓</span> Accept / decline in browser</li>
+              <li><span aria-hidden="true">✓</span> Deposit-ready when payments are enabled</li>
+            </ul>
           </div>
           <CustomerQuoteCard />
         </section>
@@ -117,14 +125,7 @@ export function LandingPage() {
               <li>No setup weekend</li>
             </ul>
 
-            <div className="audience-chips" aria-label="Supported service provider examples">
-              <span className="is-active">Painters</span>
-              <span>Cleaners</span>
-              <span>Handymen</span>
-              <span>Fencing</span>
-            </div>
-
-            <AudienceQuoteCard />
+            <AudienceExamples />
           </div>
         </section>
 
@@ -165,13 +166,15 @@ export function LandingPage() {
   );
 }
 
-function HowCard(props: { step: string; title: string; text: string }) {
+function HowStep(props: { index: string; title: string; text: string }) {
   return (
-    <article className="how-card">
-      <span>{props.step}</span>
-      <h3>{props.title}</h3>
-      <p>{props.text}</p>
-    </article>
+    <li>
+      <span className="how-rail-index">{props.index}</span>
+      <div>
+        <strong>{props.title}</strong>
+        <p>{props.text}</p>
+      </div>
+    </li>
   );
 }
 
@@ -180,9 +183,11 @@ function EmailDashboardPreview() {
   const [isInView, setIsInView] = useState(false);
   const rows = [
     {
-      sender: "QuoteVan",
-      subject: "Quote from Bright Coat Painting",
-      preview: "Michael, your quote is ready to review. Total: $1,932.",
+      sender: "Bright Coat Painting",
+      via: "QuoteVan",
+      subject: "Your quote is ready",
+      preview: "Michael, your quote for $1,932 is ready to view",
+      chip: "$1,932",
       time: "Now",
       important: true,
     },
@@ -241,12 +246,15 @@ function EmailDashboardPreview() {
     <div
       className={isInView ? "email-dashboard is-in-view" : "email-dashboard"}
       ref={dashboardRef}
-      aria-label="Customer inbox showing a QuoteVan quote email"
+      aria-label="Customer inbox showing a new quote email from Bright Coat Painting"
     >
       <div className="email-topbar">
         <div className="email-menu" aria-hidden="true"><span /></div>
         <div className="email-logo" aria-hidden="true">
-          <i />
+          <svg fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
+            <rect height="14" rx="2.5" width="19" x="2.5" y="5" />
+            <path d="M3.5 6.5 12 13 20.5 6.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
           <span>Mail</span>
         </div>
         <div className="email-search">Search mail</div>
@@ -256,35 +264,32 @@ function EmailDashboardPreview() {
           <b>MC</b>
         </div>
       </div>
-      <div className="email-shell">
-        <aside className="email-sidebar" aria-label="Email folders">
-          <button type="button">Compose</button>
-          <span className="is-active">Inbox <b>24</b></span>
-          <span>Starred</span>
-          <span>Sent</span>
-          <span>Drafts</span>
-        </aside>
-        <div className="email-main">
-          <div className="email-toolbar">
-            <span className="email-checkbox" />
-            <span>Primary</span>
-            <small>1 new</small>
-          </div>
-          <div className="email-tabs" aria-hidden="true">
-            <span className="is-active">Primary</span>
-            <span>Updates</span>
-            <span>Promotions</span>
-          </div>
-          <div className="email-list">
-            {rows.map((row) => (
-              <article className={row.important ? "email-row is-quote" : "email-row"} key={`${row.sender}-${row.subject}`}>
-                <span className="email-checkbox" />
-                <strong>{row.sender}</strong>
-                <p><b>{row.subject}</b> <span>- {row.preview}</span></p>
+      <div className="email-main">
+        <div className="email-toolbar">
+          <span className="email-checkbox" />
+          <span>Primary</span>
+          <small>1 new</small>
+        </div>
+        <div className="email-tabs" aria-hidden="true">
+          <span className="is-active">Primary</span>
+          <span>Updates</span>
+          <span>Promotions</span>
+        </div>
+        <div className="email-list">
+          {rows.map((row) => (
+            <article className={row.important ? "email-row is-quote" : "email-row"} key={`${row.sender}-${row.subject}`}>
+              <span className="email-checkbox" />
+              <strong>
+                {row.sender}
+                {row.via ? <span className="email-row-via">via {row.via}</span> : null}
+              </strong>
+              <p><b>{row.subject}</b> <span>- {row.preview}</span></p>
+              <span className="email-row-end">
+                {row.chip ? <span className="email-row-chip">{row.chip}</span> : null}
                 <time>{row.time}</time>
-              </article>
-            ))}
-          </div>
+              </span>
+            </article>
+          ))}
         </div>
       </div>
       <div className="email-quote-pop" aria-hidden="true">
@@ -358,19 +363,86 @@ function PriceBookRow(props: { title: string; detail: string; price: string; ton
   );
 }
 
-function AudienceQuoteCard() {
-  const lines = [
-    { title: "Paint walls", detail: "2 medium rooms · 2 coats", price: "$840" },
-    { title: "Paint ceilings", detail: "2 rooms", price: "$360" },
-    { title: "Paint trim", detail: "2 rooms", price: "$320" },
-    { title: "Paint 2 doors", detail: "each", price: "$190" },
-  ];
+const audienceTrades = {
+  painters: {
+    chipLabel: "Painters",
+    cardLabel: "A painter's quote",
+    total: "$1,932",
+    lines: [
+      { title: "Paint walls", detail: "2 medium rooms · 2 coats", price: "$840" },
+      { title: "Paint ceilings", detail: "2 rooms", price: "$360" },
+      { title: "Paint trim", detail: "2 rooms", price: "$320" },
+      { title: "Paint 2 doors", detail: "each", price: "$190" },
+    ],
+  },
+  cleaners: {
+    chipLabel: "Cleaners",
+    cardLabel: "A cleaner's quote",
+    total: "$490",
+    lines: [
+      { title: "Deep clean kitchen", detail: "1 visit", price: "$180" },
+      { title: "Deep clean bathrooms", detail: "2 baths", price: "$150" },
+      { title: "Interior windows", detail: "12 panes", price: "$90" },
+      { title: "Fridge + oven detail", detail: "add-on", price: "$70" },
+    ],
+  },
+  handymen: {
+    chipLabel: "Handymen",
+    cardLabel: "A handyman's quote",
+    total: "$415",
+    lines: [
+      { title: "Drywall patch repair", detail: "2 spots", price: "$120" },
+      { title: "Replace door hardware", detail: "3 doors", price: "$85" },
+      { title: "Mount shelving", detail: "4 shelves", price: "$150" },
+      { title: "Caulk and seal", detail: "kitchen + bath", price: "$60" },
+    ],
+  },
+  fencing: {
+    chipLabel: "Fencing",
+    cardLabel: "A fencing quote",
+    total: "$1,205",
+    lines: [
+      { title: "Replace fence panels", detail: "6 panels", price: "$560" },
+      { title: "Reset posts", detail: "3 posts", price: "$240" },
+      { title: "Gate hardware", detail: "1 gate", price: "$95" },
+      { title: "Stain and seal", detail: "60 linear ft", price: "$310" },
+    ],
+  },
+} as const satisfies Record<string, { chipLabel: string; cardLabel: string; total: string; lines: { title: string; detail: string; price: string }[] }>;
+
+type AudienceTradeKey = keyof typeof audienceTrades;
+
+function AudienceExamples() {
+  const [trade, setTrade] = useState<AudienceTradeKey>("painters");
 
   return (
-    <article className="audience-quote-card" aria-label="Example painter quote priced from the price book">
-      <p className="landing-eyebrow">A painter's quote</p>
+    <>
+      <div className="audience-chips" aria-label="See an example quote by trade">
+        {(Object.keys(audienceTrades) as AudienceTradeKey[]).map((key) => (
+          <button
+            aria-pressed={key === trade}
+            className={key === trade ? "is-active" : undefined}
+            key={key}
+            onClick={() => setTrade(key)}
+            type="button"
+          >
+            {audienceTrades[key].chipLabel}
+          </button>
+        ))}
+      </div>
+      <AudienceQuoteCard key={trade} trade={audienceTrades[trade]} />
+    </>
+  );
+}
+
+function AudienceQuoteCard(props: { trade: (typeof audienceTrades)[AudienceTradeKey] }) {
+  const { trade } = props;
+
+  return (
+    <article aria-label={`Example ${trade.cardLabel.toLowerCase()}, priced from the price book`} className="audience-quote-card">
+      <p className="landing-eyebrow">{trade.cardLabel}</p>
       <div className="audience-quote-lines">
-        {lines.map((line) => (
+        {trade.lines.map((line) => (
           <div className="audience-quote-line" key={line.title}>
             <span className="audience-quote-stripe" aria-hidden="true" />
             <span>
@@ -383,7 +455,7 @@ function AudienceQuoteCard() {
       </div>
       <footer>
         <span>Total · priced from your book</span>
-        <strong>$1,932</strong>
+        <strong>{trade.total}</strong>
       </footer>
     </article>
   );
@@ -393,7 +465,7 @@ function CustomerQuoteCard() {
   return (
     <article className="customer-quote-card">
       <header>
-        <QuoteVanMark size={42} framed />
+        <QuoteVanMark size={36} framed />
         <div>
           <span>Quote from</span>
           <strong>Bright Coat Painting</strong>
@@ -408,8 +480,7 @@ function CustomerQuoteCard() {
       </div>
       <section className="customer-quote-party">
         <b>Prepared for</b>
-        <strong>Michael</strong>
-        <p>18 Victor Ave, Toronto</p>
+        <p><strong>Michael</strong> · 18 Victor Ave, Toronto</p>
       </section>
       <section className="customer-quote-scope">
         <b>Scope of work</b>
@@ -437,14 +508,13 @@ function CustomerQuoteCard() {
         <strong>$1,932</strong>
       </div>
       <div className="customer-quote-terms">
-        <p><b>Terms.</b> 50% deposit due to schedule the job. Balance due on completion.</p>
-        <span>Deposit due today: <strong>$966</strong></span>
+        <p><b>Terms.</b> 50% deposit (<span>$966</span>) to schedule the job — balance due on completion.</p>
       </div>
       <div className="customer-quote-actions">
         <button type="button">Accept quote</button>
         <button type="button">Decline</button>
       </div>
-      <small>No account needed. Questions? Reply to the email.</small>
+      <small>Private link · quotevan.app/q/8f2a1c</small>
     </article>
   );
 }
