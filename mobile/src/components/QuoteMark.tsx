@@ -14,7 +14,7 @@ export function QuoteMark(props: { size?: number | undefined; boxed?: boolean | 
       />
       <Path d="M459 560L562 663" stroke={colors.surfaceRaised} strokeLinecap="round" strokeWidth="96" />
       <Path
-        d="M482 552L578 648L730 454"
+        d="M430 488L570 658L748 446"
         stroke={colors.green}
         strokeLinecap="round"
         strokeLinejoin="round"
