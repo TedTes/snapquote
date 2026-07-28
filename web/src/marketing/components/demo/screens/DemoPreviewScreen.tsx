@@ -38,6 +38,13 @@ export function DemoPreviewScreen({ playback }: DemoPreviewScreenProps) {
           <span>Total</span>
           <strong>$1,932</strong>
         </div>
+        <p className="qv-flow-preview-terms">
+          <b>Terms.</b> 50% deposit due to schedule the job, balance due on completion.
+        </p>
+        <div className="qv-flow-preview-actions">
+          <button type="button">Accept quote</button>
+          <button type="button">Decline</button>
+        </div>
       </article>
       {tapTarget && isActiveTarget(playback, "sendQuote", "send") ? (
         <TapIndicator x={tapTarget.x} y={tapTarget.y} label="Tap send quote" />

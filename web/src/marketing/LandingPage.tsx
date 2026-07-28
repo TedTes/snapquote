@@ -1,8 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import { ProductFlowDemo } from "./components/demo/ProductFlowDemo";
-import { DraftLine, ProgressMeter, QuoteVanMark, StatusPill } from "./components/demo/primitives";
+import { ProgressMeter, QuoteVanMark, StatusPill } from "./components/demo/primitives";
 import "./landing.css";
 
-const waitlistMailto = "mailto:hello@quotevan.com?subject=Early%20access%20request";
 const supportMailto = "mailto:hello@quotevan.com?subject=QuoteVan%20support";
 
 export function LandingPage() {
@@ -15,12 +15,11 @@ export function LandingPage() {
             <span>QuoteVan</span>
           </a>
           <nav aria-label="Landing page" className="landing-nav-links">
-            <a href="#no-guesses">No guesses</a>
             <a href="#how">How it works</a>
             <a href="#customer">Customer view</a>
             <a href="#book">Price book</a>
+            <a href="#trust">Pricing trust</a>
           </nav>
-          <a className="btn btn-primary btn-small" href={waitlistMailto}>Get early access</a>
         </div>
       </header>
 
@@ -32,10 +31,6 @@ export function LandingPage() {
             <p className="landing-lede">
               Walk the job, capture the scope, and send a professional quote with prices from your own book.
             </p>
-            <div className="landing-hero-actions">
-              <a className="btn btn-primary" href={waitlistMailto}>Join waitlist</a>
-              <a className="landing-text-link" href="#how">See how it works</a>
-            </div>
             <StoreBadges />
           </div>
 
@@ -44,35 +39,31 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="promise-strip" aria-label="QuoteVan product promise">
-          <PromiseItem title="On-site workflow" text="Start the quote while the job is still fresh." />
-          <PromiseItem title="No guessed prices" text="AI can draft scope. Dollars come from your book." />
-          <PromiseItem title="Customer-ready" text="Send a clean quote link by email." />
-        </section>
-
-        <section className="no-guess-section" id="no-guesses">
-          <div className="section-copy">
-            <p className="landing-eyebrow">No guessed prices</p>
-            <h2>AI drafts scope. Your price book sets the dollars.</h2>
-            <p>
-              QuoteVan treats pricing as a trust state. Green lines are priced, yellow lines need your OK, and red
-              lines block sending until you enter a real price.
-            </p>
+        <section className="email-dashboard-section" id="trust">
+          <div className="landing-story-wire" aria-hidden="true">
+            <svg viewBox="0 0 1120 260" preserveAspectRatio="none">
+              <path
+                d="M890 8 C 796 38 835 82 752 105 C 648 134 673 184 548 210 C 492 222 438 218 386 236"
+              />
+              <path
+                className="wire-echo"
+                d="M932 34 C 824 65 835 115 747 136 C 642 162 642 205 520 228 C 466 238 417 236 362 250"
+              />
+              <circle className="wire-dot wire-dot-1" cx="826" cy="43" r="3.2" />
+              <circle className="wire-dot wire-dot-2" cx="728" cy="116" r="2.4" />
+              <circle className="wire-dot wire-dot-3" cx="620" cy="187" r="2.8" />
+              <circle className="wire-dot wire-dot-4" cx="464" cy="228" r="2.3" />
+            </svg>
           </div>
-          <div className="trust-stack">
-            <DraftLine detail="2 rooms · from your book" price={840} title="Paint walls" trustState="confirmed" />
-            <DraftLine
-              actionLabel="Confirm"
-              detail="$75 suggested · confirm once"
-              title="Patch nail holes"
-              trustState="needsOk"
-            />
-            <DraftLine
-              actionLabel="Add price"
-              detail="Hallway · no match found"
-              title="Remove wallpaper"
-              trustState="needsPrice"
-            />
+          <div className="email-dashboard-layout">
+            <EmailDashboardPreview />
+            <div className="section-copy email-section-copy">
+              <h2>The quote lands where customers already are.</h2>
+              <p>
+                Send a private quote link by email. Customers open the proposal in a browser, accept or decline, and
+                reply with questions without installing anything.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -91,30 +82,17 @@ export function LandingPage() {
         <section className="customer-section" id="customer">
           <div className="section-copy">
             <p className="landing-eyebrow">Customer experience</p>
-            <h2>The customer sees a quote, not your app.</h2>
+            <h2>A clean proposal your customer can act on.</h2>
             <p>
-              They open a private link from email, review the scope, accept or decline, and can pay a deposit when
-              payments are enabled.
+              They open a private link from email, review the scope, accept or decline, and pay a deposit when payments
+              are enabled.
             </p>
           </div>
           <CustomerQuoteCard />
         </section>
 
         <section className="book-section" id="book">
-          <div className="book-demo-card">
-            <div className="book-demo-head">
-              <span className="landing-eyebrow">Book strength</span>
-              <strong>8 of 11 confirmed</strong>
-            </div>
-            <ProgressMeter confirmed={8} total={11} />
-            <div className="book-flow">
-              <span>Suggested starter</span>
-              <b>Patch nail holes · $75</b>
-              <i aria-hidden="true" />
-              <span>Next quote</span>
-              <b>Auto-matches green</b>
-            </div>
-          </div>
+          <PriceBookScreen />
           <div className="section-copy">
             <p className="landing-eyebrow">Price book flywheel</p>
             <h2>Confirm a price once. Reuse it every quote.</h2>
@@ -126,32 +104,48 @@ export function LandingPage() {
         </section>
 
         <section className="audience-section">
-          <div className="section-copy is-centered">
-            <p className="landing-eyebrow">Built for small service teams</p>
-            <h2>Purpose-built for quoting, not another CRM to manage.</h2>
-            <p>
-              Useful for painters, handymen, cleaners, repair pros, and other field-service providers who need to
-              respond before the customer moves on.
-            </p>
-          </div>
-          <div className="audience-chips" aria-label="Supported service provider examples">
-            <span>Painters</span>
-            <span>Handymen</span>
-            <span>Cleaners</span>
-            <span>Repair pros</span>
-            <span>Field-service teams</span>
+          <div className="audience-inner">
+            <div className="section-copy is-centered">
+              <p className="landing-eyebrow">Built for small service teams</p>
+              <h2>Purpose-built for quoting, not another CRM to manage.</h2>
+              <p>For field-service pros who need to quote before the customer moves on.</p>
+            </div>
+
+            <ul className="audience-points" aria-label="QuoteVan is lighter than a CRM">
+              <li>No pipelines to maintain</li>
+              <li>No contacts to import</li>
+              <li>No setup weekend</li>
+            </ul>
+
+            <div className="audience-chips" aria-label="Supported service provider examples">
+              <span className="is-active">Painters</span>
+              <span>Cleaners</span>
+              <span>Handymen</span>
+              <span>Fencing</span>
+            </div>
+
+            <AudienceQuoteCard />
           </div>
         </section>
 
         <section className="final-cta">
-          <p className="landing-eyebrow">Early access</p>
-          <h2>Finish the quote before you get back in the van.</h2>
-          <p>
-            QuoteVan is still early. Join the waitlist if you want to test real quotes and shape the workflow.
-          </p>
-          <div className="landing-hero-actions">
-            <a className="btn btn-primary" href={waitlistMailto}>Get early access</a>
-            <a className="landing-support-link" href={supportMailto}>Questions? Contact support</a>
+          <div className="final-cta-card">
+            <p className="landing-eyebrow">Ready to quote faster</p>
+            <h2>Finish the quote before you get back in the van.</h2>
+            <p>
+              Build clean, customer-ready quotes with prices you control — right there on site.
+            </p>
+            <a className="final-cta-button" href={supportMailto}>
+              <span className="final-cta-button-icon" aria-hidden="true" />
+              <span className="final-cta-button-label">Start your first quote free</span>
+            </a>
+            <div className="final-cta-trust">
+              <span>No card to start</span>
+              <span>Works on your phone</span>
+            </div>
+            <p className="final-cta-support">
+              Questions? <a href={supportMailto}>Talk to a real person</a>
+            </p>
           </div>
         </section>
       </main>
@@ -171,15 +165,6 @@ export function LandingPage() {
   );
 }
 
-function PromiseItem(props: { title: string; text: string }) {
-  return (
-    <article>
-      <strong>{props.title}</strong>
-      <p>{props.text}</p>
-    </article>
-  );
-}
-
 function HowCard(props: { step: string; title: string; text: string }) {
   return (
     <article className="how-card">
@@ -190,15 +175,229 @@ function HowCard(props: { step: string; title: string; text: string }) {
   );
 }
 
+function EmailDashboardPreview() {
+  const dashboardRef = useRef<HTMLDivElement | null>(null);
+  const [isInView, setIsInView] = useState(false);
+  const rows = [
+    {
+      sender: "QuoteVan",
+      subject: "Quote from Bright Coat Painting",
+      preview: "Michael, your quote is ready to review. Total: $1,932.",
+      time: "Now",
+      important: true,
+    },
+    {
+      sender: "Riverbend Supply",
+      subject: "Paint order ready for pickup",
+      preview: "Your contractor order is staged at the front counter.",
+      time: "9:18 AM",
+    },
+    {
+      sender: "Maya Chen",
+      subject: "Re: hallway repaint",
+      preview: "Thanks, can you send the estimate when you have it?",
+      time: "8:42 AM",
+    },
+    {
+      sender: "Calendar",
+      subject: "Tomorrow: exterior touch-up walkthrough",
+      preview: "Reminder for 10:30 AM with Daniel Ortega.",
+      time: "Yesterday",
+    },
+    {
+      sender: "Northline Hardware",
+      subject: "Receipt for primer and tape",
+      preview: "Your purchase receipt and warranty information.",
+      time: "Jul 25",
+    },
+    {
+      sender: "Avery Brooks",
+      subject: "Front door paint color",
+      preview: "We decided on the darker green you showed us.",
+      time: "Jul 24",
+    },
+  ];
+
+  useEffect(() => {
+    const node = dashboardRef.current;
+
+    if (!node) {
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(Boolean(entry?.isIntersecting));
+      },
+      { threshold: 0.35 },
+    );
+
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      className={isInView ? "email-dashboard is-in-view" : "email-dashboard"}
+      ref={dashboardRef}
+      aria-label="Customer inbox showing a QuoteVan quote email"
+    >
+      <div className="email-topbar">
+        <div className="email-menu" aria-hidden="true"><span /></div>
+        <div className="email-logo" aria-hidden="true">
+          <i />
+          <span>Mail</span>
+        </div>
+        <div className="email-search">Search mail</div>
+        <div className="email-top-actions" aria-hidden="true">
+          <span />
+          <span />
+          <b>MC</b>
+        </div>
+      </div>
+      <div className="email-shell">
+        <aside className="email-sidebar" aria-label="Email folders">
+          <button type="button">Compose</button>
+          <span className="is-active">Inbox <b>24</b></span>
+          <span>Starred</span>
+          <span>Sent</span>
+          <span>Drafts</span>
+        </aside>
+        <div className="email-main">
+          <div className="email-toolbar">
+            <span className="email-checkbox" />
+            <span>Primary</span>
+            <small>1 new</small>
+          </div>
+          <div className="email-tabs" aria-hidden="true">
+            <span className="is-active">Primary</span>
+            <span>Updates</span>
+            <span>Promotions</span>
+          </div>
+          <div className="email-list">
+            {rows.map((row) => (
+              <article className={row.important ? "email-row is-quote" : "email-row"} key={`${row.sender}-${row.subject}`}>
+                <span className="email-checkbox" />
+                <strong>{row.sender}</strong>
+                <p><b>{row.subject}</b> <span>- {row.preview}</span></p>
+                <time>{row.time}</time>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="email-quote-pop" aria-hidden="true">
+        <QuoteVanMark size={24} />
+        <div>
+          <strong>New quote received</strong>
+          <span>Private quote link from Bright Coat Painting</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PriceBookScreen() {
+  return (
+    <article className="price-book-screen" aria-label="QuoteVan price book screen preview">
+      <header className="price-book-screen-head">
+        <div>
+          <h3>Price book</h3>
+          <span>11 items</span>
+        </div>
+        <button type="button" aria-label="Add price book item">+</button>
+      </header>
+
+      <section className="price-book-strength-card">
+        <div>
+          <span className="landing-eyebrow">Book strength</span>
+          <strong>8 of 11 confirmed</strong>
+        </div>
+        <ProgressMeter confirmed={8} total={11} />
+      </section>
+
+      <section className="price-book-list-section">
+        <div className="price-book-list-title">
+          <span>Active - matches green</span>
+          <b>8</b>
+        </div>
+        <div className="price-book-group is-active">
+          <PriceBookRow title="Paint walls" detail="Per room · S $294 · L $672" price="$420" tone="active" />
+          <PriceBookRow title="Paint ceiling" detail="Per room · S $126 · L $288" price="$180" tone="active" />
+          <PriceBookRow title="Paint trim" detail="Per room · S $112 · L $256" price="$160" tone="active" />
+          <PriceBookRow title="Paint door" detail="Each" price="$95" tone="active" />
+        </div>
+      </section>
+
+      <section className="price-book-list-section">
+        <div className="price-book-list-title">
+          <span>Starters to confirm</span>
+          <b>3</b>
+        </div>
+        <div className="price-book-group is-starter">
+          <PriceBookRow title="Patch nail holes" detail="Per room · S $35 · L $75" price="$50" tone="starter" />
+          <PriceBookRow title="Primer coat" detail="Per room · S $80 · L $180" price="$120" tone="starter" />
+        </div>
+      </section>
+    </article>
+  );
+}
+
+function PriceBookRow(props: { title: string; detail: string; price: string; tone: "active" | "starter" }) {
+  return (
+    <div className={`price-book-row is-${props.tone}`}>
+      <span className="price-book-row-stripe" aria-hidden="true" />
+      <span className="price-book-row-copy">
+        <strong>{props.title}</strong>
+        <small>{props.detail}</small>
+      </span>
+      <b>{props.price}</b>
+      <i aria-hidden="true">›</i>
+    </div>
+  );
+}
+
+function AudienceQuoteCard() {
+  const lines = [
+    { title: "Paint walls", detail: "2 medium rooms · 2 coats", price: "$840" },
+    { title: "Paint ceilings", detail: "2 rooms", price: "$360" },
+    { title: "Paint trim", detail: "2 rooms", price: "$320" },
+    { title: "Paint 2 doors", detail: "each", price: "$190" },
+  ];
+
+  return (
+    <article className="audience-quote-card" aria-label="Example painter quote priced from the price book">
+      <p className="landing-eyebrow">A painter's quote</p>
+      <div className="audience-quote-lines">
+        {lines.map((line) => (
+          <div className="audience-quote-line" key={line.title}>
+            <span className="audience-quote-stripe" aria-hidden="true" />
+            <span>
+              <strong>{line.title}</strong>
+              <small>{line.detail}</small>
+            </span>
+            <b>{line.price}</b>
+          </div>
+        ))}
+      </div>
+      <footer>
+        <span>Total · priced from your book</span>
+        <strong>$1,932</strong>
+      </footer>
+    </article>
+  );
+}
+
 function CustomerQuoteCard() {
   return (
     <article className="customer-quote-card">
       <header>
-        <QuoteVanMark size={38} framed />
+        <QuoteVanMark size={42} framed />
         <div>
           <span>Quote from</span>
           <strong>Bright Coat Painting</strong>
-          <p>Quote prepared with QuoteVan</p>
+          <p>(416) 555-0148 · quotes@brightcoat.co</p>
         </div>
         <StatusPill tone="viewed">Viewed</StatusPill>
       </header>
@@ -207,17 +406,39 @@ function CustomerQuoteCard() {
         <span><b>Issued</b>Jul 26</span>
         <span><b>Valid until</b>Aug 7</span>
       </div>
-      <section>
+      <section className="customer-quote-party">
         <b>Prepared for</b>
         <strong>Michael</strong>
         <p>18 Victor Ave, Toronto</p>
       </section>
-      <QuotePreviewLine title="Paint walls in 2 medium rooms" price="$840" />
-      <QuotePreviewLine title="Paint ceilings in 2 rooms" price="$360" />
-      <QuotePreviewLine title="Paint trim in 2 rooms" price="$320" />
-      <div className="customer-quote-total">
-        <span>Total</span>
+      <section className="customer-quote-scope">
+        <b>Scope of work</b>
+        <p>
+          Interior repaint for two medium rooms: walls, ceilings, trim, and two doors. Standard prep and two coats
+          included.
+        </p>
+      </section>
+      <div className="customer-quote-table" role="presentation">
+        <div className="customer-quote-table-head">
+          <span>Description</span>
+          <span>Amount</span>
+        </div>
+        <QuotePreviewLine title="Paint walls" detail="2 medium rooms · 2 coats · $420/room" price="$840" />
+        <QuotePreviewLine title="Paint ceilings" detail="2 rooms · $180/room" price="$360" />
+        <QuotePreviewLine title="Paint trim" detail="2 rooms · $160/room" price="$320" />
+        <QuotePreviewLine title="Paint 2 doors" detail="2 each · $95/door" price="$190" />
+      </div>
+      <div className="customer-quote-summary">
+        <span>Subtotal</span>
+        <b>$1,710</b>
+        <span>Tax (13%)</span>
+        <b>$222</b>
+        <strong>Total</strong>
         <strong>$1,932</strong>
+      </div>
+      <div className="customer-quote-terms">
+        <p><b>Terms.</b> 50% deposit due to schedule the job. Balance due on completion.</p>
+        <span>Deposit due today: <strong>$966</strong></span>
       </div>
       <div className="customer-quote-actions">
         <button type="button">Accept quote</button>
@@ -228,10 +449,13 @@ function CustomerQuoteCard() {
   );
 }
 
-function QuotePreviewLine(props: { title: string; price: string }) {
+function QuotePreviewLine(props: { title: string; detail: string; price: string }) {
   return (
     <div className="customer-quote-line">
-      <span>{props.title}</span>
+      <span>
+        <strong>{props.title}</strong>
+        <small>{props.detail}</small>
+      </span>
       <b>{props.price}</b>
     </div>
   );
@@ -240,18 +464,18 @@ function QuotePreviewLine(props: { title: string; price: string }) {
 function StoreBadges() {
   return (
     <div aria-label="QuoteVan mobile app availability" className="store-badges">
-      <a aria-label="Join the waitlist for QuoteVan on the App Store" className="store-badge" href={waitlistMailto}>
+      <span aria-label="QuoteVan iOS app status" className="store-badge">
         <span aria-hidden="true" className="store-badge-icon store-badge-icon-apple">
           <svg viewBox="0 0 18 22">
             <path d="M14.8 11.6c0-2.4 2-3.6 2.1-3.7-1.1-1.6-2.8-1.9-3.4-1.9-1.4-.1-2.7.8-3.5.8-.7 0-1.9-.8-3.1-.8-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.8 2.5 3.1 2.4 1.2 0 1.7-.8 3.1-.8s1.8.8 3.1.8c1.3 0 2.1-1.2 2.9-2.3.9-1.3 1.2-2.6 1.3-2.7 0 0-2.9-1.1-2.9-3.8ZM12.6 4.5c.7-.8 1.1-1.9 1-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2-.5 2.7-1.3Z" />
           </svg>
         </span>
         <span>
-          <small>Coming soon on</small>
+          <small>iPhone app</small>
           <strong>App Store</strong>
         </span>
-      </a>
-      <a aria-label="Join the waitlist for QuoteVan on Google Play" className="store-badge" href={waitlistMailto}>
+      </span>
+      <span aria-label="QuoteVan Android app status" className="store-badge">
         <span aria-hidden="true" className="store-badge-icon store-badge-icon-play">
           <svg viewBox="0 0 22 24">
             <path d="M2.1 1.1c-.4.3-.6.9-.6 1.6v18.6c0 .7.2 1.3.7 1.6l10.6-10.9L2.1 1.1Z" />
@@ -261,10 +485,10 @@ function StoreBadges() {
           </svg>
         </span>
         <span>
-          <small>Coming soon on</small>
+          <small>Android app</small>
           <strong>Google Play</strong>
         </span>
-      </a>
+      </span>
     </div>
   );
 }

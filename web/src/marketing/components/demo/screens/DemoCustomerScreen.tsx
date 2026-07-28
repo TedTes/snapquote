@@ -1,4 +1,4 @@
-import { AppHeader, DemoButton, PhoneFrame, StepBar, TapIndicator } from "../primitives";
+import { DemoButton, PhoneFrame, StepBar, TapIndicator, WizardHeader } from "../primitives";
 import { isActiveTarget, targetCoordinates, typedValue } from "../engine/playback";
 import type { DemoPlaybackState } from "../engine/types";
 
@@ -11,12 +11,7 @@ export function DemoCustomerScreen({ playback }: DemoCustomerScreenProps) {
 
   return (
     <PhoneFrame time="11:28">
-      <AppHeader
-        centered
-        leftAction="×"
-        title="New quote"
-        subtitle="1 / 4"
-      />
+      <WizardHeader leftAction="×" step="1 / 4" />
       <StepBar steps={["Customer", "Job", "Notes", "Review"]} activeIndex={0} />
 
       <section className="qv-flow-form">

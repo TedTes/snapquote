@@ -18,4 +18,5 @@ export * from "./TapIndicator";
 export * from "./Timeline";
 export * from "./TrustSwatch";
 export * from "./TypingText";
+export * from "./WizardHeader";
 export type * from "./types";

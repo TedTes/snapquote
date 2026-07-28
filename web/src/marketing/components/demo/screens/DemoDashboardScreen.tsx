@@ -17,7 +17,7 @@ export function DemoDashboardScreen({ playback }: DemoDashboardScreenProps) {
   const tapTarget = targetCoordinates(playback.activeEvent?.target);
 
   return (
-    <PhoneFrame time="8:15">
+    <PhoneFrame className="qv-flow-dashboard" time="8:15">
       <AppHeader eyebrow="Bright Coat Painting" title="Today" subtitle="Sunday, Jul 26" avatarText="BC" />
 
       <section className="qv-flow-pipeline">

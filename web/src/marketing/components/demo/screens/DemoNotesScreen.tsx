@@ -1,4 +1,4 @@
-import { AppHeader, DemoButton, PhoneFrame, StepBar } from "../primitives";
+import { DemoButton, PhoneFrame, StepBar, WizardHeader } from "../primitives";
 import type { DemoPlaybackState } from "../engine/types";
 
 interface DemoNotesScreenProps {
@@ -10,25 +10,40 @@ export function DemoNotesScreen({ playback }: DemoNotesScreenProps) {
 
   return (
     <PhoneFrame time="11:28">
-      <AppHeader centered leftAction="‹" title="New quote" subtitle="3 / 4" />
+      <WizardHeader step="3 / 4" />
       <StepBar steps={["Customer", "Job", "Notes", "Review"]} activeIndex={2} />
 
       <section className="qv-flow-notes">
         <h3>Anything else on this job?</h3>
-        <p>Talk it through, or tap extras below.</p>
-        <div className={isRecording ? "qv-flow-recording is-active" : "qv-flow-recording"}>
-          <span />
-          <strong>{isRecording ? "0:24 · tap to stop" : "Tap to talk"}</strong>
-          <div aria-hidden="true">
-            {Array.from({ length: 22 }, (_, index) => <i key={index} />)}
+        <p>Talk it through or type it — whatever's faster on site.</p>
+
+        <div className={isRecording ? "qv-flow-unified-note is-recording" : "qv-flow-unified-note"}>
+          <div className="qv-flow-note-placeholder">
+            {isRecording ? (
+              <span>Listening...</span>
+            ) : (
+              <span>Water stain on the hallway ceiling...</span>
+            )}
           </div>
+          <div className="qv-flow-note-footer">
+            <small>{isRecording ? "0:24 · tap mic to stop" : "Adds scope, never prices"}</small>
+            <button aria-label="Record note" data-demo-target="mic" type="button">
+              {isRecording ? <i aria-hidden="true" /> : <span className="qv-flow-mic-glyph" aria-hidden="true" />}
+            </button>
+          </div>
+          {isRecording ? (
+            <div className="qv-flow-note-wave" aria-hidden="true">
+              {Array.from({ length: 17 }, (_, index) => <i key={index} />)}
+            </div>
+          ) : null}
         </div>
-        <small>Saved on your phone as you talk</small>
+
+        <b className="qv-flow-chip-label">Quick add</b>
         <div className="qv-flow-chip-row">
-          <button type="button">+ patch holes</button>
-          <button type="button">+ wallpaper</button>
-          <button type="button">+ primer</button>
-          <button type="button">+ materials</button>
+          <button className="is-active" type="button"><span />patch holes</button>
+          <button type="button"><span />wallpaper</button>
+          <button type="button"><span />primer</button>
+          <button type="button"><span />materials</button>
         </div>
       </section>
 

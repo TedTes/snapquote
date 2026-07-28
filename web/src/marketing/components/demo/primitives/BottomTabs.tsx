@@ -9,7 +9,7 @@ const tabs: Array<{ id: DemoTab; label: string; icon?: DemoTabIcon }> = [
   { id: "today", label: "Today", icon: "home" },
   { id: "quotes", label: "Quotes", icon: "clipboardList" },
   { id: "new", label: "" },
-  { id: "priceBook", label: "Price", icon: "book" },
+  { id: "priceBook", label: "Price book", icon: "book" },
   { id: "settings", label: "Settings", icon: "gear" },
 ];
 
