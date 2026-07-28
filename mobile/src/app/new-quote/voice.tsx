@@ -6,7 +6,7 @@ import {
   useAudioRecorder,
   useAudioRecorderState
 } from "expo-audio";
-import { Info, Mic, Plus } from "lucide-react-native";
+import { Mic } from "lucide-react-native";
 import { router } from "expo-router";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -183,47 +183,56 @@ export default function NewQuoteVoiceScreen() {
       <NewQuoteHeader onBack={() => router.back()} step={3} />
       <AnimatedScreenContent contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <NewQuoteTitle
-          helper={tradeConfig.notes.helper}
-          title={tradeConfig.notes.title}
+          helper="Talk it through or type it — whatever's faster on site."
+          title="Anything else on this job?"
         />
 
         <View style={styles.group}>
-          <SectionKicker>{recording ? "Recording" : "Talk it through"}</SectionKicker>
-          {recording ? (
-            <Pressable accessibilityRole="button" onPress={() => void stopRecording()} style={styles.recordingPanel}>
-              <View style={styles.recordDot} />
-              <View style={styles.recordBody}>
-                <Text style={styles.recordText}>{formatElapsed(elapsedSeconds)} · tap to stop</Text>
-                <View style={styles.wave}>
-                  {WAVE_BARS.map((height, index) => (
-                    <View key={index} style={[styles.waveBar, { height }]} />
-                  ))}
-                </View>
+          <SectionKicker>Notes</SectionKicker>
+          <View style={[styles.captureCard, recording ? styles.captureCardRecording : null]}>
+            <TextInput
+              editable={!recording}
+              multiline
+              onChangeText={setNotes}
+              placeholder={recording ? "Listening..." : tradeConfig.notes.placeholder}
+              placeholderTextColor={colors.ink3}
+              style={styles.notesInput}
+              textAlignVertical="top"
+              value={notes}
+            />
+            <View style={styles.captureDivider} />
+            <View style={styles.captureFooter}>
+              <View style={styles.guardrail}>
+                <View style={styles.guardrailMark} />
+                <Text style={styles.guardrailText}>
+                  {recording
+                    ? `${formatElapsed(elapsedSeconds)} · tap mic to stop`
+                    : transcribing
+                      ? "Writing down the recording..."
+                      : "Adds scope, never prices"}
+                </Text>
               </View>
-            </Pressable>
-          ) : (
-            <Pressable accessibilityRole="button" onPress={() => void startRecording()} style={styles.talkPanel}>
-              <View style={styles.micBadge}>
-                <Mic color={colors.surface} size={18} strokeWidth={2.3} />
+              <Pressable
+                accessibilityLabel={recording ? "Stop recording" : "Start voice note"}
+                accessibilityRole="button"
+                onPress={() => recording ? void stopRecording() : void startRecording()}
+                style={[styles.micButton, recording ? styles.micButtonRecording : null]}
+              >
+                {recording ? <View style={styles.stopGlyph} /> : <Mic color={colors.surface} size={18} strokeWidth={2.3} />}
+              </Pressable>
+            </View>
+            {recording ? (
+              <View style={styles.inlineWave}>
+                {WAVE_BARS.slice(0, 13).map((height, index) => (
+                  <View key={index} style={[styles.waveBar, { height: Math.max(8, height - 8) }]} />
+                ))}
               </View>
-              <View style={styles.talkTextWrap}>
-                <Text style={styles.talkTitle}>Tap to talk</Text>
-                <Text style={styles.talkSub}>Walk the space — we'll write it down</Text>
-              </View>
-            </Pressable>
-          )}
-          {recording || transcribing ? (
-            <Text style={styles.savedText}>
-              {transcribing ? "Writing down the recording..." : "Saved on your phone as you talk"}
-            </Text>
-          ) : null}
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.group}>
-          <View style={styles.kickerRow}>
-            <SectionKicker>Common extras</SectionKicker>
-            <Text style={styles.kickerHint}>tap to add</Text>
-          </View>
+          <SectionKicker>Quick add</SectionKicker>
           <View style={styles.chipWrap}>
             {extraHints.map((hint) => (
               <ExtraChip
@@ -235,28 +244,6 @@ export default function NewQuoteVoiceScreen() {
             ))}
           </View>
         </View>
-
-        {!recording ? (
-          <View style={styles.group}>
-            <View style={styles.kickerRow}>
-              <SectionKicker>Notes</SectionKicker>
-              <Text style={styles.kickerHint}>optional</Text>
-            </View>
-            <TextInput
-              multiline
-              onChangeText={setNotes}
-              placeholder={tradeConfig.notes.placeholder}
-              placeholderTextColor={colors.ink3}
-              style={styles.notesInput}
-              textAlignVertical="top"
-              value={notes}
-            />
-            <View style={styles.guardrail}>
-              <Info color={colors.ink3} size={12} strokeWidth={2} />
-              <Text style={styles.guardrailText}>Notes add scope only — never prices.</Text>
-            </View>
-          </View>
-        ) : null}
       </AnimatedScreenContent>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
@@ -288,7 +275,7 @@ function ExtraChip(props: { active: boolean; label: string; onPress: () => void 
       onPress={props.onPress}
       style={[styles.extraChip, props.active ? styles.extraChipActive : null]}
     >
-      <Plus color={props.active ? colors.amber : colors.ink2} size={13} strokeWidth={2.2} />
+      <View style={[styles.extraChipMark, props.active ? styles.extraChipMarkActive : null]} />
       <Text style={[styles.extraChipText, props.active ? styles.extraChipTextActive : null]}>
         {props.label}
       </Text>
@@ -355,86 +342,43 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 20
   },
-  talkPanel: {
-    alignItems: "center",
-    backgroundColor: colors.dark,
-    borderRadius: 10,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 62,
-    paddingHorizontal: 14
-  },
-  micBadge: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: 999,
-    height: 40,
-    justifyContent: "center",
-    width: 40
-  },
-  talkTextWrap: {
-    gap: 3
-  },
-  talkTitle: {
-    color: colors.surface,
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  talkSub: {
-    color: "rgba(255,255,255,0.74)",
-    fontSize: 11,
-    fontWeight: "700"
-  },
-  recordingPanel: {
-    alignItems: "center",
+  captureCard: {
     backgroundColor: colors.surface,
-    borderColor: colors.red,
+    borderColor: colors.border,
     borderRadius: 11,
     borderWidth: 1,
-    flexDirection: "row",
-    gap: 16,
-    minHeight: 70,
-    paddingHorizontal: 14
+    overflow: "hidden"
   },
-  recordDot: {
-    backgroundColor: colors.red,
-    borderRadius: 999,
-    height: 38,
-    width: 38
+  captureCardRecording: {
+    borderColor: colors.red
   },
-  recordBody: {
-    gap: 10
+  captureDivider: {
+    backgroundColor: colors.border,
+    height: 1
   },
-  recordText: {
-    color: colors.red,
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  wave: {
+  captureFooter: {
     alignItems: "center",
     flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    minHeight: 48,
+    paddingLeft: 13,
+    paddingRight: 10
+  },
+  inlineWave: {
+    alignItems: "center",
+    bottom: 14,
+    flexDirection: "row",
     gap: 3,
-    height: 23
+    height: 18,
+    left: 124,
+    pointerEvents: "none",
+    position: "absolute"
   },
   waveBar: {
     backgroundColor: colors.redBorder,
     borderRadius: 2,
     width: 3
-  },
-  savedText: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "700"
-  },
-  kickerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  kickerHint: {
-    color: colors.ink3,
-    fontSize: 10,
-    fontWeight: "700"
   },
   chipWrap: {
     flexDirection: "row",
@@ -448,13 +392,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 5,
+    gap: 7,
     minHeight: 34,
     paddingHorizontal: 12
   },
   extraChipActive: {
-    backgroundColor: colors.amberBg,
-    borderColor: colors.amberBorder
+    backgroundColor: colors.dark,
+    borderColor: colors.dark
+  },
+  extraChipMark: {
+    borderColor: colors.ink3,
+    borderRadius: 1,
+    borderWidth: 1.3,
+    height: 7,
+    width: 7
+  },
+  extraChipMarkActive: {
+    borderColor: colors.surface
   },
   extraChipText: {
     color: colors.ink,
@@ -462,30 +416,51 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   extraChipTextActive: {
-    color: colors.amber,
+    color: colors.surface,
     fontWeight: "900"
   },
   notesInput: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1,
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-    minHeight: 70,
-    padding: 13
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+    minHeight: 86,
+    paddingHorizontal: 13,
+    paddingTop: 13
   },
   guardrail: {
     alignItems: "center",
     flexDirection: "row",
     gap: 5
   },
+  guardrailMark: {
+    borderColor: colors.ink3,
+    borderRadius: 1,
+    borderWidth: 1.2,
+    height: 7,
+    width: 7
+  },
   guardrailText: {
     color: colors.ink3,
     fontSize: 11,
     fontWeight: "700"
+  },
+  micButton: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: 999,
+    height: 38,
+    justifyContent: "center",
+    width: 38
+  },
+  micButtonRecording: {
+    backgroundColor: colors.red
+  },
+  stopGlyph: {
+    backgroundColor: colors.surface,
+    borderRadius: 3,
+    height: 13,
+    width: 13
   },
   footer: {
     backgroundColor: colors.bg,
