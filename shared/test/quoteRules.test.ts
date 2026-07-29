@@ -4,6 +4,7 @@ import {
   deriveQuoteStatus,
   getQuoteSendBlockers,
   isQuoteStale,
+  sendQuoteSchema,
   type QuoteEvent,
   type QuoteLineItem
 } from "../src/index.js";
@@ -81,5 +82,11 @@ describe("quote rules", () => {
         now: new Date("2026-07-20T12:00:00.000Z")
       })
     ).toBe(false);
+  });
+
+  it("accepts email and SMS as explicit quote delivery channels", () => {
+    expect(sendQuoteSchema.parse({ channels: ["email"] })).toEqual({ channels: ["email"] });
+    expect(sendQuoteSchema.parse({ channels: ["sms"] })).toEqual({ channels: ["sms"] });
+    expect(sendQuoteSchema.parse({ channels: ["email", "sms"] })).toEqual({ channels: ["email", "sms"] });
   });
 });

@@ -177,6 +177,97 @@ describe("price book state", () => {
     expect(useQuoteStore.getState().priceBookItems).toEqual([]);
   });
 
+  it("archives a local quote from the active list", () => {
+    const quote = { ...quoteWithYellowLine("item-confirmed"), sentAt: now };
+    useQuoteStore.setState({
+      quotes: [quote],
+      events: [
+        {
+          id: "event-sent",
+          quoteId: quote.id,
+          type: "sent",
+          meta: { channel: "email" },
+          createdAt: now,
+        },
+      ],
+    });
+
+    useQuoteStore.getState().archiveQuote(quote.id);
+
+    expect(useQuoteStore.getState().quotes).toEqual([]);
+    expect(useQuoteStore.getState().events).toEqual([]);
+  });
+
+  it("removes only local artifacts that were synced remotely", () => {
+    const syncedQuote = quoteWithYellowLine("item-confirmed");
+    const unsyncedQuote = {
+      ...quoteWithYellowLine("item-confirmed"),
+      id: "quote-unsynced",
+    };
+    const localCustomer = {
+      id: "cust-local",
+      orgId,
+      name: "Maya Chen",
+      email: "maya@example.com",
+      phone: null,
+      address: "18 Victor Ave",
+      createdAt: now,
+    };
+    const syncedItem = item({
+      id: "pbi-local",
+      key: "custom_cleanup",
+      name: "Custom cleanup",
+      starter: false,
+    });
+    const unsyncedItem = item({
+      id: "pbi-unsynced",
+      key: "custom_prep",
+      name: "Custom prep",
+      starter: false,
+    });
+
+    useQuoteStore.setState({
+      customers: [localCustomer],
+      priceBookItems: [syncedItem, unsyncedItem],
+      quotes: [syncedQuote, unsyncedQuote],
+      events: [
+        {
+          id: "event-synced",
+          quoteId: syncedQuote.id,
+          type: "created",
+          meta: {},
+          createdAt: now,
+        },
+        {
+          id: "event-unsynced",
+          quoteId: unsyncedQuote.id,
+          type: "created",
+          meta: {},
+          createdAt: now,
+        },
+      ],
+    });
+
+    useQuoteStore.getState().removeLocalSyncArtifacts({
+      customerIds: [localCustomer.id],
+      priceBookItemIds: [syncedItem.id],
+      quoteIds: [syncedQuote.id],
+    });
+
+    expect(useQuoteStore.getState().customers).toEqual([]);
+    expect(useQuoteStore.getState().priceBookItems).toEqual([unsyncedItem]);
+    expect(useQuoteStore.getState().quotes).toEqual([unsyncedQuote]);
+    expect(useQuoteStore.getState().events).toEqual([
+      {
+        id: "event-unsynced",
+        quoteId: unsyncedQuote.id,
+        type: "created",
+        meta: {},
+        createdAt: now,
+      },
+    ]);
+  });
+
   it("keeps remote price items over local items with the same key during hydration", () => {
     const remote = item({
       id: "00000000-0000-4000-8000-000000000201",

@@ -163,4 +163,48 @@ describe("painter draft generation", () => {
       ["remove_wallpaper", "red"]
     ]);
   });
+
+  it("ignores spoken prices from voice notes and prices only from the price book", () => {
+    const priceBook = buildPainterStarterPriceBook({
+      orgId: "00000000-0000-4000-8000-000000000099",
+      now: "2026-07-20T12:00:00.000Z",
+      makeId: (key) => idMap[key],
+      corePrices: {
+        paintWalls: {
+          small: 25000,
+          medium: 42000,
+          large: 65000
+        },
+        paintCeiling: {
+          small: 12000,
+          medium: 18000,
+          large: 26000
+        },
+        paintTrim: {
+          small: 9000,
+          medium: 16000,
+          large: 24000
+        },
+        paintDoorEachCents: 9500,
+        heavyPrepHourlyCents: 8500
+      }
+    });
+
+    const draft = createPainterDraftLines({
+      checklist,
+      transcript:
+        "Also patch nail holes for 75 dollars, remove wallpaper behind the stairs for 220 dollars, and customer has paint.",
+      priceBookItems: priceBook
+    });
+
+    const patchLine = draft.lineItems.find((line) => line.priceBookItemKey === "patch_nail_holes");
+    const wallpaperLine = draft.lineItems.find((line) => line.priceBookItemKey === "remove_wallpaper");
+
+    expect(patchLine?.matchState).toBe("yellow");
+    expect(patchLine?.unitPriceCents).toBe(5000);
+    expect(wallpaperLine?.matchState).toBe("red");
+    expect(wallpaperLine?.unitPriceCents).toBeNull();
+    expect(draft.lineItems.some((line) => line.unitPriceCents === 7500 || line.unitPriceCents === 22000)).toBe(false);
+    expect(draft.scopeNotes).toEqual(["Customer supplies paint."]);
+  });
 });
