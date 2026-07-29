@@ -324,7 +324,7 @@ export const quotePatchSchema = z.object({
 });
 
 export const sendQuoteSchema = z.object({
-  channels: z.array(deliveryChannelSchema).min(1).max(1)
+  channels: z.array(deliveryChannelSchema).min(1).max(2)
 });
 
 export const customerQuoteResponseSchema = z.object({

@@ -26,7 +26,7 @@ export const jobStatuses = [
 export const lineItemKinds = ["labour", "material"] as const;
 export const lineItemSources = ["price_book", "manual"] as const;
 export const lineItemMatchStates = ["green", "yellow", "red"] as const;
-export const deliveryChannels = ["email"] as const;
+export const deliveryChannels = ["email", "sms"] as const;
 export const customerResponseActions = ["accept", "decline"] as const;
 export const quoteEventTypes = [
   "created",
@@ -36,7 +36,12 @@ export const quoteEventTypes = [
   "declined",
   "expired",
   "followed_up",
-  "superseded"
+  "customer_replied",
+  "superseded",
+  "payment_started",
+  "payment_paid",
+  "payment_failed",
+  "archived"
 ] as const;
 
 export const quoteUnits = [

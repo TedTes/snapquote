@@ -40,7 +40,7 @@ import {
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-snapquote-org-id, stripe-signature",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-snapquote-org-id, stripe-signature, x-snapquote-webhook-secret, x-snapquote-admin-secret",
   "access-control-allow-methods": "GET,POST,PATCH,OPTIONS"
 };
 
@@ -49,6 +49,8 @@ const defaultUserId = Deno.env.get("SNAPQUOTE_DEFAULT_USER_ID") ?? "00000000-000
 const requestOrgIds = new WeakMap<Request, string>();
 const appAccessTokenSeconds = 60 * 60 * 24 * 7;
 const appRefreshTokenSeconds = 60 * 60 * 24 * 30;
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+const maxRateLimitBuckets = 2_000;
 
 type AuthSessionPayload = {
   accessToken: string;
@@ -170,6 +172,11 @@ const customerSchema = z.object({
   address: z.string().trim().min(1).max(400)
 });
 
+const customerPatchSchema = customerSchema.partial().refine(
+  (input) => Object.values(input).some((value) => value !== undefined),
+  "At least one customer field is required"
+);
+
 const createQuoteSchema = z.object({
   customerId: z.string().uuid().optional(),
   customer: customerSchema.optional(),
@@ -233,7 +240,20 @@ const priceBookCreateSchema = z.object({
 });
 
 const sendSchema = z.object({
-  channels: z.array(z.literal("email")).min(1).max(1).default(["email"])
+  channels: z.array(z.enum(["email", "sms"])).min(1).max(2).default(["email"])
+}).transform((input) => ({
+  channels: Array.from(new Set(input.channels))
+}));
+
+const inboundEmailSchema = z.object({
+  publicToken: z.string().trim().min(16).max(160).optional(),
+  quoteToken: z.string().trim().min(16).max(160).optional(),
+  from: z.string().trim().max(320).optional(),
+  fromEmail: z.string().trim().email().max(320).optional(),
+  subject: z.string().trim().max(500).optional(),
+  text: z.string().trim().max(20_000).optional(),
+  html: z.string().trim().max(80_000).optional(),
+  receivedAt: z.string().trim().max(80).optional()
 });
 
 const publicPaymentConfirmSchema = z.object({
@@ -248,6 +268,65 @@ const pricingSuggestionQuerySchema = z.object({
   metro: z.string().trim().min(1).max(160).optional()
 });
 
+const pricingSuggestionIngestSchema = z.object({
+  actor: z.string().trim().min(1).max(160).default("pricing-ingest"),
+  trade: z.string().trim().min(1).max(80).default("painting"),
+  region: z.object({
+    key: z.string().trim().min(1).max(120),
+    countryCode: z.string().trim().min(2).max(3).nullable().optional(),
+    regionCode: z.string().trim().min(1).max(80).nullable().optional(),
+    metroName: z.string().trim().min(1).max(160).nullable().optional(),
+    currency: z.string().trim().length(3).default("USD"),
+    laborMultiplier: z.number().positive().default(1),
+    materialMultiplier: z.number().positive().default(1),
+    confidence: z.number().min(0).max(1).default(0.5),
+    active: z.boolean().default(true)
+  }),
+  source: z.object({
+    key: z.string().trim().min(1).max(120).optional(),
+    name: z.string().trim().min(1).max(240),
+    sourceType: z.enum(["curated", "government", "vendor", "import", "llm_draft"]).default("import"),
+    sourceUrl: z.string().trim().url().nullable().optional(),
+    collectedAt: z.string().date().nullable().optional(),
+    notes: z.string().trim().max(4000).default(""),
+    confidence: z.number().min(0).max(1).default(0.5)
+  }),
+  version: z.object({
+    key: z.string().trim().min(1).max(120).optional(),
+    status: z.enum(["draft", "reviewed", "published", "retired"]).default("published"),
+    formulaVersion: z.string().trim().min(1).max(80).default("manual-v1"),
+    publishedAt: z.string().datetime().nullable().optional(),
+    sourceSnapshot: z.record(z.unknown()).default({}),
+    notes: z.string().trim().max(4000).default("")
+  }).default({}),
+  suggestions: z.array(z.object({
+    key: z.string().trim().min(1).max(80).optional(),
+    name: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(1000).default(""),
+    aliases: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
+    unit: z.enum(["room", "each", "hour", "flat", "sqft", "lnft", "day"]),
+    kind: z.enum(["labour", "material"]).default("labour"),
+    pricingType: z.enum(["fixed", "room_size"]).optional(),
+    pricing: pricingSchema.optional(),
+    lowCents: z.number().int().min(0),
+    medianCents: z.number().int().min(0),
+    highCents: z.number().int().min(0),
+    confidence: z.number().min(0).max(1).default(0.5),
+    provenance: z.record(z.unknown()).default({}),
+    sourceNote: z.string().trim().max(1000).default("ingested source")
+  })).min(1).max(200)
+}).superRefine((input, context) => {
+  for (const [index, suggestion] of input.suggestions.entries()) {
+    if (suggestion.lowCents > suggestion.medianCents || suggestion.medianCents > suggestion.highCents) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["suggestions", index, "medianCents"],
+        message: "Suggestion prices must be ordered low <= median <= high"
+      });
+    }
+  }
+});
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -258,7 +337,11 @@ Deno.serve(async (request) => {
     const route = routeFromRequest(request);
 
     if (route.method === "GET" && route.path === "/health") {
-      return json({ ok: true, service: "snapquote-edge", timestamp: new Date().toISOString() });
+      return json({ ok: true, service: "quotevan-edge", timestamp: new Date().toISOString() });
+    }
+
+    if (route.method === "GET" && route.path === "/admin/ops/health") {
+      return json(await adminOpsHealth(db, request));
     }
 
     if (route.method === "POST" && route.path === "/v1/auth/refresh") {
@@ -279,6 +362,14 @@ Deno.serve(async (request) => {
 
     if (route.method === "POST" && route.path === "/stripe/webhook") {
       return json(await handleStripeWebhook(db, request));
+    }
+
+    if (route.method === "POST" && route.path === "/email/reply-webhook") {
+      return json(await handleInboundEmailReply(db, request));
+    }
+
+    if (route.method === "POST" && route.path === "/admin/pricing-suggestions/ingest") {
+      return json(await ingestPricingSuggestions(db, request));
     }
 
     if (requiresAppAuth(route)) {
@@ -340,11 +431,15 @@ Deno.serve(async (request) => {
     }
 
     if (route.method === "GET" && route.path === "/v1/customers") {
-      return json({ customers: await listCustomers(db, orgIdFromRequest(request)) });
+      return json({ customers: await listCustomers(db, orgIdFromRequest(request), request) });
     }
 
     if (route.method === "POST" && route.path === "/v1/customers") {
       return json(await createCustomer(db, request), 201);
+    }
+
+    if (route.method === "PATCH" && match(route.path, "/v1/customers/:id")) {
+      return json(await updateCustomer(db, request, params(route.path, "/v1/customers/:id").id));
     }
 
     if (route.method === "GET" && route.path === "/v1/quotes") {
@@ -393,6 +488,10 @@ Deno.serve(async (request) => {
       return json(await deleteDraftQuote(db, request, params(route.path, "/v1/quotes/:id/delete-draft").id));
     }
 
+    if (route.method === "POST" && match(route.path, "/v1/quotes/:id/archive")) {
+      return json(await archiveQuote(db, request, params(route.path, "/v1/quotes/:id/archive").id));
+    }
+
     if (route.method === "POST" && match(route.path, "/v1/quotes/:id/duplicate")) {
       return json(await duplicateQuote(db, request, params(route.path, "/v1/quotes/:id/duplicate").id), 201);
     }
@@ -402,19 +501,27 @@ Deno.serve(async (request) => {
     }
 
     if (route.method === "GET" && match(route.path, "/public/quotes/:token")) {
-      return json(await viewPublicQuote(db, params(route.path, "/public/quotes/:token").token));
+      const token = params(route.path, "/public/quotes/:token").token;
+      enforceRateLimit(request, ["public_quote_view", token, requestClientKey(request)], 120, 60_000);
+      return json(await viewPublicQuote(db, token));
     }
 
     if (route.method === "POST" && match(route.path, "/public/quotes/:token/respond")) {
-      return json(await respondToPublicQuote(db, request, params(route.path, "/public/quotes/:token/respond").token));
+      const token = params(route.path, "/public/quotes/:token/respond").token;
+      enforceRateLimit(request, ["public_quote_respond", token, requestClientKey(request)], 12, 10 * 60_000);
+      return json(await respondToPublicQuote(db, request, token));
     }
 
     if (route.method === "POST" && match(route.path, "/public/quotes/:token/pay")) {
-      return json(await createPublicQuotePayment(db, params(route.path, "/public/quotes/:token/pay").token));
+      const token = params(route.path, "/public/quotes/:token/pay").token;
+      enforceRateLimit(request, ["public_quote_pay", token, requestClientKey(request)], 10, 10 * 60_000);
+      return json(await createPublicQuotePayment(db, token));
     }
 
     if (route.method === "POST" && match(route.path, "/public/quotes/:token/pay/confirm")) {
-      return json(await confirmPublicQuotePayment(db, request, params(route.path, "/public/quotes/:token/pay/confirm").token));
+      const token = params(route.path, "/public/quotes/:token/pay/confirm").token;
+      enforceRateLimit(request, ["public_quote_pay_confirm", token, requestClientKey(request)], 30, 10 * 60_000);
+      return json(await confirmPublicQuotePayment(db, request, token));
     }
 
     return json({ error: "not_found", message: "Route not found" }, 404);
@@ -668,7 +775,13 @@ async function ensureOrg(db: SupabaseClient, orgId: string) {
 
 async function getMe(db: SupabaseClient, request: Request) {
   const orgId = orgIdFromRequest(request);
-  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  let org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  const hasStripeAccount = typeof org.stripe_account_id === "string" && org.stripe_account_id.length > 0;
+
+  if (hasStripeAccount && (!org.stripe_charges_enabled || !org.stripe_payouts_enabled)) {
+    org = await refreshStripeAccountStatus(db, orgId);
+  }
+
   const user = await memberFromBearer(db, request) ??
     await single(db.from("snapquote_org_members").select("*").eq("org_id", orgId).limit(1));
 
@@ -743,7 +856,7 @@ async function billingPortal(db: SupabaseClient, request: Request) {
     throw new HttpError(401, "Sign in before managing billing.");
   }
 
-  const url = Deno.env.get("SNAPQUOTE_BILLING_PORTAL_URL") ?? null;
+  const url = envFirst("QUOTEVAN_BILLING_PORTAL_URL", "SNAPQUOTE_BILLING_PORTAL_URL") ?? null;
 
   return { url };
 }
@@ -766,6 +879,82 @@ async function deleteAccount(db: SupabaseClient, request: Request) {
   must(await db.from("snapquote_orgs").delete().eq("id", orgId));
 
   return { deleted: true };
+}
+
+async function adminOpsHealth(db: SupabaseClient, request: Request) {
+  assertAdminSecret(request);
+
+  const database = {
+    orgs: await tableHealth(db, "snapquote_orgs"),
+    orgMembers: await tableHealth(db, "snapquote_org_members"),
+    customers: await tableHealth(db, "snapquote_customers"),
+    priceBookItems: await tableHealth(db, "snapquote_price_book_items"),
+    quotes: await tableHealth(db, "snapquote_quotes"),
+    quoteLineItems: await tableHealth(db, "snapquote_quote_line_items"),
+    quoteEvents: await tableHealth(db, "snapquote_quote_events"),
+    quotePublicLinks: await tableHealth(db, "snapquote_quote_public_links"),
+    quotePayments: await tableHealth(db, "snapquote_quote_payments"),
+    pricingSuggestions: await tableHealth(db, "snapquote_service_price_suggestions")
+  };
+  const checks = Object.values(database);
+
+  return {
+    ok: checks.every((check) => check.ok),
+    service: "quotevan-edge",
+    timestamp: new Date().toISOString(),
+    config: {
+      supabaseUrl: hasEnv("SUPABASE_URL"),
+      serviceRoleKey: hasEnv("SUPABASE_SERVICE_ROLE_KEY"),
+      publicBaseUrl: hasAnyEnv("QUOTEVAN_PUBLIC_BASE_URL", "SNAPQUOTE_PUBLIC_BASE_URL"),
+      resendApiKey: hasEnv("RESEND_API_KEY"),
+      emailFrom: hasAnyEnv("QUOTE_EMAIL_FROM", "SNAPQUOTE_EMAIL_FROM"),
+      emailWebhookUrl: hasAnyEnv("QUOTE_EMAIL_WEBHOOK_URL", "SNAPQUOTE_EMAIL_WEBHOOK_URL"),
+      inboundEmailSecret: hasAnyEnv("QUOTEVAN_INBOUND_EMAIL_SECRET", "SNAPQUOTE_INBOUND_EMAIL_SECRET", "SNAPQUOTE_EMAIL_WEBHOOK_SECRET"),
+      openAiApiKey: hasEnv("OPENAI_API_KEY"),
+      stripeSecretKey: hasEnv("STRIPE_SECRET_KEY"),
+      stripeWebhookSecret: hasEnv("STRIPE_WEBHOOK_SECRET"),
+      stripeConnectReturnUrl: hasAnyEnv("QUOTEVAN_CONNECT_RETURN_URL", "SNAPQUOTE_CONNECT_RETURN_URL"),
+      twilioAccountSid: hasEnv("TWILIO_ACCOUNT_SID"),
+      twilioAuthToken: hasEnv("TWILIO_AUTH_TOKEN"),
+      twilioFromPhone: hasAnyEnv("TWILIO_FROM_PHONE", "SNAPQUOTE_FROM_PHONE"),
+      adminSecret: hasAnyEnv("QUOTEVAN_ADMIN_SECRET", "SNAPQUOTE_ADMIN_SECRET", "SNAPQUOTE_PRICING_INGEST_SECRET"),
+      billingPortalUrl: hasAnyEnv("QUOTEVAN_BILLING_PORTAL_URL", "SNAPQUOTE_BILLING_PORTAL_URL")
+    },
+    database,
+    runtime: {
+      rateLimitBuckets: rateLimitBuckets.size
+    }
+  };
+}
+
+async function tableHealth(db: SupabaseClient, table: string) {
+  const { count, error } = await db.from(table).select("id", { count: "exact", head: true });
+
+  if (error) {
+    return { ok: false, count: null, error: error.message };
+  }
+
+  return { ok: true, count: count ?? 0 };
+}
+
+function envFirst(...names: string[]) {
+  for (const name of names) {
+    const value = Deno.env.get(name);
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function hasEnv(name: string) {
+  return Boolean(envFirst(name));
+}
+
+function hasAnyEnv(...names: string[]) {
+  return names.some((name) => hasEnv(name));
 }
 
 async function memberFromBearer(db: SupabaseClient, request: Request) {
@@ -912,6 +1101,92 @@ async function listPricingSuggestions(db: SupabaseClient, request: Request) {
   };
 }
 
+async function ingestPricingSuggestions(db: SupabaseClient, request: Request) {
+  assertAdminSecret(request);
+  const input = parse(pricingSuggestionIngestSchema, await request.json());
+  const region = await upsertPricingRegion(db, input.region);
+  const sourceKey = input.source.key ?? slugKey(`${input.source.sourceType}-${input.source.name}`);
+  const source = await upsertPricingSource(db, { ...input.source, key: sourceKey });
+  const versionKey = input.version.key ?? slugKey(`${input.trade}-${input.region.key}-${input.version.formulaVersion}`);
+  const publishedAt = input.version.status === "published"
+    ? input.version.publishedAt ?? new Date().toISOString()
+    : input.version.publishedAt ?? null;
+  const version = await upsertPricingVersion(db, {
+    key: versionKey,
+    trade: input.trade,
+    status: input.version.status,
+    formulaVersion: input.version.formulaVersion,
+    publishedAt,
+    sourceSnapshot: {
+      ...input.version.sourceSnapshot,
+      sources: Array.from(new Set([
+        ...arrayOfStrings((input.version.sourceSnapshot as { sources?: unknown }).sources),
+        sourceKey
+      ]))
+    },
+    notes: input.version.notes
+  });
+
+  const ingestedSuggestions: Array<{ id: string; templateKey: string; name: string }> = [];
+
+  for (const suggestion of input.suggestions) {
+    const templateKey = suggestion.key ?? slugKey(suggestion.name);
+    const pricing = suggestionPricing(suggestion);
+    const pricingType = pricing.type;
+    const template = await upsertServiceTemplate(db, {
+      trade: input.trade,
+      key: templateKey,
+      name: suggestion.name,
+      description: suggestion.description,
+      unit: suggestion.unit,
+      kind: suggestion.kind,
+      defaultPricingType: pricingType,
+      aliases: suggestion.aliases
+    });
+    const serviceSuggestion = await upsertServicePriceSuggestion(db, {
+      versionId: String(version.id),
+      templateId: String(template.id),
+      regionId: String(region.id),
+      unit: suggestion.unit,
+      pricingType,
+      lowCents: suggestion.lowCents,
+      medianCents: suggestion.medianCents,
+      highCents: suggestion.highCents,
+      pricing,
+      currency: String(region.currency),
+      confidence: suggestion.confidence,
+      provenance: {
+        ...suggestion.provenance,
+        sourceKey,
+        ingestedAt: new Date().toISOString()
+      }
+    });
+
+    await upsertSuggestionSourceLink(db, String(serviceSuggestion.id), String(source.id), suggestion.sourceNote);
+    ingestedSuggestions.push({ id: String(serviceSuggestion.id), templateKey, name: suggestion.name });
+  }
+
+  must(await db.from("snapquote_pricing_suggestion_audit_log").insert({
+    version_id: version.id,
+    action: "ingest_pricing_suggestions",
+    actor: input.actor,
+    meta: {
+      regionKey: input.region.key,
+      sourceKey,
+      suggestionCount: ingestedSuggestions.length,
+      templateKeys: ingestedSuggestions.map((suggestion) => suggestion.templateKey)
+    }
+  }));
+
+  return {
+    ok: true,
+    version: pricingVersionFromRow(version as PricingVersionRow),
+    region: pricingRegionFromRow(region as PricingRegionRow),
+    source: { id: source.id, key: source.key, name: source.name },
+    suggestions: ingestedSuggestions
+  };
+}
+
 async function resolvePricingRegion(
   db: SupabaseClient,
   query: z.infer<typeof pricingSuggestionQuerySchema>
@@ -1020,6 +1295,218 @@ async function serviceTemplatesByIds(db: SupabaseClient, ids: string[]): Promise
   });
 }
 
+async function upsertPricingRegion(
+  db: SupabaseClient,
+  input: z.infer<typeof pricingSuggestionIngestSchema>["region"]
+) {
+  const patch = {
+    key: input.key,
+    country_code: input.countryCode?.toUpperCase() ?? null,
+    region_code: input.regionCode?.toUpperCase() ?? null,
+    metro_name: input.metroName ?? null,
+    currency: input.currency.toUpperCase(),
+    labor_multiplier: input.laborMultiplier,
+    material_multiplier: input.materialMultiplier,
+    confidence: input.confidence,
+    active: input.active
+  };
+  const existing = await maybeSingle(db.from("snapquote_pricing_regions").select("*").eq("key", input.key).limit(1));
+
+  if (existing) {
+    return await single(db.from("snapquote_pricing_regions").update(patch).eq("id", existing.id).select("*"));
+  }
+
+  return await single(db.from("snapquote_pricing_regions").insert(patch).select("*"));
+}
+
+async function upsertPricingSource(
+  db: SupabaseClient,
+  input: z.infer<typeof pricingSuggestionIngestSchema>["source"] & { key: string }
+) {
+  const patch = {
+    key: input.key,
+    name: input.name,
+    source_type: input.sourceType,
+    source_url: input.sourceUrl ?? null,
+    collected_at: input.collectedAt ?? null,
+    notes: input.notes,
+    confidence: input.confidence
+  };
+  const existing = await maybeSingle(db.from("snapquote_pricing_sources").select("*").eq("key", input.key).limit(1));
+
+  if (existing) {
+    return await single(db.from("snapquote_pricing_sources").update(patch).eq("id", existing.id).select("*"));
+  }
+
+  return await single(db.from("snapquote_pricing_sources").insert(patch).select("*"));
+}
+
+async function upsertPricingVersion(
+  db: SupabaseClient,
+  input: {
+    key: string;
+    trade: string;
+    status: PricingVersionRow["status"];
+    formulaVersion: string;
+    publishedAt: string | null;
+    sourceSnapshot: Record<string, unknown>;
+    notes: string;
+  }
+) {
+  const patch = {
+    key: input.key,
+    trade: input.trade,
+    status: input.status,
+    formula_version: input.formulaVersion,
+    published_at: input.publishedAt,
+    source_snapshot: input.sourceSnapshot,
+    notes: input.notes
+  };
+  const existing = await maybeSingle(db.from("snapquote_pricing_versions").select("*").eq("key", input.key).limit(1));
+
+  if (existing) {
+    return await single(db.from("snapquote_pricing_versions").update(patch).eq("id", existing.id).select("*"));
+  }
+
+  return await single(db.from("snapquote_pricing_versions").insert(patch).select("*"));
+}
+
+async function upsertServiceTemplate(
+  db: SupabaseClient,
+  input: {
+    trade: string;
+    key: string;
+    name: string;
+    description: string;
+    unit: ServiceTemplateRow["unit"];
+    kind: ServiceTemplateRow["kind"];
+    defaultPricingType: ServiceTemplateRow["default_pricing_type"];
+    aliases: string[];
+  }
+) {
+  const patch = {
+    trade: input.trade,
+    key: input.key,
+    name: input.name,
+    description: input.description,
+    unit: input.unit,
+    kind: input.kind,
+    default_pricing_type: input.defaultPricingType,
+    aliases: input.aliases,
+    active: true
+  };
+  const existing = await maybeSingle(db
+    .from("snapquote_service_templates")
+    .select("*")
+    .eq("trade", input.trade)
+    .eq("key", input.key)
+    .limit(1));
+
+  if (existing) {
+    return await single(db.from("snapquote_service_templates").update(patch).eq("id", existing.id).select("*"));
+  }
+
+  return await single(db.from("snapquote_service_templates").insert(patch).select("*"));
+}
+
+async function upsertServicePriceSuggestion(
+  db: SupabaseClient,
+  input: {
+    versionId: string;
+    templateId: string;
+    regionId: string;
+    unit: ServicePriceSuggestionRow["unit"];
+    pricingType: ServicePriceSuggestionRow["pricing_type"];
+    lowCents: number;
+    medianCents: number;
+    highCents: number;
+    pricing: PriceBookPricing;
+    currency: string;
+    confidence: number;
+    provenance: Record<string, unknown>;
+  }
+) {
+  const patch = {
+    version_id: input.versionId,
+    service_template_id: input.templateId,
+    region_id: input.regionId,
+    unit: input.unit,
+    pricing_type: input.pricingType,
+    low_cents: input.lowCents,
+    median_cents: input.medianCents,
+    high_cents: input.highCents,
+    pricing: input.pricing,
+    currency: input.currency,
+    confidence: input.confidence,
+    provenance: input.provenance
+  };
+  const existing = await maybeSingle(db
+    .from("snapquote_service_price_suggestions")
+    .select("*")
+    .eq("version_id", input.versionId)
+    .eq("service_template_id", input.templateId)
+    .eq("region_id", input.regionId)
+    .limit(1));
+
+  if (existing) {
+    return await single(db.from("snapquote_service_price_suggestions").update(patch).eq("id", existing.id).select("*"));
+  }
+
+  return await single(db.from("snapquote_service_price_suggestions").insert(patch).select("*"));
+}
+
+async function upsertSuggestionSourceLink(db: SupabaseClient, suggestionId: string, sourceId: string, note: string) {
+  const existing = await maybeSingle(db
+    .from("snapquote_suggestion_source_links")
+    .select("*")
+    .eq("suggestion_id", suggestionId)
+    .eq("source_id", sourceId)
+    .limit(1));
+  const patch = {
+    suggestion_id: suggestionId,
+    source_id: sourceId,
+    weight: 1,
+    note
+  };
+
+  if (existing) {
+    must(await db
+      .from("snapquote_suggestion_source_links")
+      .update({ weight: patch.weight, note: patch.note })
+      .eq("suggestion_id", suggestionId)
+      .eq("source_id", sourceId));
+    return;
+  }
+
+  must(await db.from("snapquote_suggestion_source_links").insert(patch));
+}
+
+function suggestionPricing(
+  suggestion: z.infer<typeof pricingSuggestionIngestSchema>["suggestions"][number]
+): PriceBookPricing {
+  if (suggestion.pricing) {
+    return suggestion.pricing;
+  }
+
+  const pricingType = suggestion.pricingType ?? (suggestion.unit === "room" ? "room_size" : "fixed");
+
+  if (pricingType === "room_size") {
+    return {
+      type: "room_size",
+      prices: {
+        small: suggestion.lowCents,
+        medium: suggestion.medianCents,
+        large: suggestion.highCents
+      }
+    };
+  }
+
+  return {
+    type: "fixed",
+    unitPriceCents: suggestion.medianCents
+  };
+}
+
 async function listPriceBook(db: SupabaseClient, orgId: string): Promise<PriceBookItem[]> {
   const { data, error } = await db.from("snapquote_price_book_items").select("*").eq("org_id", orgId)
     .is("archived_at", null)
@@ -1094,8 +1581,16 @@ async function createPriceBookItem(db: SupabaseClient, request: Request) {
   return priceBookItemFromRow(item as PriceBookRow);
 }
 
-async function listCustomers(db: SupabaseClient, orgId: string) {
-  const { data, error } = await db.from("snapquote_customers").select("*").eq("org_id", orgId).order("created_at", { ascending: false });
+async function listCustomers(db: SupabaseClient, orgId: string, request: Request) {
+  const search = new URL(request.url).searchParams.get("q")?.trim();
+  let query = db.from("snapquote_customers").select("*").eq("org_id", orgId);
+
+  if (search !== undefined && search.length > 0) {
+    const term = searchTerm(search);
+    query = query.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,address.ilike.%${term}%`);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(100);
 
   if (error) {
     throw error;
@@ -1106,13 +1601,34 @@ async function listCustomers(db: SupabaseClient, orgId: string) {
 
 async function createCustomer(db: SupabaseClient, request: Request) {
   const input = parse(customerSchema, await request.json());
-  const row = await single(db.from("snapquote_customers").insert({
-    org_id: orgIdFromRequest(request),
-    name: input.name,
-    email: input.email ?? null,
-    phone: input.phone ?? null,
-    address: input.address
-  }).select("*"));
+  const row = await upsertCustomerFromInput(db, orgIdFromRequest(request), input);
+  return customerResponse(row);
+}
+
+async function updateCustomer(db: SupabaseClient, request: Request, customerId: string) {
+  const orgId = orgIdFromRequest(request);
+  const input = parse(customerPatchSchema, await request.json());
+  await assertCustomerContactAvailable(db, orgId, input, customerId);
+
+  const patch: Record<string, string | null> = {};
+
+  if (input.name !== undefined) {
+    patch.name = input.name;
+  }
+
+  if (input.email !== undefined) {
+    patch.email = normalizedEmail(input.email);
+  }
+
+  if (input.phone !== undefined) {
+    patch.phone = input.phone ?? null;
+  }
+
+  if (input.address !== undefined) {
+    patch.address = input.address;
+  }
+
+  const row = await single(db.from("snapquote_customers").update(patch).eq("org_id", orgId).eq("id", customerId).select("*"));
   return customerResponse(row);
 }
 
@@ -1334,7 +1850,12 @@ async function extractScopeForInput(input: z.infer<typeof extractScopeSchema>) {
 
 async function listQuotes(db: SupabaseClient, orgId: string) {
   await refreshStatuses(db, orgId);
-  const { data, error } = await db.from("snapquote_quotes").select("id").eq("org_id", orgId).order("updated_at", { ascending: false });
+  const { data, error } = await db
+    .from("snapquote_quotes")
+    .select("id")
+    .eq("org_id", orgId)
+    .is("archived_at", null)
+    .order("updated_at", { ascending: false });
 
   if (error) {
     throw error;
@@ -1389,6 +1910,7 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
     firstViewedAt: quote.first_viewed_at,
     respondedAt: quote.responded_at,
     supersededByQuoteId: quote.superseded_by_quote_id,
+    archivedAt: quote.archived_at,
     payment: {
       status: quote.payment_status ?? "not_requested",
       depositPercent: Number(quote.deposit_percent ?? 50),
@@ -1543,7 +2065,7 @@ async function saveLineToPriceBook(db: SupabaseClient, request: Request, quoteId
 }
 
 async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) {
-  parse(sendSchema, await request.json().catch(() => ({})));
+  const input = parse(sendSchema, await request.json().catch(() => ({})));
   const orgId = orgIdFromRequest(request);
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)) as QuoteRow;
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
@@ -1553,8 +2075,12 @@ async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) 
     throw new HttpError(409, "Only draft quotes can be sent");
   }
 
-  if (!customer.email) {
+  if (input.channels.includes("email") && !customer.email) {
     throw new HttpError(409, "Customer email is required before sending");
+  }
+
+  if (input.channels.includes("sms") && !customer.phone) {
+    throw new HttpError(409, "Customer phone is required before texting");
   }
 
   assertQuoteCanSend(lineItems);
@@ -1565,22 +2091,31 @@ async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) 
   });
   must(await db.from("snapquote_quotes").update(totalsColumns(totals)).eq("id", quoteId).eq("org_id", orgId));
 
-  const delivery = await deliverQuoteNotification("quote_sent", await getQuoteResponse(db, orgId, quoteId));
+  const delivery = await deliverQuoteNotification("quote_sent", await getQuoteResponse(db, orgId, quoteId), input.channels);
   const now = new Date().toISOString();
   must(await db.from("snapquote_quotes").update({ sent_at: now, status: "sent" }).eq("id", quoteId).eq("org_id", orgId));
   const response = await getQuoteResponse(db, orgId, quoteId);
-  await createEvent(db, quoteId, "sent", { channel: "email", ...delivery });
+  await createEvent(db, quoteId, "sent", { channel: input.channels.length === 1 ? input.channels[0] : "multi", channels: input.channels, ...delivery });
 
   return response;
 }
 
 async function followUpQuote(db: SupabaseClient, request: Request, quoteId: string) {
-  parse(sendSchema, await request.json().catch(() => ({})));
+  const input = parse(sendSchema, await request.json().catch(() => ({})));
   const orgId = orgIdFromRequest(request);
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)) as QuoteRow;
+  const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
 
   if (quote.status !== "sent" && quote.status !== "viewed") {
     throw new HttpError(409, "Only sent quotes awaiting a response can be followed up");
+  }
+
+  if (input.channels.includes("email") && !customer.email) {
+    throw new HttpError(409, "Customer email is required before following up");
+  }
+
+  if (input.channels.includes("sms") && !customer.phone) {
+    throw new HttpError(409, "Customer phone is required before texting a follow-up");
   }
 
   if (!isQuoteStale({ sentAt: quote.sent_at, firstViewedAt: quote.first_viewed_at, respondedAt: quote.responded_at, now: new Date() })) {
@@ -1588,8 +2123,8 @@ async function followUpQuote(db: SupabaseClient, request: Request, quoteId: stri
   }
 
   const response = await getQuoteResponse(db, orgId, quoteId);
-  const delivery = await deliverQuoteNotification("quote_follow_up", response);
-  await createEvent(db, quoteId, "followed_up", { channel: "email", ...delivery });
+  const delivery = await deliverQuoteNotification("quote_follow_up", response, input.channels);
+  await createEvent(db, quoteId, "followed_up", { channel: input.channels.length === 1 ? input.channels[0] : "multi", channels: input.channels, ...delivery });
 
   return response;
 }
@@ -1605,6 +2140,25 @@ async function deleteDraftQuote(db: SupabaseClient, request: Request, quoteId: s
   must(await db.from("snapquote_quotes").delete().eq("id", quoteId).eq("org_id", orgId));
 
   return { id: quoteId, deleted: true };
+}
+
+async function archiveQuote(db: SupabaseClient, request: Request, quoteId: string) {
+  const orgId = orgIdFromRequest(request);
+  const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)) as QuoteRow;
+
+  if (quote.status === "draft") {
+    throw new HttpError(409, "Draft quotes should be deleted, not archived");
+  }
+
+  if (quote.archived_at) {
+    return { id: quoteId, archived: true, archivedAt: quote.archived_at };
+  }
+
+  const archivedAt = new Date().toISOString();
+  must(await db.from("snapquote_quotes").update({ archived_at: archivedAt }).eq("id", quoteId).eq("org_id", orgId));
+  await createEvent(db, quoteId, "archived");
+
+  return { id: quoteId, archived: true, archivedAt };
 }
 
 async function duplicateQuote(db: SupabaseClient, request: Request, quoteId: string) {
@@ -1757,8 +2311,14 @@ async function createPaymentConnectOnboarding(db: SupabaseClient, request: Reque
     must(await db.from("snapquote_orgs").update({ stripe_account_id: accountId }).eq("id", orgId));
   }
 
-  const returnUrl = Deno.env.get("QUOTEVAN_CONNECT_RETURN_URL") ?? Deno.env.get("SNAPQUOTE_CONNECT_RETURN_URL") ?? "snapquote://settings";
-  const refreshUrl = Deno.env.get("QUOTEVAN_CONNECT_REFRESH_URL") ?? Deno.env.get("SNAPQUOTE_CONNECT_REFRESH_URL") ?? returnUrl;
+  const returnUrl = stripeConnectUrl(
+    envFirst("QUOTEVAN_CONNECT_RETURN_URL", "SNAPQUOTE_CONNECT_RETURN_URL"),
+    "/payment/connect/return"
+  );
+  const refreshUrl = stripeConnectUrl(
+    envFirst("QUOTEVAN_CONNECT_REFRESH_URL", "SNAPQUOTE_CONNECT_REFRESH_URL"),
+    "/payment/connect/refresh"
+  );
   const link = await stripePost("account_links", {
     account: accountId,
     type: "account_onboarding",
@@ -1811,6 +2371,7 @@ async function createPublicQuotePayment(db: SupabaseClient, token: string) {
 
   const session = await stripePost("checkout/sessions", {
     mode: "payment",
+    "payment_method_types[0]": "card",
     success_url: successUrl,
     cancel_url: cancelUrl,
     customer_email: customer.email ? String(customer.email) : undefined,
@@ -1923,6 +2484,35 @@ async function handleStripeWebhook(db: SupabaseClient, request: Request) {
   return { received: true };
 }
 
+async function handleInboundEmailReply(db: SupabaseClient, request: Request) {
+  assertInboundEmailWebhookSecret(request);
+  const input = parse(inboundEmailSchema, await request.json());
+  const token = input.publicToken ?? input.quoteToken ?? extractPublicQuoteToken(input.text, input.html);
+
+  if (!token) {
+    throw new HttpError(400, "A quote token or quote link is required");
+  }
+
+  const link = await single(
+    db.from("snapquote_quote_public_links")
+      .select("*")
+      .eq("token", token)
+      .is("revoked_at", null)
+  );
+  const quoteId = String(link.quote_id);
+  const message = emailPreview(input.text ?? stripHtml(input.html ?? ""));
+
+  await createEvent(db, quoteId, "customer_replied", {
+    from: input.fromEmail ?? input.from ?? null,
+    subject: input.subject ?? null,
+    receivedAt: input.receivedAt ?? new Date().toISOString(),
+    preview: message || null,
+    publicToken: token
+  });
+
+  return { ok: true, quoteId };
+}
+
 async function markQuotePaymentPaid(db: SupabaseClient, quote: QuoteRow, input: {
   sessionId: string;
   paymentIntentId: string | null;
@@ -2019,13 +2609,72 @@ function publicQuoteResponse<T extends {
 }
 
 async function createCustomerFromInput(db: SupabaseClient, orgId: string, input: z.infer<typeof customerSchema>) {
+  return await upsertCustomerFromInput(db, orgId, input);
+}
+
+async function upsertCustomerFromInput(db: SupabaseClient, orgId: string, input: z.infer<typeof customerSchema>) {
+  const existing = await findExistingCustomer(db, orgId, input);
+  const email = normalizedEmail(input.email);
+
+  if (existing !== null) {
+    return await single(db.from("snapquote_customers").update({
+      name: input.name,
+      email: email ?? stringOrNull(existing.email),
+      phone: input.phone ?? stringOrNull(existing.phone),
+      address: input.address
+    }).eq("id", String(existing.id)).eq("org_id", orgId).select("*"));
+  }
+
   return await single(db.from("snapquote_customers").insert({
     org_id: orgId,
     name: input.name,
-    email: input.email ?? null,
+    email,
     phone: input.phone ?? null,
     address: input.address
   }).select("*"));
+}
+
+async function findExistingCustomer(db: SupabaseClient, orgId: string, input: Pick<z.infer<typeof customerSchema>, "email" | "phone">) {
+  const email = normalizedEmail(input.email);
+
+  if (email !== null) {
+    const { data, error } = await db.from("snapquote_customers").select("*").eq("org_id", orgId).ilike("email", email).limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    if (data.length > 0) {
+      return data[0] as Record<string, unknown>;
+    }
+  }
+
+  if (input.phone !== undefined && input.phone !== null) {
+    const { data, error } = await db.from("snapquote_customers").select("*").eq("org_id", orgId).eq("phone", input.phone).limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    if (data.length > 0) {
+      return data[0] as Record<string, unknown>;
+    }
+  }
+
+  return null;
+}
+
+async function assertCustomerContactAvailable(
+  db: SupabaseClient,
+  orgId: string,
+  input: Pick<z.infer<typeof customerPatchSchema>, "email" | "phone">,
+  customerId: string
+) {
+  const existing = await findExistingCustomer(db, orgId, input);
+
+  if (existing !== null && String(existing.id) !== customerId) {
+    throw new HttpError(409, "Another customer already uses that contact detail.");
+  }
 }
 
 async function listLines(db: SupabaseClient, quoteId: string): Promise<(QuoteLineItem & { id: string })[]> {
@@ -2084,11 +2733,26 @@ async function createEvent(db: SupabaseClient, quoteId: string, type: QuoteEvent
 }
 
 type QuoteNotificationKind = "quote_sent" | "quote_follow_up";
+type QuoteDeliveryChannel = "email" | "sms";
 
-async function deliverQuoteNotification(kind: QuoteNotificationKind, quote: Record<string, any>) {
-  const resendKey = Deno.env.get("RESEND_API_KEY");
-  const webhookUrl = Deno.env.get("SNAPQUOTE_EMAIL_WEBHOOK_URL");
+async function deliverQuoteNotification(kind: QuoteNotificationKind, quote: Record<string, any>, channels: QuoteDeliveryChannel[] = ["email"]) {
+  const results: Record<string, unknown> = {};
   const publicUrl = typeof quote.publicUrl === "string" ? quote.publicUrl : publicQuoteUrl(String(quote.publicToken));
+
+  if (channels.includes("email")) {
+    results.email = await deliverQuoteEmail(kind, quote, publicUrl);
+  }
+
+  if (channels.includes("sms")) {
+    results.sms = await deliverQuoteSms(kind, quote, publicUrl);
+  }
+
+  return { delivery: channels.length === 1 ? channels[0] : "multi", provider: "quotevan", channels, publicUrl, ...results };
+}
+
+async function deliverQuoteEmail(kind: QuoteNotificationKind, quote: Record<string, any>, publicUrl: string) {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  const webhookUrl = envFirst("QUOTE_EMAIL_WEBHOOK_URL", "SNAPQUOTE_EMAIL_WEBHOOK_URL");
   const payload = {
     kind,
     quoteId: quote.id,
@@ -2102,7 +2766,7 @@ async function deliverQuoteNotification(kind: QuoteNotificationKind, quote: Reco
   };
 
   if (resendKey) {
-    const from = Deno.env.get("SNAPQUOTE_FROM_EMAIL");
+    const from = envFirst("QUOTE_EMAIL_FROM", "SNAPQUOTE_EMAIL_FROM", "SNAPQUOTE_FROM_EMAIL");
 
     if (!from) {
       throw new HttpError(500, "Quote email sender is not configured");
@@ -2122,7 +2786,7 @@ async function deliverQuoteNotification(kind: QuoteNotificationKind, quote: Reco
       body: JSON.stringify({
         from,
         to: [quote.customer.email],
-        reply_to: Deno.env.get("SNAPQUOTE_REPLY_TO_EMAIL") ?? undefined,
+        reply_to: envFirst("QUOTE_REPLY_TO_EMAIL", "SNAPQUOTE_REPLY_TO_EMAIL") ?? undefined,
         subject: email.subject,
         html: email.html,
         text: email.text
@@ -2130,7 +2794,7 @@ async function deliverQuoteNotification(kind: QuoteNotificationKind, quote: Reco
     });
 
     if (!response.ok) {
-      console.warn("SnapQuote Resend delivery failed", response.status, await response.text());
+      console.warn("QuoteVan Resend delivery failed", response.status, await response.text());
       throw new HttpError(502, "Quote email could not be sent");
     }
 
@@ -2155,14 +2819,80 @@ async function deliverQuoteNotification(kind: QuoteNotificationKind, quote: Reco
   return { delivery: "webhook", publicUrl };
 }
 
+async function deliverQuoteSms(kind: QuoteNotificationKind, quote: Record<string, any>, publicUrl: string) {
+  const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+  const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
+  const from = envFirst("TWILIO_FROM_PHONE", "SNAPQUOTE_FROM_PHONE");
+  const to = String(quote.customer?.phone ?? "").trim();
+
+  if (!to) {
+    throw new HttpError(409, "Customer phone is required before texting");
+  }
+
+  if (!accountSid || !authToken || !from) {
+    throw new HttpError(500, "Text messaging is not configured");
+  }
+
+  if (!publicUrl.startsWith("http://") && !publicUrl.startsWith("https://")) {
+    throw new HttpError(500, "Public quote host is not configured");
+  }
+
+  const orgName = String(quote.org?.name ?? "QuoteVan");
+  const total = formatEmailMoney(quote.totals?.totalCents ?? null);
+  const lead = kind === "quote_sent"
+    ? `${orgName} sent your quote for ${total}:`
+    : `${orgName} is following up on your quote for ${total}:`;
+  const params = new URLSearchParams({
+    From: from,
+    To: to,
+    Body: `${lead} ${publicUrl}`
+  });
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Messages.json`, {
+    method: "POST",
+    headers: {
+      authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    body: params
+  });
+
+  if (!response.ok) {
+    console.warn("QuoteVan SMS delivery failed", response.status, await response.text());
+    throw new HttpError(502, "Quote text could not be sent");
+  }
+
+  const body = await response.json().catch(() => ({})) as { sid?: string };
+  return { delivery: "twilio", provider: "twilio", messageId: body.sid ?? null, publicUrl };
+}
+
 function publicQuoteUrl(token: string) {
-  const baseUrl = Deno.env.get("SNAPQUOTE_PUBLIC_BASE_URL");
+  const baseUrl = envFirst("QUOTEVAN_PUBLIC_BASE_URL", "SNAPQUOTE_PUBLIC_BASE_URL");
 
   if (!baseUrl) {
     return `/q/${token}`;
   }
 
   return `${baseUrl.replace(/\/$/, "")}/q/${token}`;
+}
+
+function stripeConnectUrl(configuredUrl: string | undefined, fallbackPath: string) {
+  const url = configuredUrl ?? webBaseUrl(fallbackPath);
+
+  if (!url.startsWith("https://") && !url.startsWith("http://")) {
+    throw new HttpError(500, "Stripe Connect return URLs must be normal web URLs");
+  }
+
+  return url;
+}
+
+function webBaseUrl(path: string) {
+  const baseUrl = envFirst("QUOTEVAN_PUBLIC_BASE_URL", "SNAPQUOTE_PUBLIC_BASE_URL");
+
+  if (!baseUrl) {
+    throw new HttpError(500, "Public QuoteVan URL is required before opening payment setup");
+  }
+
+  return `${baseUrl.replace(/\/$/, "")}${path}`;
 }
 
 function quoteEmail(kind: QuoteNotificationKind, quote: Record<string, any>, publicUrl: string) {
@@ -2471,6 +3201,18 @@ function extensionForContentType(contentType: "image/jpeg" | "image/png" | "imag
 function safeStorageName(fileName: string) {
   const cleaned = fileName.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
   return cleaned.length > 0 ? cleaned.slice(0, 120) : "recording.m4a";
+}
+
+function normalizedEmail(email: string | null | undefined) {
+  return typeof email === "string" && email.trim().length > 0 ? email.trim().toLowerCase() : null;
+}
+
+function stringOrNull(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function searchTerm(value: string) {
+  return value.replace(/[%(),]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 function customerResponse(row: Record<string, unknown>) {
@@ -3045,11 +3787,133 @@ function publicMessageFromError(error: unknown, status: number) {
 
   const message = messageFromError(error).toLowerCase();
 
+  if (message.includes("stripe payments are not configured") || message.includes("payment") && message.includes("not configured")) {
+    return "Online deposits are not configured yet. Add Stripe keys before opening payment setup.";
+  }
+
   if (message.includes("permission denied") || message.includes("relation ") || message.includes("schema ")) {
     return "QuoteVan is still finishing setup. Try again in a moment.";
   }
 
   return "QuoteVan hit a server problem. Try again in a moment.";
+}
+
+function enforceRateLimit(request: Request, keyParts: string[], limit: number, windowMs: number) {
+  const now = Date.now();
+  const key = keyParts.join(":");
+  const bucket = rateLimitBuckets.get(key);
+
+  if (!bucket || bucket.resetAt <= now) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    pruneRateLimitBuckets(now);
+    return;
+  }
+
+  if (bucket.count >= limit) {
+    throw new HttpError(429, "Too many requests. Try again in a moment.");
+  }
+
+  bucket.count += 1;
+  rateLimitBuckets.set(key, bucket);
+}
+
+function pruneRateLimitBuckets(now: number) {
+  if (rateLimitBuckets.size <= maxRateLimitBuckets) {
+    return;
+  }
+
+  for (const [key, bucket] of rateLimitBuckets) {
+    if (bucket.resetAt <= now) {
+      rateLimitBuckets.delete(key);
+    }
+  }
+}
+
+function requestClientKey(request: Request) {
+  const cfIp = request.headers.get("cf-connecting-ip")?.trim();
+
+  if (cfIp) {
+    return cfIp;
+  }
+
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+
+  return forwardedFor || "unknown-client";
+}
+
+function assertInboundEmailWebhookSecret(request: Request) {
+  const expected = envFirst("QUOTEVAN_INBOUND_EMAIL_SECRET", "SNAPQUOTE_INBOUND_EMAIL_SECRET", "SNAPQUOTE_EMAIL_WEBHOOK_SECRET");
+
+  if (!expected) {
+    throw new HttpError(500, "Inbound email webhook secret is not configured");
+  }
+
+  const authorization = request.headers.get("authorization") ?? "";
+  const bearer = authorization.toLowerCase().startsWith("bearer ") ? authorization.slice(7).trim() : "";
+  const provided = bearer || request.headers.get("x-snapquote-webhook-secret")?.trim();
+
+  if (provided !== expected) {
+    throw new HttpError(401, "Invalid email webhook secret");
+  }
+}
+
+function assertAdminSecret(request: Request) {
+  const expected = envFirst("QUOTEVAN_ADMIN_SECRET", "SNAPQUOTE_ADMIN_SECRET", "SNAPQUOTE_PRICING_INGEST_SECRET");
+
+  if (!expected) {
+    throw new HttpError(500, "Admin secret is not configured");
+  }
+
+  const authorization = request.headers.get("authorization") ?? "";
+  const bearer = authorization.toLowerCase().startsWith("bearer ") ? authorization.slice(7).trim() : "";
+  const provided = bearer || request.headers.get("x-snapquote-admin-secret")?.trim();
+
+  if (provided !== expected) {
+    throw new HttpError(401, "Invalid admin secret");
+  }
+}
+
+function arrayOfStrings(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function extractPublicQuoteToken(...values: Array<string | undefined>) {
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+
+    const match = value.match(/\/q\/([A-Za-z0-9_-]{16,160})/);
+
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+function stripHtml(value: string) {
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function emailPreview(value: string) {
+  const clean = value.replace(/\s+/g, " ").trim();
+
+  if (clean.length <= 500) {
+    return clean;
+  }
+
+  return `${clean.slice(0, 497)}...`;
 }
 
 class HttpError extends Error {

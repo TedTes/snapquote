@@ -146,10 +146,12 @@ export type QuoteEvent = {
     | "declined"
     | "expired"
     | "followed_up"
+    | "customer_replied"
     | "superseded"
     | "payment_started"
     | "payment_paid"
-    | "payment_failed";
+    | "payment_failed"
+    | "archived";
   meta: Record<string, unknown>;
   createdAt: string;
 };
@@ -272,6 +274,7 @@ export type QuoteRow = {
   paid_at: string | null;
   stripe_checkout_session_id: string | null;
   stripe_payment_intent_id: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 };
