@@ -1,16 +1,28 @@
 import { File, Paths } from "expo-file-system";
 import * as Linking from "expo-linking";
+import type {
+  Customer,
+  PriceBookItem,
+  QuoteLineItem,
+} from "@snapquote/shared";
 import { create } from "zustand";
 import {
   setApiAuthToken,
+  setApiAuthTokenProvider,
   snapquoteApi,
   userFacingErrorMessage,
+  type ApiCustomer,
+  type ApiQuote,
   type AuthResponse,
   type OAuthProvider,
   type AuthSession,
   type MeResponse
 } from "../api/client";
-import { corePricesFromPriceBook, useQuoteStore } from "../state/quoteStore";
+import {
+  corePricesFromPriceBook,
+  useQuoteStore,
+  type QuoteRecord,
+} from "../state/quoteStore";
 
 type AuthStatus = "loading" | "signed_out" | "signed_in";
 
@@ -36,6 +48,7 @@ type AuthState = {
 
 const sessionFileName = "snapquote-session.json";
 let initializePromise: Promise<void> | null = null;
+let authSessionRefreshPromise: Promise<AuthSession | null> | null = null;
 let pendingOAuthInput: { businessName?: string | undefined; name?: string | undefined } = {};
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -162,6 +175,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   }
 }));
 
+setApiAuthTokenProvider(provideApiAuthToken);
+
 async function applyAuthResponse(
   response: AuthResponse,
   set: (patch: Pick<AuthState, "status" | "session" | "me" | "error">) => void
@@ -174,11 +189,17 @@ async function applyAuthResponse(
 
 async function bootstrapRemoteData(meOverride?: MeResponse) {
   const syncedMe = await syncLocalSetupIfNeeded(meOverride ?? await snapquoteApi.me());
-  const [priceBook, customers, quotes] = await Promise.all([
-    snapquoteApi.listPriceBook(),
-    snapquoteApi.listCustomers(),
-    snapquoteApi.listQuotes()
-  ]);
+  let [priceBook, customers, quotes] = await fetchRemoteSnapshot();
+
+  const didSyncLocalData = await syncLocalDataAfterLogin({
+    priceBookItems: priceBook.items,
+    customers: customers.customers,
+    quotes: quotes.quotes,
+  });
+
+  if (didSyncLocalData) {
+    [priceBook, customers, quotes] = await fetchRemoteSnapshot();
+  }
 
   useQuoteStore.getState().hydrateRemoteState({
     me: syncedMe,
@@ -188,6 +209,14 @@ async function bootstrapRemoteData(meOverride?: MeResponse) {
   });
 
   return syncedMe;
+}
+
+async function fetchRemoteSnapshot() {
+  return Promise.all([
+    snapquoteApi.listPriceBook(),
+    snapquoteApi.listCustomers(),
+    snapquoteApi.listQuotes()
+  ]);
 }
 
 async function syncLocalSetupIfNeeded(me: MeResponse): Promise<MeResponse> {
@@ -218,9 +247,219 @@ async function syncLocalSetupIfNeeded(me: MeResponse): Promise<MeResponse> {
   };
 }
 
+async function syncLocalDataAfterLogin(input: {
+  priceBookItems: PriceBookItem[];
+  customers: ApiCustomer[];
+  quotes: ApiQuote[];
+}) {
+  const local = useQuoteStore.getState();
+  const localPriceBookItems = local.priceBookItems.filter((item) =>
+    isLocalPriceBookItem(item),
+  );
+  const localCustomers = local.customers.filter((customer) =>
+    isLocalCustomer(customer),
+  );
+  const localQuotes = local.quotes.filter((quote) => isLocalQuote(quote));
+
+  if (
+    localPriceBookItems.length === 0 &&
+    localCustomers.length === 0 &&
+    localQuotes.length === 0
+  ) {
+    return false;
+  }
+
+  const syncedPriceBookItemIds: string[] = [];
+  const syncedCustomerIds: string[] = [];
+  const syncedQuoteIds: string[] = [];
+  const customerIdMap = new Map<string, string>();
+  const priceBookByKey = new Map(
+    input.priceBookItems
+      .filter((item) => item.key !== null)
+      .map((item) => [item.key as string, item]),
+  );
+
+  for (const item of localPriceBookItems) {
+    try {
+      const remoteItem = item.key !== null ? priceBookByKey.get(item.key) : undefined;
+
+      if (remoteItem) {
+        await snapquoteApi.updatePriceBookItem(remoteItem.id, {
+          name: item.name,
+          description: item.description,
+          pricing: item.pricing,
+          confirmed: item.confirmedAt !== null,
+        });
+      } else {
+        await snapquoteApi.createPriceBookItem({
+          name: item.name,
+          description: item.description,
+          unit: item.unit,
+          kind: item.kind,
+          pricing: item.pricing,
+          confirmed: item.confirmedAt !== null,
+        });
+      }
+
+      syncedPriceBookItemIds.push(item.id);
+    } catch (error) {
+      console.warn("QuoteVan local price book sync skipped", userFacingErrorMessage(error));
+    }
+  }
+
+  for (const customer of localCustomers) {
+    try {
+      const remoteCustomer = await snapquoteApi.createCustomer({
+        name: customer.name,
+        email: customer.email ?? undefined,
+        phone: customer.phone,
+        address: customer.address,
+      });
+      customerIdMap.set(customer.id, remoteCustomer.id);
+      syncedCustomerIds.push(customer.id);
+    } catch (error) {
+      console.warn("QuoteVan local customer sync skipped", userFacingErrorMessage(error));
+    }
+  }
+
+  for (const quote of localQuotes) {
+    const customer = local.customers.find(
+      (candidate) => candidate.id === quote.customerId,
+    );
+    const remoteCustomerId = customerIdMap.get(quote.customerId) ?? quote.customerId;
+
+    if (!customer && isLocalCustomerId(quote.customerId)) {
+      continue;
+    }
+
+    try {
+      const created = await snapquoteApi.createQuote({
+        customerId: isLocalCustomerId(remoteCustomerId) ? undefined : remoteCustomerId,
+        customer: isLocalCustomerId(remoteCustomerId) && customer
+          ? {
+              name: customer.name,
+              email: customer.email ?? undefined,
+              phone: customer.phone,
+              address: customer.address,
+            }
+          : undefined,
+        address: quote.address,
+        jobTitle: quote.jobTitle,
+        checklist: quote.checklist,
+        transcript: quote.transcript,
+        typedNotes: quote.notes,
+        audioStoragePath: quote.audioStoragePath,
+        audioContentType: quote.audioContentType,
+        audioDurationSeconds: quote.audioDurationSeconds,
+      });
+
+      await snapquoteApi.patchQuote(created.id, {
+        lineItems: quote.lineItems.map(lineItemForSync),
+        discount: quote.discount,
+        taxRate: quote.taxRate,
+        notes: quote.notes,
+        terms: quote.terms,
+        validUntil: quote.validUntil,
+      });
+
+      syncedQuoteIds.push(quote.id);
+    } catch (error) {
+      console.warn("QuoteVan local quote sync skipped", userFacingErrorMessage(error));
+    }
+  }
+
+  useQuoteStore.getState().removeLocalSyncArtifacts({
+    customerIds: syncedCustomerIds,
+    priceBookItemIds: syncedPriceBookItemIds,
+    quoteIds: syncedQuoteIds,
+  });
+
+  return (
+    syncedPriceBookItemIds.length > 0 ||
+    syncedCustomerIds.length > 0 ||
+    syncedQuoteIds.length > 0
+  );
+}
+
+function isLocalCustomer(customer: Customer) {
+  return isLocalCustomerId(customer.id);
+}
+
+function isLocalCustomerId(id: string) {
+  return id.startsWith("cust-");
+}
+
+function isLocalQuote(quote: QuoteRecord) {
+  return quote.id.startsWith("quote-");
+}
+
+function isLocalPriceBookItem(item: PriceBookItem) {
+  return item.id.startsWith("pbi-") && !item.starter;
+}
+
+function lineItemForSync(line: QuoteRecord["lineItems"][number]): QuoteLineItem {
+  const { id: _id, ...lineItem } = line;
+  return lineItem;
+}
+
 function shouldRefresh(session: AuthSession) {
   const expiresAtMs = session.expiresAt * 1000;
   return expiresAtMs - Date.now() < 5 * 60 * 1000;
+}
+
+async function provideApiAuthToken() {
+  const state = useAuthStore.getState();
+  const session = state.session ?? await readStoredSession();
+
+  if (!session) {
+    setApiAuthToken(null);
+    return null;
+  }
+
+  if (!shouldRefresh(session)) {
+    setApiAuthToken(session.accessToken);
+
+    if (!state.session && state.status !== "loading") {
+      useAuthStore.setState({ status: "signed_in", session, error: null });
+    }
+
+    return session.accessToken;
+  }
+
+  authSessionRefreshPromise ??= refreshStoredSession(session);
+  const refreshedSession = await authSessionRefreshPromise;
+  return refreshedSession?.accessToken ?? null;
+}
+
+async function refreshStoredSession(session: AuthSession) {
+  try {
+    const response = await snapquoteApi.refreshSession({
+      refreshToken: session.refreshToken,
+    });
+
+    setApiAuthToken(response.session.accessToken);
+    writeStoredSession(response.session);
+    useAuthStore.setState({
+      status: "signed_in",
+      session: response.session,
+      error: null,
+    });
+
+    return response.session;
+  } catch {
+    clearStoredSession();
+    setApiAuthToken(null);
+    useAuthStore.setState({
+      status: "signed_out",
+      session: null,
+      me: null,
+      error: "Your session expired. Sign in again.",
+    });
+
+    return null;
+  } finally {
+    authSessionRefreshPromise = null;
+  }
 }
 
 function oauthSessionFromUrl(url: string):

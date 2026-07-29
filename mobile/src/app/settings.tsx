@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { router } from "expo-router";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { router, useFocusEffect } from "expo-router";
 import {
   Book,
   CalendarDays,
@@ -13,7 +13,7 @@ import {
   RotateCcw,
   Type
 } from "lucide-react-native";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { getTradeConfig } from "@snapquote/shared";
 import { BottomTabBar } from "../components/BottomTabBar";
 import { Screen } from "../components/base";
@@ -22,6 +22,13 @@ import { businessInitials } from "../utils/format";
 import { useQuoteStore } from "../state/quoteStore";
 import { useAuthStore } from "../auth/authStore";
 import { snapquoteApi, userFacingErrorMessage } from "../api/client";
+
+type PaymentConnectionState = {
+  accountId: string | null;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  connected: boolean;
+};
 
 export default function SettingsScreen() {
   const businessName = useQuoteStore((state) => state.businessName);
@@ -32,16 +39,91 @@ export default function SettingsScreen() {
   const priceBookItems = useQuoteStore((state) => state.priceBookItems);
   const activeTrade = useQuoteStore((state) => state.activeTrade);
   const me = useAuthStore((state) => state.me);
+  const authStatus = useAuthStore((state) => state.status);
+  const setMe = useAuthStore((state) => state.setMe);
+  const [paymentRefreshing, setPaymentRefreshing] = useState(false);
+  const [paymentStatusKnown, setPaymentStatusKnown] = useState(false);
+  const [paymentConnection, setPaymentConnection] = useState<PaymentConnectionState | null>(null);
   const tradeConfig = getTradeConfig(activeTrade);
   const paymentsConnected = Boolean(me?.org.paymentsConnected);
+  const paymentState = paymentConnection ?? {
+    accountId: null,
+    chargesEnabled: paymentsConnected,
+    payoutsEnabled: paymentsConnected,
+    connected: paymentsConnected
+  };
+  const paymentStatus = paymentState.connected ? "connected" : paymentState.accountId ? "pending" : "setup";
+  const isCheckingPaymentStatus = authStatus === "signed_in" && (!paymentStatusKnown || paymentRefreshing);
 
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const totalCount = priceBookItems.length;
   const senderEmail = me?.user.email ?? "quotes@sharpedge.co";
 
+  const refreshPaymentStatus = useCallback(async () => {
+    if (authStatus !== "signed_in") return;
+
+    try {
+      setPaymentRefreshing(true);
+      const status = await snapquoteApi.paymentConnectStatus();
+      setPaymentConnection({
+        accountId: status.accountId,
+        chargesEnabled: status.chargesEnabled,
+        payoutsEnabled: status.payoutsEnabled,
+        connected: status.connected
+      });
+      setPaymentStatusKnown(true);
+      const nextMe = await snapquoteApi.me();
+      setMe(nextMe);
+    } catch (error) {
+      console.warn("QuoteVan payment status refresh skipped", error);
+    } finally {
+      setPaymentRefreshing(false);
+    }
+  }, [authStatus, setMe]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshPaymentStatus();
+    }, [refreshPaymentStatus])
+  );
+
+  useEffect(() => {
+    if (authStatus !== "signed_in") return undefined;
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshPaymentStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [authStatus, refreshPaymentStatus]);
+
   async function openPaymentSetup() {
+    if (paymentStatus === "connected" || paymentsConnected) {
+      Alert.alert("Online deposits connected", "Customers can pay quote deposits from the quote link.");
+      return;
+    }
+
+    if (authStatus !== "signed_in") {
+      Alert.alert("Sign in required", "Sign in to manage online deposits.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign in", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) }
+      ]);
+      return;
+    }
+
     try {
       const status = await snapquoteApi.paymentConnectStatus();
+      setPaymentConnection({
+        accountId: status.accountId,
+        chargesEnabled: status.chargesEnabled,
+        payoutsEnabled: status.payoutsEnabled,
+        connected: status.connected
+      });
+      setPaymentStatusKnown(true);
+      const nextMe = await snapquoteApi.me();
+      setMe(nextMe);
 
       if (status.connected) {
         Alert.alert("Online deposits connected", "Customers can pay quote deposits from the quote link.");
@@ -49,6 +131,9 @@ export default function SettingsScreen() {
       }
 
       const onboarding = await snapquoteApi.startPaymentConnectOnboarding();
+      if (!onboarding.url.startsWith("https://") && !onboarding.url.startsWith("http://")) {
+        throw new Error("Payment setup link is not ready yet.");
+      }
       await Linking.openURL(onboarding.url);
     } catch (error) {
       Alert.alert("Could not open payment setup", userFacingErrorMessage(error));
@@ -131,8 +216,16 @@ export default function SettingsScreen() {
 
         <SettingsSection label="Sending">
           <SettingsRow
-            customValue={<ConnectionBadge connected={paymentsConnected} />}
-            detail={paymentsConnected ? "Customers can pay quote deposits" : "Connect Stripe to collect deposits"}
+            customValue={<ConnectionBadge loading={isCheckingPaymentStatus} status={paymentStatus} />}
+            detail={
+              isCheckingPaymentStatus
+                ? "Checking Stripe status..."
+                : paymentStatus === "connected"
+                  ? "Customers can pay quote deposits"
+                  : paymentStatus === "pending"
+                    ? "Stripe is finishing verification"
+                  : "Connect Stripe to collect deposits"
+            }
             icon={<CreditCard color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Online deposits"
             onPress={() => void openPaymentSetup()}
@@ -230,12 +323,14 @@ function VerifiedBadge() {
   );
 }
 
-function ConnectionBadge(props: { connected: boolean }) {
+function ConnectionBadge(props: { status: "setup" | "pending" | "connected"; loading?: boolean | undefined }) {
+  const connected = props.status === "connected";
+  const pending = props.status === "pending";
+  const label = props.loading ? "Sync" : connected ? "On" : pending ? "Pending" : "Setup";
+
   return (
-    <View style={[styles.verifiedBadge, props.connected ? null : styles.pendingBadge]}>
-      <Text style={[styles.verifiedText, props.connected ? null : styles.pendingText]}>
-        {props.connected ? "On" : "Setup"}
-      </Text>
+    <View style={[styles.verifiedBadge, connected ? null : styles.pendingBadge]}>
+      <Text style={[styles.verifiedText, connected ? null : styles.pendingText]}>{label}</Text>
     </View>
   );
 }

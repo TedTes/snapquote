@@ -29,6 +29,7 @@ import {
   getCustomer,
   getQuoteBlockers,
   getQuoteEvents,
+  getQuoteIsStale,
   getQuoteStatus,
   getQuoteTotals,
   useQuoteStore,
@@ -366,8 +367,10 @@ function CoverageLegend(props: { color: string; label: string }) {
 function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; customerName: string; events: QuoteEvent[] }) {
   const { quote } = props;
   const upsertRemoteQuote = useQuoteStore((state) => state.upsertRemoteQuote);
+  const archiveLocalQuote = useQuoteStore((state) => state.archiveQuote);
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
   const [quoteAction, setQuoteAction] = useState<"revise" | "duplicate" | null>(null);
+  const [archivingQuote, setArchivingQuote] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const status = getQuoteStatus(quote, props.events);
@@ -377,6 +380,10 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
   const hostedPublicUrl = quote.publicUrl?.startsWith("http") ? quote.publicUrl : null;
   const publicUrl = hostedPublicUrl ?? (quote.publicToken ? `${apiBaseUrl}/public/quotes/${quote.publicToken}` : null);
   const statusMeta = quoteStatusMeta({ quote, events: timeline });
+  const isAwaitingResponse = status === "sent" || status === "viewed";
+  const isFollowUpDue = isAwaitingResponse && getQuoteIsStale(quote);
+  const showFollowUpFooter = isAwaitingResponse;
+  const followUpDisabled = sendingFollowUp || !isFollowUpDue;
 
   async function revise() {
     if (quoteAction !== null) {
@@ -436,12 +443,50 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
 
   function downloadPdf() {
     setMenuOpen(false);
-    Alert.alert("Download PDF", "PDF export is coming next.");
+
+    if (!publicUrl) {
+      Alert.alert("No printable quote yet", "Send or sync this quote before downloading a PDF.");
+      return;
+    }
+
+    const separator = publicUrl.includes("?") ? "&" : "?";
+    void Linking.openURL(`${publicUrl}${separator}print=1`);
   }
 
   function archiveQuote() {
     setMenuOpen(false);
-    Alert.alert("Archive quote", "Archiving sent quotes is coming next.");
+    Alert.alert(
+      "Archive quote?",
+      "This hides it from active quote lists. Customer links stay available.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Archive",
+          style: "destructive",
+          onPress: () => {
+            void archiveRemoteQuote();
+          },
+        },
+      ],
+    );
+  }
+
+  async function archiveRemoteQuote() {
+    if (archivingQuote) {
+      return;
+    }
+
+    setArchivingQuote(true);
+
+    try {
+      await snapquoteApi.archiveQuote(quote.id);
+      archiveLocalQuote(quote.id);
+      router.replace("/quotes");
+    } catch (error) {
+      Alert.alert("Could not archive quote", userFacingErrorMessage(error));
+    } finally {
+      setArchivingQuote(false);
+    }
   }
 
   function callCustomer() {
@@ -483,7 +528,10 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
     <Screen edges={["top"]}>
       <View style={styles.detailScreen}>
         <ScrollView
-          contentContainerStyle={[styles.detailContent, { paddingBottom: Math.max(insets.bottom, 8) + 92 }]}
+          contentContainerStyle={[
+            styles.detailContent,
+            { paddingBottom: Math.max(insets.bottom, 8) + (showFollowUpFooter ? 92 : 20) }
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.draftNav}>
@@ -582,19 +630,25 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
           </Text>
         </ScrollView>
 
-        <View style={[styles.followUpFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-          <Pressable
-            accessibilityRole="button"
-            disabled={sendingFollowUp}
-            onPress={() => void followUp()}
-            style={[styles.followUpButton, sendingFollowUp ? styles.followUpButtonDisabled : null]}
-          >
-            <Send color={sendingFollowUp ? colors.ink3 : colors.onDark} size={15} strokeWidth={2.4} />
-            <Text style={[styles.followUpButtonText, sendingFollowUp ? styles.followUpButtonTextDisabled : null]}>
-              {sendingFollowUp ? "Sending follow-up..." : "Send follow-up"}
-            </Text>
-          </Pressable>
-        </View>
+        {showFollowUpFooter ? (
+          <View style={[styles.followUpFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={followUpDisabled}
+              onPress={() => void followUp()}
+              style={[styles.followUpButton, followUpDisabled ? styles.followUpButtonDisabled : null]}
+            >
+              <Send color={followUpDisabled ? colors.ink3 : colors.onDark} size={15} strokeWidth={2.4} />
+              <Text style={[styles.followUpButtonText, followUpDisabled ? styles.followUpButtonTextDisabled : null]}>
+                {sendingFollowUp
+                  ? "Sending follow-up..."
+                  : isFollowUpDue
+                    ? "Send follow-up"
+                    : "Follow-up available after 3 days"}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {menuOpen ? (
           <>
@@ -603,7 +657,7 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
               <MenuRow icon={<Pencil color={colors.ink2} size={16} strokeWidth={2.2} />} label={quoteAction === "revise" ? "Revising..." : "Revise quote"} onPress={() => void revise()} />
               <MenuRow icon={<Copy color={colors.ink2} size={16} strokeWidth={2.2} />} label={quoteAction === "duplicate" ? "Duplicating..." : "Duplicate"} onPress={() => void duplicate()} />
               <MenuRow icon={<FileText color={colors.ink2} size={16} strokeWidth={2.2} />} label="Download PDF" onPress={downloadPdf} />
-              <MenuRow icon={<Archive color={colors.ink2} size={16} strokeWidth={2.2} />} label="Archive" onPress={archiveQuote} />
+              <MenuRow icon={<Archive color={colors.ink2} size={16} strokeWidth={2.2} />} label={archivingQuote ? "Archiving..." : "Archive"} onPress={archiveQuote} />
               <View style={styles.menuNote}>
                 <Text style={styles.menuNoteText}>
                   Sent quotes are locked. Revise creates a new draft and marks this one Superseded.

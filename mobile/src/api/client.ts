@@ -20,6 +20,7 @@ const runtimeProcess = globalThis as unknown as { process?: ExpoRuntimeProcess }
 const rawApiBaseUrl = envValue("EXPO_PUBLIC_API_URL") ?? "https://dctmpfrbkgntiuhjbblu.functions.supabase.co/snapquote";
 const snapquoteOrgId = envValue("EXPO_PUBLIC_SNAPQUOTE_ORG_ID");
 let authAccessToken: string | null = null;
+let authAccessTokenProvider: (() => Promise<string | null>) | null = null;
 
 export const apiBaseUrl = rawApiBaseUrl.replace(/\/$/, "");
 
@@ -32,6 +33,7 @@ type RequestOptions = {
   body?: unknown;
   method?: "GET" | "POST" | "PATCH";
   skipAuth?: boolean | undefined;
+  timeoutMs?: number | undefined;
 };
 
 export type ApiCustomer = {
@@ -93,6 +95,7 @@ export type ApiQuote = {
   firstViewedAt: string | null;
   respondedAt: string | null;
   supersededByQuoteId: string | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
   sendBlockers: {
@@ -327,11 +330,22 @@ export const snapquoteApi = {
       method: "POST"
     }),
 
-  listCustomers: () => request<{ customers: ApiCustomer[] }>("/v1/customers"),
+  listCustomers: (search?: string) => {
+    const query = search !== undefined && search.trim().length > 0
+      ? `?q=${encodeURIComponent(search.trim())}`
+      : "";
+    return request<{ customers: ApiCustomer[] }>(`/v1/customers${query}`);
+  },
 
   createCustomer: (input: CreateCustomerInput) =>
     request<ApiCustomer>("/v1/customers", {
       method: "POST",
+      body: input
+    }),
+
+  updateCustomer: (id: string, input: Partial<CreateCustomerInput>) =>
+    request<ApiCustomer>(`/v1/customers/${id}`, {
+      method: "PATCH",
       body: input
     }),
 
@@ -400,20 +414,25 @@ export const snapquoteApi = {
       method: "POST"
     }),
 
-  sendQuote: (id: string) =>
+  sendQuote: (id: string, channels: Array<"email" | "sms"> = ["email"]) =>
     request<ApiQuote>(`/v1/quotes/${id}/send`, {
       method: "POST",
-      body: { channels: ["email"] }
+      body: { channels }
     }),
 
-  followUpQuote: (id: string) =>
+  followUpQuote: (id: string, channels: Array<"email" | "sms"> = ["email"]) =>
     request<ApiQuote>(`/v1/quotes/${id}/follow-up`, {
       method: "POST",
-      body: { channels: ["email"] }
+      body: { channels }
     }),
 
   deleteDraftQuote: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/v1/quotes/${id}/delete-draft`, {
+      method: "POST"
+    }),
+
+  archiveQuote: (id: string) =>
+    request<{ id: string; archived: boolean; archivedAt: string }>(`/v1/quotes/${id}/archive`, {
       method: "POST"
     }),
 
@@ -438,6 +457,10 @@ export const snapquoteApi = {
 
 export function setApiAuthToken(token: string | null) {
   authAccessToken = token;
+}
+
+export function setApiAuthTokenProvider(provider: (() => Promise<string | null>) | null) {
+  authAccessTokenProvider = provider;
 }
 
 export function userFacingErrorMessage(error: unknown): string {
@@ -523,33 +546,51 @@ function queryString(input: Record<string, string | undefined> | undefined): str
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 45000);
+  const authorizationToken = options.skipAuth
+    ? null
+    : authAccessTokenProvider
+      ? await authAccessTokenProvider()
+      : authAccessToken;
   const requestInit: RequestInit = {
     method: options.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
-      ...(!options.skipAuth && authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : {}),
+      ...(authorizationToken ? { Authorization: `Bearer ${authorizationToken}` } : {}),
       ...(snapquoteOrgId ? { "x-snapquote-org-id": snapquoteOrgId } : {})
-    }
+    },
+    signal: controller.signal
   };
 
   if (options.body !== undefined) {
     requestInit.body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(`${apiBaseUrl}${path}`, requestInit);
+  try {
+    const response = await fetch(`${apiBaseUrl}${path}`, requestInit);
 
-  const text = await response.text();
-  const data: unknown = text.length > 0 ? JSON.parse(text) : null;
+    const text = await response.text();
+    const data: unknown = text.length > 0 ? JSON.parse(text) : null;
 
-  if (!response.ok) {
-    const message =
-      isRecord(data) && "message" in data
-        ? String(data["message"])
-        : `Request failed with ${response.status}`;
-    throw new Error(message);
+    if (!response.ok) {
+      const message =
+        isRecord(data) && "message" in data
+          ? String(data["message"])
+          : `Request failed with ${response.status}`;
+      throw new Error(message);
+    }
+
+    return data as T;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Request timed out. Check your connection and try again.");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return data as T;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -187,6 +187,7 @@ type QuoteStoreState = {
   sendQuote: (quoteId: string) => void;
   followUpQuote: (quoteId: string) => void;
   deleteDraftQuote: (quoteId: string) => void;
+  archiveQuote: (quoteId: string) => void;
   reviseQuote: (quoteId: string) => string;
   duplicateQuote: (quoteId: string) => string;
 
@@ -207,9 +208,15 @@ type QuoteStoreState = {
     kind: PriceBookItem["kind"];
     pricing: PriceBookPricing;
   }) => void;
+  upsertCustomer: (customer: Customer) => void;
   upsertPriceBookItem: (item: PriceBookItem) => void;
   upsertRemoteQuote: (quote: ApiQuote) => void;
   removeRemoteQuote: (quoteId: string) => void;
+  removeLocalSyncArtifacts: (input: {
+    customerIds?: string[];
+    priceBookItemIds?: string[];
+    quoteIds?: string[];
+  }) => void;
   hydrateRemoteState: (input: {
     me: MeResponse;
     priceBookItems: PriceBookItem[];
@@ -638,6 +645,13 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     }));
   },
 
+  archiveQuote: (quoteId) => {
+    set((state) => ({
+      quotes: state.quotes.filter((quote) => quote.id !== quoteId),
+      events: state.events.filter((event) => event.quoteId !== quoteId),
+    }));
+  },
+
   reviseQuote: (quoteId) => {
     const newId = makeId("quote");
     const now = new Date().toISOString();
@@ -750,6 +764,22 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     set((state) => ({ priceBookItems: [item, ...state.priceBookItems] }));
   },
 
+  upsertCustomer: (customer) => {
+    set((state) => {
+      const exists = state.customers.some(
+        (candidate) => candidate.id === customer.id,
+      );
+
+      return {
+        customers: exists
+          ? state.customers.map((candidate) =>
+              candidate.id === customer.id ? customer : candidate,
+            )
+          : [customer, ...state.customers],
+      };
+    });
+  },
+
   upsertPriceBookItem: (item) => {
     set((state) => {
       const exists = state.priceBookItems.some(
@@ -803,6 +833,23 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     set((state) => ({
       quotes: state.quotes.filter((quote) => quote.id !== quoteId),
       events: state.events.filter((event) => event.quoteId !== quoteId),
+    }));
+  },
+
+  removeLocalSyncArtifacts: (input) => {
+    const customerIds = new Set(input.customerIds ?? []);
+    const priceBookItemIds = new Set(input.priceBookItemIds ?? []);
+    const quoteIds = new Set(input.quoteIds ?? []);
+
+    set((state) => ({
+      customers: state.customers.filter(
+        (customer) => !customerIds.has(customer.id),
+      ),
+      priceBookItems: state.priceBookItems.filter(
+        (item) => !priceBookItemIds.has(item.id),
+      ),
+      quotes: state.quotes.filter((quote) => !quoteIds.has(quote.id)),
+      events: state.events.filter((event) => !quoteIds.has(event.quoteId)),
     }));
   },
 
