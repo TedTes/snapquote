@@ -112,6 +112,9 @@ export function QuotePage(props: { token: string }) {
         if (!canceled) {
           setState({ kind: "ready", quote });
           setPaymentAction(null);
+          if (urlParams.get("print") === "1") {
+            window.setTimeout(() => window.print(), 350);
+          }
         }
       } catch {
         if (!canceled) {
@@ -242,6 +245,39 @@ export function QuotePage(props: { token: string }) {
   );
 }
 
+function depositAmountCents(quote: PublicQuote) {
+  const payment = quote.payment;
+  const totalCents = quote.totals?.totalCents ?? null;
+
+  if (!payment || totalCents === null) {
+    return null;
+  }
+
+  return payment.depositAmountCents ?? Math.round(totalCents * (payment.depositPercent / 100));
+}
+
+function quoteIsExpired(quote: PublicQuote) {
+  return new Date() > new Date(`${quote.validUntil}T23:59:59`);
+}
+
+function canStartDepositPayment(quote: PublicQuote) {
+  const payment = quote.payment;
+  const depositAmount = depositAmountCents(quote);
+
+  return Boolean(
+    payment &&
+    payment.providerConnected &&
+    payment.status !== "paid" &&
+    depositAmount !== null &&
+    depositAmount > 0 &&
+    quote.status !== "accepted" &&
+    quote.status !== "declined" &&
+    quote.status !== "expired" &&
+    quote.status !== "superseded" &&
+    !quoteIsExpired(quote)
+  );
+}
+
 function PaymentPanel(props: {
   quote: PublicQuote;
   action: "starting" | "confirming" | null;
@@ -249,9 +285,7 @@ function PaymentPanel(props: {
 }) {
   const payment = props.quote.payment;
   const totalCents = props.quote.totals?.totalCents ?? null;
-  const depositAmount = payment?.depositAmountCents ?? (
-    totalCents === null ? null : Math.round(totalCents * ((payment?.depositPercent ?? 50) / 100))
-  );
+  const depositAmount = depositAmountCents(props.quote);
 
   if (!payment || totalCents === null || depositAmount === null || depositAmount <= 0) {
     return null;
@@ -281,7 +315,7 @@ function PaymentPanel(props: {
     );
   }
 
-  if (props.quote.status === "declined" || props.quote.status === "expired" || props.quote.status === "superseded") {
+  if (props.quote.status === "declined" || props.quote.status === "expired" || props.quote.status === "superseded" || quoteIsExpired(props.quote)) {
     return null;
   }
 
@@ -332,7 +366,7 @@ function ResponsePanel(props: {
     );
   }
 
-  const expired = new Date() > new Date(`${props.quote.validUntil}T23:59:59`);
+  const expired = quoteIsExpired(props.quote);
 
   if (expired) {
     return (
@@ -341,6 +375,19 @@ function ResponsePanel(props: {
           <strong>Quote expired</strong>
           <span>Ask the sender for a revised quote.</span>
         </div>
+      </div>
+    );
+  }
+
+  if (canStartDepositPayment(props.quote)) {
+    return (
+      <div className="response-wrap">
+        <div className="actions deposit-response-actions">
+          <button className="decline" disabled={props.action !== null} onClick={() => void props.onRespond("decline")}>
+            {props.action === "decline" ? "Declining..." : "Decline quote"}
+          </button>
+        </div>
+        <p className="action-note">Paying the deposit accepts the quote and notifies the sender.</p>
       </div>
     );
   }

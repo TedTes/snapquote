@@ -280,6 +280,10 @@ h2 {
   gap: 10px;
 }
 
+.deposit-response-actions {
+  grid-template-columns: 1fr;
+}
+
 .actions button {
   min-height: 48px;
   border-radius: 10px;
@@ -465,6 +469,33 @@ h2 {
     padding-bottom: 20px;
   }
 
+  .footnote {
+    display: none;
+  }
+}
+
+@media print {
+  :root,
+  body {
+    background: #fff;
+  }
+
+  .page {
+    min-height: auto;
+    padding: 0;
+    background: #fff;
+  }
+
+  .quote-card {
+    width: 100%;
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .payment-panel,
+  .response-wrap,
   .footnote {
     display: none;
   }
