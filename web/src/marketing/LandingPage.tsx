@@ -15,11 +15,12 @@ export function LandingPage() {
             <span>QuoteVan</span>
           </a>
           <nav aria-label="Landing page" className="landing-nav-links">
+            <a href="#trust">Customer email</a>
             <a href="#how">How it works</a>
             <a href="#customer">Customer view</a>
             <a href="#book">Price book</a>
-            <a href="#trust">Pricing trust</a>
           </nav>
+          <a className="btn btn-primary btn-small" href={supportMailto}>Get started</a>
         </div>
       </header>
 
