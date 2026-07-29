@@ -281,9 +281,11 @@ Deno.serve(async (request) => {
       return json(await handleStripeWebhook(db, request));
     }
 
-    const orgId = await resolveOrgId(db, request);
-    requestOrgIds.set(request, orgId);
-    await ensureOrg(db, orgId);
+    if (requiresAppAuth(route)) {
+      const orgId = await authenticatedOrgIdFromRequest(db, request);
+      requestOrgIds.set(request, orgId);
+      await ensureOrg(db, orgId);
+    }
 
     if (route.method === "GET" && route.path === "/v1/me") {
       return json(await getMe(db, request));
@@ -2417,41 +2419,28 @@ function params(path: string, pattern: string) {
   return values;
 }
 
-async function resolveOrgId(db: SupabaseClient, request: Request) {
-  const authHeader = request.headers.get("authorization");
-  const bearerToken = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+function requiresAppAuth(route: { method: string; path: string }) {
+  return route.path.startsWith("/v1/") && !route.path.startsWith("/v1/auth/");
+}
 
-  if (bearerToken) {
-    const { data, error } = await db.auth.getUser(bearerToken);
+async function authenticatedOrgIdFromRequest(db: SupabaseClient, request: Request) {
+  const member = await memberFromBearer(db, request);
 
-    if (!error && data.user) {
-      const { data: member, error: memberError } = await db
-        .from("snapquote_org_members")
-        .select("org_id")
-        .eq("auth_user_id", data.user.id)
-        .maybeSingle();
-
-      if (memberError) {
-        throw memberError;
-      }
-
-      if (member?.org_id) {
-        return String(member.org_id);
-      }
-    }
-
-    const payload = await verifyAppToken(bearerToken, "access").catch(() => null);
-
-    if (payload?.org) {
-      return payload.org;
-    }
+  if (!member?.org_id) {
+    throw new HttpError(401, "Sign in to use QuoteVan.");
   }
 
-  return request.headers.get("x-snapquote-org-id") ?? defaultOrgId;
+  return String(member.org_id);
 }
 
 function orgIdFromRequest(request: Request) {
-  return requestOrgIds.get(request) ?? request.headers.get("x-snapquote-org-id") ?? defaultOrgId;
+  const orgId = requestOrgIds.get(request);
+
+  if (!orgId) {
+    throw new HttpError(401, "Sign in to use QuoteVan.");
+  }
+
+  return orgId;
 }
 
 function orgResponse(row: Record<string, unknown>) {
