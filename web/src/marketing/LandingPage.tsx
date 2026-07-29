@@ -187,8 +187,7 @@ function EmailDashboardPreview() {
       sender: "Bright Coat Painting",
       via: "QuoteVan",
       subject: "Your quote is ready",
-      preview: "Michael, your quote for $1,932 is ready to view",
-      chip: "$1,932",
+      preview: "Michael, your quote is ready to view",
       time: "Now",
       important: true,
     },
@@ -286,7 +285,6 @@ function EmailDashboardPreview() {
               </strong>
               <p><b>{row.subject}</b> <span>- {row.preview}</span></p>
               <span className="email-row-end">
-                {row.chip ? <span className="email-row-chip">{row.chip}</span> : null}
                 <time>{row.time}</time>
               </span>
             </article>
