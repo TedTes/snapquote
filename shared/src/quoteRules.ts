@@ -121,7 +121,7 @@ const GENERIC_JOB_TITLE_PATTERN = /^(?:interior\s+(?:paint|painting|repaint|repa
  * summary, then a generic placeholder. Never returns an empty string.
  */
 export function deriveJobLabel(quote: {
-  workType?: QuoteWorkType | string | null | undefined;
+  workType?: string | null | undefined;
   jobTitle?: string | null | undefined;
   checklist: PainterChecklist;
   scopeSummary: string;
@@ -156,7 +156,7 @@ export function deriveJobLabel(quote: {
 }
 
 export function inferQuoteWorkType(quote: {
-  workType?: QuoteWorkType | string | null | undefined;
+  workType?: string | null | undefined;
   jobTitle?: string | null | undefined;
   checklist: PainterChecklist;
 }): QuoteWorkType {
