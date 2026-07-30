@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Customer, QuoteStatus, QuoteTotals, SendBlockers } from "@snapquote/shared";
+import { deriveJobLabel, type Customer, type QuoteStatus, type QuoteTotals, type SendBlockers } from "@snapquote/shared";
 import {
   getQuoteBlockers,
   getQuoteCustomer,
@@ -18,6 +18,21 @@ export type QuoteRow = {
   stale: boolean;
   totals: QuoteTotals | null;
 };
+
+/**
+ * Search predicate for the Quotes list: matches the derived job label and the
+ * linked customer's name/address/city.
+ */
+export function matchesQuoteSearch(row: QuoteRow, term: string): boolean {
+  const query = term.trim().toLowerCase();
+
+  if (query.length === 0) {
+    return true;
+  }
+
+  const haystack = `${deriveJobLabel(row.quote)} ${row.customer?.name ?? ""} ${row.customer?.address ?? ""} ${row.customer?.city ?? ""}`.toLowerCase();
+  return haystack.includes(query);
+}
 
 export function useQuoteRows(): QuoteRow[] {
   const quotes = useQuoteStore((state) => state.quotes);

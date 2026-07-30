@@ -10,16 +10,18 @@ import {
   Lock,
   Mic,
   RotateCcw,
-  Search
+  Search,
+  User
 } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
+import { deriveCustomerCity, deriveJobLabel } from "@snapquote/shared";
 import { BottomTabBar } from "../components/BottomTabBar";
 import { ClipboardQuoteMark } from "../components/ClipboardQuoteMark";
 import { Screen } from "../components/base";
 import { colors, radius } from "../components/theme";
 import { formatMoney, formatShortDate } from "../utils/format";
-import { useQuoteRows, type QuoteRow } from "../state/useQuoteRows";
+import { matchesQuoteSearch, useQuoteRows, type QuoteRow } from "../state/useQuoteRows";
 import type { QuoteRecord } from "../state/quoteStore";
 import { useRemoteQuoteRefresh } from "../sync/useRemoteQuoteRefresh";
 
@@ -90,15 +92,8 @@ export default function QuotesScreen() {
   );
 
   const filtered = useMemo(() => {
-    const term = showSearch ? query.trim().toLowerCase() : "";
-    const bySearch = visibleRows.filter((row) => {
-      if (term.length === 0) {
-        return true;
-      }
-
-      const haystack = `${row.customer?.name ?? ""} ${row.quote.address} ${row.quote.jobTitle}`.toLowerCase();
-      return haystack.includes(term);
-    });
+    const term = showSearch ? query : "";
+    const bySearch = visibleRows.filter((row) => matchesQuoteSearch(row, term));
 
     if (filter === "all") {
       return bySearch;
@@ -370,12 +365,15 @@ function CompactQuoteCard(props: {
         <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.quoteBody}>
           <View style={styles.quoteTop}>
             <View style={styles.quoteIdentity}>
-              <Text style={styles.quoteCustomer} numberOfLines={1}>
-                {props.row.customer?.name ?? "Unnamed customer"}
+              <Text style={styles.quoteTitle} numberOfLines={1}>
+                {deriveJobLabel(props.row.quote)}
               </Text>
-              <Text style={styles.quoteAddress} numberOfLines={1}>
-                {quoteSubtitle(props.row.quote)}
-              </Text>
+              <View style={styles.quoteCustomerRow}>
+                <User color={colors.ink3} size={11} strokeWidth={2.2} />
+                <Text style={styles.quoteCustomerSubtitle} numberOfLines={1}>
+                  {customerSubtitle(props.row.customer)}
+                </Text>
+              </View>
             </View>
             <View style={styles.amountBlock}>
               <Text style={styles.quoteAmount}>{props.row.totals ? formatMoney(props.row.totals.totalCents) : "$--"}</Text>
@@ -419,10 +417,13 @@ function CompactQuoteCard(props: {
   );
 }
 
-function quoteSubtitle(quote: QuoteRecord): string {
-  const parts = [quote.address, quote.jobTitle].map((part) => part.trim()).filter((part) => part.length > 0);
+function customerSubtitle(customer: QuoteRow["customer"]): string {
+  if (customer === null) {
+    return "Unnamed customer";
+  }
 
-  return parts.length > 0 ? parts.join(" · ") : "No address";
+  const city = customer.city.trim() || deriveCustomerCity(customer.address);
+  return city.length > 0 ? `${customer.name} · ${city}` : customer.name;
 }
 
 function quoteAlert(row: QuoteRow): {
@@ -789,14 +790,19 @@ const styles = StyleSheet.create({
     gap: 2,
     minWidth: 0
   },
-  quoteCustomer: {
+  quoteTitle: {
     color: colors.ink,
     fontSize: 15,
     fontWeight: "900"
   },
-  quoteAddress: {
+  quoteCustomerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4
+  },
+  quoteCustomerSubtitle: {
     color: colors.ink3,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "600"
   },
   amountBlock: {

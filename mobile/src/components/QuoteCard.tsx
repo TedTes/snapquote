@@ -6,6 +6,7 @@ import { colors, radius, spacing } from "./theme";
 import { formatMoney, formatRelativeToNow } from "../utils/format";
 import type { QuoteRow } from "../state/useQuoteRows";
 import type { StoredLineItem } from "../state/quoteStore";
+import { deriveCustomerCity, deriveJobLabel } from "@snapquote/shared";
 
 export function QuoteCard(props: { row: QuoteRow; onPress: () => void; onFollowUp?: (() => void) | undefined }) {
   const { row } = props;
@@ -21,10 +22,10 @@ export function QuoteCard(props: { row: QuoteRow; onPress: () => void; onFollowU
           <View style={styles.top}>
             <View style={styles.titleBlock}>
               <Text style={styles.customer} numberOfLines={1}>
-                {row.customer?.name ?? "Unnamed customer"}
+                {deriveJobLabel(row.quote)}
               </Text>
               <Text style={styles.address} numberOfLines={1}>
-                {row.quote.address || "No address"}
+                {customerSubtitle(row)}
               </Text>
             </View>
             <View style={styles.amountBlock}>
@@ -65,6 +66,15 @@ function sumTrustedCents(lineItems: StoredLineItem[]): number {
   return lineItems
     .filter((line) => line.matchState === "green" && line.unitPriceCents !== null)
     .reduce((sum, line) => sum + Math.round(line.quantity * (line.unitPriceCents ?? 0)), 0);
+}
+
+function customerSubtitle(row: QuoteRow): string {
+  if (row.customer === null) {
+    return "Unnamed customer";
+  }
+
+  const city = row.customer.city.trim() || deriveCustomerCity(row.customer.address);
+  return city.length > 0 ? `${row.customer.name} · ${city}` : row.customer.name;
 }
 
 function cardAlert(row: QuoteRow): {
