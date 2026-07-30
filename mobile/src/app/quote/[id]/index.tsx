@@ -26,8 +26,8 @@ import { apiBaseUrl, snapquoteApi, userFacingErrorMessage } from "../../../api/c
 import { colors, radius, spacing } from "../../../components/theme";
 import { describeQuantity, formatDateTime, formatMoney, formatShortDate } from "../../../utils/format";
 import {
-  getCustomer,
   getQuoteBlockers,
+  getQuoteCustomer,
   getQuoteEvents,
   getQuoteIsStale,
   getQuoteStatus,
@@ -56,7 +56,7 @@ export default function QuoteScreen() {
     );
   }
 
-  const customer = getCustomer(customers, quote.customerId);
+  const customer = getQuoteCustomer(quote, customers);
   const status = getQuoteStatus(quote, events);
 
   if (status === "draft") {
@@ -380,6 +380,7 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
   const hostedPublicUrl = quote.publicUrl?.startsWith("http") ? quote.publicUrl : null;
   const publicUrl = hostedPublicUrl ?? (quote.publicToken ? `${apiBaseUrl}/public/quotes/${quote.publicToken}` : null);
   const statusMeta = quoteStatusMeta({ quote, events: timeline });
+  const depositStatus = depositStatusLabel(quote);
   const isAwaitingResponse = status === "sent" || status === "viewed";
   const isFollowUpDue = isAwaitingResponse && getQuoteIsStale(quote);
   const showFollowUpFooter = isAwaitingResponse;
@@ -560,6 +561,7 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
               </View>
               <Text style={styles.detailValidUntil}>{statusMeta}</Text>
             </View>
+            {depositStatus ? <Text style={styles.detailDepositStatus}>{depositStatus}</Text> : null}
           </View>
 
           <View style={styles.quoteSummaryCard}>
@@ -685,6 +687,20 @@ function formatTaxRate(taxRate: number): string {
   return `${Number.isInteger(percent) ? percent.toFixed(0) : percent.toFixed(2).replace(/\.?0+$/, "")}%`;
 }
 
+function depositStatusLabel(quote: QuoteRecord): string | null {
+  const payment = quote.payment;
+
+  if (!payment) {
+    return null;
+  }
+
+  if (payment.status === "paid") {
+    return `${formatMoney(payment.paidAmountCents)} deposit paid · ready to schedule`;
+  }
+
+  return null;
+}
+
 function quoteStatusMeta(input: { quote: QuoteRecord; events: QuoteEvent[] }): string {
   const sentEvent = [...input.events].reverse().find((event) => event.type === "sent");
   const basis = sentEvent?.createdAt ?? input.quote.sentAt ?? input.quote.updatedAt;
@@ -805,6 +821,12 @@ function eventLabel(event: QuoteEvent): string {
       return "Follow-up sent";
     case "superseded":
       return "Superseded";
+    case "payment_paid":
+      return "Deposit paid";
+    case "payment_started":
+      return "Payment started";
+    case "payment_failed":
+      return "Payment failed";
     default:
       return event.type;
   }
@@ -1418,6 +1440,12 @@ const styles = StyleSheet.create({
     color: colors.ink3,
     fontSize: 11,
     fontWeight: "700"
+  },
+  detailDepositStatus: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 2
   },
   quoteSummaryCard: {
     backgroundColor: colors.surface,

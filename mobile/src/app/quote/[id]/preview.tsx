@@ -32,8 +32,8 @@ import { describeQuantity, formatLongDate, formatMoney, initials } from "../../.
 import { snapquoteApi, userFacingErrorMessage } from "../../../api/client";
 import { useAuthStore } from "../../../auth/authStore";
 import {
-  getCustomer,
   getQuoteBlockers,
+  getQuoteCustomer,
   getQuoteStatus,
   getQuoteTotals,
   dollarsToCents,
@@ -97,7 +97,7 @@ export default function QuotePreviewScreen() {
     );
   }
 
-  const customer = getCustomer(customers, quote.customerId);
+  const customer = getQuoteCustomer(quote, customers);
   const status = getQuoteStatus(quote, events);
   const blockers = getQuoteBlockers(quote);
   const totals = getQuoteTotals(quote);

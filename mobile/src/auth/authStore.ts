@@ -327,20 +327,21 @@ async function syncLocalDataAfterLogin(input: {
       (candidate) => candidate.id === quote.customerId,
     );
     const remoteCustomerId = customerIdMap.get(quote.customerId) ?? quote.customerId;
+    const quoteCustomer = quote.customerSnapshot ?? customer ?? null;
 
-    if (!customer && isLocalCustomerId(quote.customerId)) {
+    if (!quoteCustomer && isLocalCustomerId(quote.customerId)) {
       continue;
     }
 
     try {
       const created = await snapquoteApi.createQuote({
-        customerId: isLocalCustomerId(remoteCustomerId) ? undefined : remoteCustomerId,
-        customer: isLocalCustomerId(remoteCustomerId) && customer
+        customerId: quoteCustomer ? undefined : isLocalCustomerId(remoteCustomerId) ? undefined : remoteCustomerId,
+        customer: quoteCustomer
           ? {
-              name: customer.name,
-              email: customer.email ?? undefined,
-              phone: customer.phone,
-              address: customer.address,
+              name: quoteCustomer.name,
+              email: quoteCustomer.email ?? undefined,
+              phone: quoteCustomer.phone,
+              address: quote.address,
             }
           : undefined,
         address: quote.address,

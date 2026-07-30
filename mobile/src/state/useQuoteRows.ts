@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import type { Customer, QuoteStatus, QuoteTotals, SendBlockers } from "@snapquote/shared";
 import {
-  getCustomer,
   getQuoteBlockers,
+  getQuoteCustomer,
   getQuoteIsStale,
   getQuoteStatus,
   getQuoteTotals,
@@ -12,7 +12,7 @@ import {
 
 export type QuoteRow = {
   quote: QuoteRecord;
-  customer: Customer | undefined;
+  customer: Customer | null;
   status: QuoteStatus;
   blockers: SendBlockers;
   stale: boolean;
@@ -28,7 +28,7 @@ export function useQuoteRows(): QuoteRow[] {
     () =>
       quotes.map((quote) => ({
         quote,
-        customer: getCustomer(customers, quote.customerId),
+        customer: getQuoteCustomer(quote, customers),
         status: getQuoteStatus(quote, events),
         blockers: getQuoteBlockers(quote),
         stale: getQuoteIsStale(quote),

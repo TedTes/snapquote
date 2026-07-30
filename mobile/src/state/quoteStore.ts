@@ -31,6 +31,7 @@ export type StoredLineItem = QuoteLineItem & { id: string };
 export type QuoteRecord = {
   id: string;
   customerId: string;
+  customerSnapshot?: Customer | null;
   address: string;
   jobTitle: string;
   lineItems: StoredLineItem[];
@@ -53,6 +54,7 @@ export type QuoteRecord = {
   firstViewedAt: string | null;
   respondedAt: string | null;
   supersededByQuoteId: string | null;
+  payment?: ApiQuote["payment"];
   createdAt: string;
   updatedAt: string;
 };
@@ -343,6 +345,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     const quote: QuoteRecord = {
       id: makeId("quote"),
       customerId: customer.id,
+      customerSnapshot: customer,
       address: customer.address,
       jobTitle: wizard.jobTitle.trim(),
       lineItems,
@@ -798,7 +801,10 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
 
   upsertRemoteQuote: (quote) => {
     set((state) => {
-      const localQuote = remoteQuoteToLocal(quote);
+      const existingQuote = state.quotes.find(
+        (candidate) => candidate.id === quote.id,
+      );
+      const localQuote = remoteQuoteToLocal(quote, existingQuote);
       const quoteExists = state.quotes.some(
         (candidate) => candidate.id === quote.id,
       );
@@ -814,11 +820,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
         customers:
           quote.customer !== null && !customerExists
             ? [quote.customer, ...state.customers]
-            : state.customers.map((customer) =>
-                customer.id === quote.customerId && quote.customer !== null
-                  ? quote.customer
-                  : customer,
-              ),
+            : state.customers,
         quotes: quoteExists
           ? state.quotes.map((candidate) =>
               candidate.id === quote.id ? localQuote : candidate,
@@ -867,7 +869,12 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
       const localEvents = state.events.filter((event) =>
         localQuotes.some((quote) => quote.id === event.quoteId),
       );
-      const remoteQuotes = input.quotes.map(remoteQuoteToLocal);
+      const remoteQuotes = input.quotes.map((quote) =>
+        remoteQuoteToLocal(
+          quote,
+          state.quotes.find((candidate) => candidate.id === quote.id),
+        ),
+      );
       const remoteEvents = input.quotes.flatMap(remoteQuoteEvents);
 
       return {
@@ -938,7 +945,16 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
         ? persisted.customers
         : currentState.customers,
       quotes: Array.isArray(persisted.quotes)
-        ? persisted.quotes.map((quote) => ({ ...quote, publicUrl: quote.publicUrl ?? null }))
+        ? persisted.quotes.map((quote) => ({
+            ...quote,
+            publicUrl: quote.publicUrl ?? null,
+            customerSnapshot:
+              quote.customerSnapshot !== undefined
+                ? quote.customerSnapshot
+                : (Array.isArray(persisted.customers)
+                    ? persisted.customers.find((customer) => customer.id === quote.customerId) ?? null
+                    : null),
+          }))
         : currentState.quotes,
       events: Array.isArray(persisted.events)
         ? persisted.events
@@ -948,10 +964,12 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
   },
 }));
 
-function remoteQuoteToLocal(quote: ApiQuote): QuoteRecord {
+function remoteQuoteToLocal(quote: ApiQuote, existingQuote?: QuoteRecord): QuoteRecord {
   return {
     id: quote.id,
     customerId: quote.customerId,
+    customerSnapshot:
+      quote.customer ?? existingQuote?.customerSnapshot ?? null,
     address: quote.address,
     jobTitle: quote.jobTitle,
     lineItems: quote.lineItems,
@@ -974,6 +992,7 @@ function remoteQuoteToLocal(quote: ApiQuote): QuoteRecord {
     firstViewedAt: quote.firstViewedAt,
     respondedAt: quote.respondedAt,
     supersededByQuoteId: quote.supersededByQuoteId,
+    payment: quote.payment,
     createdAt: quote.createdAt,
     updatedAt: quote.updatedAt,
   };
@@ -1030,6 +1049,16 @@ function remoteQuoteEvents(quote: ApiQuote): QuoteEvent[] {
       type: "superseded",
       meta: { supersededByQuoteId: quote.supersededByQuoteId },
       createdAt: quote.updatedAt,
+    });
+  }
+
+  if (quote.payment?.status === "paid" && quote.payment.paidAt !== null) {
+    events.push({
+      id: `${quote.id}-remote-payment-paid`,
+      quoteId: quote.id,
+      type: "payment_paid",
+      meta: { amountCents: quote.payment.paidAmountCents, currency: quote.payment.currency },
+      createdAt: quote.payment.paidAt,
     });
   }
 
@@ -1164,6 +1193,13 @@ export function getCustomer(
   customerId: string,
 ): Customer | undefined {
   return customers.find((customer) => customer.id === customerId);
+}
+
+export function getQuoteCustomer(
+  quote: QuoteRecord,
+  customers: Customer[],
+): Customer | null {
+  return quote.customerSnapshot ?? getCustomer(customers, quote.customerId) ?? null;
 }
 
 function cloneQuoteAsDraft(
