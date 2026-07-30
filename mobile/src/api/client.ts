@@ -43,6 +43,7 @@ export type ApiCustomer = {
   email: string | null;
   phone: string | null;
   address: string;
+  city: string;
   createdAt: string;
 };
 
@@ -52,6 +53,7 @@ export type ApiQuote = {
   customerId: string;
   customer: ApiCustomer | null;
   address: string;
+  workType: string;
   jobTitle: string;
   status: QuoteStatus;
   publicToken: string;
@@ -154,12 +156,16 @@ export type CreateCustomerInput = {
   email?: string | null | undefined;
   phone?: string | null | undefined;
   address: string;
+  city?: string | undefined;
 };
 
-export type CreateQuoteInput = {
-  customerId?: string | undefined;
-  customer?: CreateCustomerInput | undefined;
+type CreateQuoteCustomerInput =
+  | { customerId: string; customer?: undefined }
+  | { customerId?: undefined; customer: CreateCustomerInput };
+
+export type CreateQuoteInput = CreateQuoteCustomerInput & {
   address: string;
+  workType?: string | undefined;
   jobTitle?: string | undefined;
   checklist: PainterChecklist;
   transcript: string;

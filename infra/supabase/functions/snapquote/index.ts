@@ -169,18 +169,21 @@ const customerSchema = z.object({
   name: z.string().trim().min(1).max(160),
   email: z.string().email().nullable().optional(),
   phone: z.string().trim().min(7).max(32).nullable().optional(),
-  address: z.string().trim().min(1).max(400)
+  address: z.string().trim().min(1).max(400),
+  city: z.string().trim().max(120).optional()
 });
 
 const customerPatchSchema = customerSchema.partial().refine(
   (input) => Object.values(input).some((value) => value !== undefined),
   "At least one customer field is required"
 );
+const workTypeSchema = z.enum(["interior_repaint", "exterior_trim"]);
 
 const createQuoteSchema = z.object({
   customerId: z.string().uuid().optional(),
   customer: customerSchema.optional(),
   address: z.string().trim().min(1).max(400),
+  workType: workTypeSchema.optional(),
   jobTitle: z.string().trim().max(160).optional(),
   checklist: checklistSchema.default(defaultChecklist),
   transcript: z.string().trim().max(5000).default(""),
@@ -188,6 +191,17 @@ const createQuoteSchema = z.object({
   audioStoragePath: z.string().trim().min(1).max(1000).nullable().optional(),
   audioContentType: z.string().trim().min(1).max(120).nullable().optional(),
   audioDurationSeconds: z.number().int().min(0).max(3600).nullable().optional()
+}).superRefine((input, context) => {
+  const hasCustomerId = input.customerId !== undefined;
+  const hasCustomer = input.customer !== undefined;
+
+  if (hasCustomerId === hasCustomer) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["customerId"],
+      message: "Provide exactly one of customerId or customer"
+    });
+  }
 });
 
 const extractScopeSchema = z.object({
@@ -1587,7 +1601,7 @@ async function listCustomers(db: SupabaseClient, orgId: string, request: Request
 
   if (search !== undefined && search.length > 0) {
     const term = searchTerm(search);
-    query = query.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,address.ilike.%${term}%`);
+    query = query.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,address.ilike.%${term}%,city.ilike.%${term}%`);
   }
 
   const { data, error } = await query.order("created_at", { ascending: false }).limit(100);
@@ -1628,6 +1642,12 @@ async function updateCustomer(db: SupabaseClient, request: Request, customerId: 
     patch.address = input.address;
   }
 
+  if (input.city !== undefined) {
+    patch.city = input.city;
+  } else if (input.address !== undefined) {
+    patch.city = deriveCustomerCity(input.address);
+  }
+
   const row = await single(db.from("snapquote_customers").update(patch).eq("org_id", orgId).eq("id", customerId).select("*"));
   return customerResponse(row);
 }
@@ -1637,13 +1657,7 @@ async function createQuote(db: SupabaseClient, request: Request) {
   const input = parse(createQuoteSchema, await request.json());
   const customer = input.customerId
     ? await single(db.from("snapquote_customers").select("*").eq("org_id", orgId).eq("id", input.customerId))
-    : await createCustomerFromInput(db, orgId, input.customer ?? {
-        name: "Unnamed customer",
-        email: "customer@example.com",
-        phone: null,
-        address: input.address
-      });
-  const quoteCustomer = quoteCustomerSnapshotColumns(customer);
+    : await createCustomerFromInput(db, orgId, input.customer!);
 
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
   const priceBookItems = await listPriceBook(db, orgId);
@@ -1683,8 +1697,8 @@ async function createQuote(db: SupabaseClient, request: Request) {
   const quote = await single(db.from("snapquote_quotes").insert({
     org_id: orgId,
     customer_id: customer.id,
-    ...quoteCustomer,
     address: input.address,
+    work_type: input.workType ?? inferQuoteWorkType(input.jobTitle ?? "", input.checklist as PainterChecklist),
     job_title: input.jobTitle ?? "",
     valid_until: validUntil,
     discount_type: discount.type,
@@ -1871,7 +1885,6 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
   const quote = await single(db.from("snapquote_quotes").select("*").eq("org_id", orgId).eq("id", quoteId)) as QuoteRow;
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", quote.org_id));
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
-  const quoteCustomer = quoteCustomerResponse(quote, customer);
   const lineItems = await listLines(db, quote.id);
   const publicLink = await ensurePublicQuoteLink(db, quote.id);
   const totals = quote.total_cents === null
@@ -1888,8 +1901,9 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
     orgId: quote.org_id,
     org: orgResponse(org),
     customerId: quote.customer_id,
-    customer: quoteCustomer,
+    customer: customerResponse(customer),
     address: quote.address,
+    workType: quote.work_type,
     jobTitle: quote.job_title,
     status: quote.status,
     publicToken: publicLink.token,
@@ -2072,18 +2086,17 @@ async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) 
   const orgId = orgIdFromRequest(request);
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)) as QuoteRow;
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
-  const quoteCustomer = quoteCustomerResponse(quote, customer);
   const lineItems = await listLines(db, quoteId);
 
   if (quote.status !== "draft") {
     throw new HttpError(409, "Only draft quotes can be sent");
   }
 
-  if (input.channels.includes("email") && !stringOrNull(quoteCustomer.email)) {
+  if (input.channels.includes("email") && !stringOrNull(customer.email)) {
     throw new HttpError(409, "Customer email is required before sending");
   }
 
-  if (input.channels.includes("sms") && !stringOrNull(quoteCustomer.phone)) {
+  if (input.channels.includes("sms") && !stringOrNull(customer.phone)) {
     throw new HttpError(409, "Customer phone is required before texting");
   }
 
@@ -2109,17 +2122,16 @@ async function followUpQuote(db: SupabaseClient, request: Request, quoteId: stri
   const orgId = orgIdFromRequest(request);
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)) as QuoteRow;
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
-  const quoteCustomer = quoteCustomerResponse(quote, customer);
 
   if (quote.status !== "sent" && quote.status !== "viewed") {
     throw new HttpError(409, "Only sent quotes awaiting a response can be followed up");
   }
 
-  if (input.channels.includes("email") && !stringOrNull(quoteCustomer.email)) {
+  if (input.channels.includes("email") && !stringOrNull(customer.email)) {
     throw new HttpError(409, "Customer email is required before following up");
   }
 
-  if (input.channels.includes("sms") && !stringOrNull(quoteCustomer.phone)) {
+  if (input.channels.includes("sms") && !stringOrNull(customer.phone)) {
     throw new HttpError(409, "Customer phone is required before texting a follow-up");
   }
 
@@ -2201,10 +2213,8 @@ async function cloneQuoteAsDraft(db: SupabaseClient, orgId: string, quoteId: str
   const cloned = await single(db.from("snapquote_quotes").insert({
     org_id: orgId,
     customer_id: source.customer_id,
-    customer_name: source.customer_name,
-    customer_email: source.customer_email,
-    customer_phone: source.customer_phone,
     address: source.address,
+    work_type: source.work_type,
     job_title: source.job_title,
     status: "draft",
     valid_until: addDays(new Date(), Number(org.quote_valid_days)),
@@ -2346,7 +2356,6 @@ async function createPublicQuotePayment(db: SupabaseClient, token: string) {
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", link.quote_id)) as QuoteRow;
   const org = await refreshStripeAccountStatus(db, quote.org_id);
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
-  const quoteCustomer = quoteCustomerResponse(quote, customer);
 
   if (!quote.total_cents || quote.total_cents <= 0) {
     throw new HttpError(409, "This quote is not ready for payment");
@@ -2383,7 +2392,7 @@ async function createPublicQuotePayment(db: SupabaseClient, token: string) {
     "payment_method_types[0]": "card",
     success_url: successUrl,
     cancel_url: cancelUrl,
-    customer_email: quoteCustomer.email ? String(quoteCustomer.email) : undefined,
+    customer_email: customer.email ? String(customer.email) : undefined,
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": currency,
     "line_items[0][price_data][unit_amount]": String(amountCents),
@@ -2642,7 +2651,8 @@ async function insertCustomerFromInput(db: SupabaseClient, orgId: string, input:
     name: input.name,
     email: normalizedEmail(input.email),
     phone: input.phone ?? null,
-    address: input.address
+    address: input.address,
+    city: input.city ?? deriveCustomerCity(input.address)
   }).select("*"));
 }
 
@@ -3227,35 +3237,46 @@ function searchTerm(value: string) {
   return value.replace(/[%(),]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
+function deriveCustomerCity(address: string) {
+  const trimmed = address.trim();
+
+  if (trimmed.length === 0) {
+    return "";
+  }
+
+  const segments = trimmed.split(",").map((segment) => segment.trim()).filter((segment) => segment.length > 0);
+  const last = segments.at(-1) ?? trimmed;
+
+  if (segments.length >= 3 && /^(?:[a-z]{2}|[a-z]{2}\s+[a-z]\d[a-z][ -]?\d[a-z]\d|\d{5}(?:-\d{4})?|canada|usa|united states)$/i.test(last)) {
+    return segments.at(-2) ?? last;
+  }
+
+  return last;
+}
+
+function inferQuoteWorkType(jobTitle: string, checklist: PainterChecklist): z.infer<typeof workTypeSchema> {
+  const typed = jobTitle.trim().toLowerCase();
+  const rooms = checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
+
+  if (typed.includes("exterior") || (rooms === 0 && checklist.doorCount > 0)) {
+    return "exterior_trim";
+  }
+
+  return "interior_repaint";
+}
+
 function customerResponse(row: Record<string, unknown>) {
+  const address = stringOrNull(row.address) ?? "";
+
   return {
     id: row.id,
     orgId: row.org_id,
     name: row.name,
     email: row.email,
     phone: row.phone,
-    address: row.address,
+    address,
+    city: stringOrNull(row.city) ?? deriveCustomerCity(address),
     createdAt: row.created_at
-  };
-}
-
-function quoteCustomerSnapshotColumns(customer: Record<string, unknown>) {
-  return {
-    customer_name: stringOrNull(customer.name) ?? "Unnamed customer",
-    customer_email: stringOrNull(customer.email),
-    customer_phone: stringOrNull(customer.phone)
-  };
-}
-
-function quoteCustomerResponse(quote: QuoteRow, customer: Record<string, unknown>) {
-  const profile = customerResponse(customer);
-
-  return {
-    ...profile,
-    name: stringOrNull(quote.customer_name) ?? stringOrNull(profile.name) ?? "Unnamed customer",
-    email: stringOrNull(quote.customer_email) ?? stringOrNull(profile.email),
-    phone: stringOrNull(quote.customer_phone) ?? stringOrNull(profile.phone),
-    address: quote.address
   };
 }
 

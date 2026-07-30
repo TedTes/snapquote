@@ -77,6 +77,7 @@ export const customerSchema = z.object({
   email: emailSchema.nullable(),
   phone: phoneSchema.nullable(),
   address: z.string().trim().min(1).max(400),
+  city: z.string().trim().max(120),
   createdAt: z.string().datetime()
 });
 
@@ -86,7 +87,8 @@ export const createCustomerSchema = customerSchema.omit({
   createdAt: true
 }).extend({
   email: emailSchema,
-  phone: phoneSchema.nullable().optional()
+  phone: phoneSchema.nullable().optional(),
+  city: z.string().trim().max(120).optional()
 });
 
 export const roomSizePricesSchema = z.object({

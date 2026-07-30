@@ -241,10 +241,8 @@ export type QuoteRow = {
   id: string;
   org_id: string;
   customer_id: string;
-  customer_name: string;
-  customer_email: string | null;
-  customer_phone: string | null;
   address: string;
+  work_type: string;
   job_title: string;
   status: QuoteStatus;
   valid_until: string;

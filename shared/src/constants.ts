@@ -28,6 +28,7 @@ export const lineItemSources = ["price_book", "manual"] as const;
 export const lineItemMatchStates = ["green", "yellow", "red"] as const;
 export const deliveryChannels = ["email", "sms"] as const;
 export const customerResponseActions = ["accept", "decline"] as const;
+export const quoteWorkTypes = ["interior_repaint", "exterior_trim"] as const;
 export const quoteEventTypes = [
   "created",
   "sent",

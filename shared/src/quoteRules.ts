@@ -1,7 +1,8 @@
-import { STALE_QUOTE_DAYS, type quoteStatuses } from "./constants.js";
-import type { QuoteEvent, QuoteLineItem } from "./schemas.js";
+import { STALE_QUOTE_DAYS, type quoteStatuses, type quoteWorkTypes } from "./constants.js";
+import type { PainterChecklist, QuoteEvent, QuoteLineItem } from "./schemas.js";
 
 export type QuoteStatus = (typeof quoteStatuses)[number];
+export type QuoteWorkType = (typeof quoteWorkTypes)[number];
 
 export type SendBlockers = {
   redLineCount: number;
@@ -105,4 +106,122 @@ export function canAcceptPublicQuote(params: {
 
 function endOfDate(date: string): Date {
   return new Date(`${date}T23:59:59.999Z`);
+}
+
+const JOB_LABEL_MAX_LENGTH = 32;
+// A title already mentioning a count/room, or already joining specific named
+// areas with "+" (e.g. "Kitchen + hallway"), is complete on its own -- don't
+// pile a room-count suffix onto it.
+const ALREADY_DESCRIPTIVE_PATTERN = /\d|\broom(s)?\b|\+/i;
+const GENERIC_JOB_TITLE_PATTERN = /^(?:interior\s+(?:paint|painting|repaint|repainting)|exterior\s+trim)$/i;
+
+/**
+ * Render-time job title for a quote card/list -- never persisted. Prefers what the
+ * provider typed, falls back to a label built from the checklist, then the scope
+ * summary, then a generic placeholder. Never returns an empty string.
+ */
+export function deriveJobLabel(quote: {
+  workType?: QuoteWorkType | string | null | undefined;
+  jobTitle?: string | null | undefined;
+  checklist: PainterChecklist;
+  scopeSummary: string;
+}): string {
+  const typed = quote.jobTitle?.trim() ?? "";
+
+  if (typed.length > 0 && !GENERIC_JOB_TITLE_PATTERN.test(typed)) {
+    const rooms = totalCheckedRooms(quote.checklist);
+
+    if (rooms > 0 && !ALREADY_DESCRIPTIVE_PATTERN.test(typed)) {
+      return `${typed} · ${rooms} ${plural(rooms, "room")}`;
+    }
+
+    return typed;
+  }
+
+  const checklistLabel = deriveChecklistLabel(inferQuoteWorkType(quote), quote.checklist);
+
+  if (checklistLabel !== null) {
+    return checklistLabel;
+  }
+
+  const scope = quote.scopeSummary.trim();
+
+  if (scope.length > 0) {
+    return scope.length > JOB_LABEL_MAX_LENGTH
+      ? `${scope.slice(0, JOB_LABEL_MAX_LENGTH).trimEnd()}…`
+      : scope;
+  }
+
+  return "Untitled quote";
+}
+
+export function inferQuoteWorkType(quote: {
+  workType?: QuoteWorkType | string | null | undefined;
+  jobTitle?: string | null | undefined;
+  checklist: PainterChecklist;
+}): QuoteWorkType {
+  if (quote.workType === "exterior_trim" || quote.workType === "interior_repaint") {
+    return quote.workType;
+  }
+
+  const typed = quote.jobTitle?.trim().toLowerCase() ?? "";
+
+  if (typed.includes("exterior") || (totalCheckedRooms(quote.checklist) === 0 && quote.checklist.doorCount > 0)) {
+    return "exterior_trim";
+  }
+
+  return "interior_repaint";
+}
+
+function deriveChecklistLabel(workType: QuoteWorkType, checklist: PainterChecklist): string | null {
+  const rooms = totalCheckedRooms(checklist);
+
+  if (workType === "exterior_trim") {
+    return checklist.doorCount > 0
+      ? `Exterior trim + ${checklist.doorCount} ${plural(checklist.doorCount, "door")}`
+      : "Exterior trim";
+  }
+
+  if (rooms > 0) {
+    return `Interior repaint · ${rooms} ${plural(rooms, "room")}`;
+  }
+
+  if (checklist.doorCount > 0) {
+    return `Exterior trim · ${checklist.doorCount} ${plural(checklist.doorCount, "door")}`;
+  }
+
+  return null;
+}
+
+function totalCheckedRooms(checklist: PainterChecklist): number {
+  return checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
+}
+
+function plural(count: number, word: string): string {
+  return count === 1 ? word : `${word}s`;
+}
+
+/**
+ * Best-effort city for legacy customer records that only have a free-text
+ * address. Prefer Customer.city when available.
+ */
+export function deriveCustomerCity(address: string): string {
+  const trimmed = address.trim();
+
+  if (trimmed.length === 0) {
+    return "";
+  }
+
+  const segments = trimmed.split(",").map((segment) => segment.trim()).filter((segment) => segment.length > 0);
+  const last = segments[segments.length - 1] ?? trimmed;
+
+  if (segments.length >= 3 && looksLikeRegionOrPostal(last)) {
+    return segments[segments.length - 2] ?? last;
+  }
+
+  return last;
+}
+
+function looksLikeRegionOrPostal(value: string): boolean {
+  return /^(?:[a-z]{2}|[a-z]{2}\s+[a-z]\d[a-z][ -]?\d[a-z]\d|\d{5}(?:-\d{4})?|canada|usa|united states)$/i.test(value);
 }
