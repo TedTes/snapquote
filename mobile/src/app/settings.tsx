@@ -11,7 +11,8 @@ import {
   MessageSquare,
   Percent,
   RotateCcw,
-  Type
+  Type,
+  Users
 } from "lucide-react-native";
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { getTradeConfig } from "@snapquote/shared";
@@ -37,6 +38,7 @@ export default function SettingsScreen() {
   const quoteValidDays = useQuoteStore((state) => state.quoteValidDays);
   const defaultDepositPercent = useQuoteStore((state) => state.defaultDepositPercent);
   const priceBookItems = useQuoteStore((state) => state.priceBookItems);
+  const customers = useQuoteStore((state) => state.customers);
   const activeTrade = useQuoteStore((state) => state.activeTrade);
   const me = useAuthStore((state) => state.me);
   const authStatus = useAuthStore((state) => state.status);
@@ -189,7 +191,14 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
-        <SettingsSection label="Price book">
+        <SettingsSection label="Customers & pricing">
+          <SettingsRow
+            detail="Edit contacts and merge duplicates"
+            icon={<Users color={colors.ink2} size={16} strokeWidth={2.1} />}
+            label="Customers"
+            onPress={() => router.push("/customers")}
+            value={`${customers.length}`}
+          />
           <SettingsRow
             customValue={<BookStrengthBadge confirmed={confirmedCount} total={totalCount} />}
             detail={<StrengthDots confirmed={confirmedCount} total={totalCount} />}

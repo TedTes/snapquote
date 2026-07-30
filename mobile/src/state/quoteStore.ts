@@ -86,6 +86,14 @@ export type LineItemFormInput = {
   kind: QuoteLineItem["kind"];
 };
 
+export type CustomerFormInput = {
+  name: string;
+  email?: string | null | undefined;
+  phone?: string | null | undefined;
+  address: string;
+  city?: string | undefined;
+};
+
 const orgId = "00000000-0000-4000-8000-000000000001";
 const defaultTrade: TradeId = "painting";
 const defaultTradeConfig = getTradeConfig(defaultTrade);
@@ -216,6 +224,10 @@ type QuoteStoreState = {
     kind: PriceBookItem["kind"];
     pricing: PriceBookPricing;
   }) => void;
+  addCustomer: (input: CustomerFormInput) => Customer;
+  updateCustomer: (customerId: string, patch: Partial<CustomerFormInput>) => void;
+  removeCustomer: (customerId: string) => void;
+  mergeCustomers: (sourceCustomerId: string, targetCustomerId: string) => void;
   upsertCustomer: (customer: Customer) => void;
   upsertPriceBookItem: (item: PriceBookItem) => void;
   upsertRemoteQuote: (quote: ApiQuote) => void;
@@ -780,6 +792,86 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     };
 
     set((state) => ({ priceBookItems: [item, ...state.priceBookItems] }));
+  },
+
+  addCustomer: (input) => {
+    const now = new Date().toISOString();
+    const customer: Customer = normalizeCustomer({
+      id: makeId("cust"),
+      orgId,
+      name: input.name.trim(),
+      email: input.email?.trim() || null,
+      phone: input.phone?.trim() || null,
+      address: input.address.trim(),
+      city: input.city?.trim() ?? deriveCustomerCity(input.address),
+      createdAt: now,
+    });
+
+    set((state) => ({ customers: [customer, ...state.customers] }));
+
+    return customer;
+  },
+
+  updateCustomer: (customerId, patch) => {
+    set((state) => ({
+      customers: state.customers.map((customer) => {
+        if (customer.id !== customerId) {
+          return customer;
+        }
+
+        const nextAddress = patch.address !== undefined ? patch.address.trim() : customer.address;
+        const nextCity = patch.city !== undefined
+          ? patch.city.trim()
+          : patch.address !== undefined
+            ? deriveCustomerCity(nextAddress)
+            : customer.city;
+
+        return normalizeCustomer({
+          ...customer,
+          ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+          ...(patch.email !== undefined ? { email: patch.email?.trim() || null } : {}),
+          ...(patch.phone !== undefined ? { phone: patch.phone?.trim() || null } : {}),
+          ...(patch.address !== undefined ? { address: nextAddress } : {}),
+          city: nextCity,
+        });
+      }),
+    }));
+  },
+
+  removeCustomer: (customerId) => {
+    set((state) => {
+      if (state.quotes.some((quote) => quote.customerId === customerId)) {
+        return state;
+      }
+
+      return {
+        customers: state.customers.filter((customer) => customer.id !== customerId),
+        wizard: state.wizard.customerId === customerId ? { ...state.wizard, customerId: null } : state.wizard,
+      };
+    });
+  },
+
+  mergeCustomers: (sourceCustomerId, targetCustomerId) => {
+    if (sourceCustomerId === targetCustomerId) {
+      return;
+    }
+
+    set((state) => {
+      const hasSource = state.customers.some((customer) => customer.id === sourceCustomerId);
+      const hasTarget = state.customers.some((customer) => customer.id === targetCustomerId);
+
+      if (!hasSource || !hasTarget) {
+        return state;
+      }
+
+      return {
+        customers: state.customers.filter((customer) => customer.id !== sourceCustomerId),
+        quotes: state.quotes.map((quote) =>
+          quote.customerId === sourceCustomerId ? { ...quote, customerId: targetCustomerId } : quote,
+        ),
+        wizard: state.wizard.customerId === sourceCustomerId ? { ...state.wizard, customerId: targetCustomerId } : state.wizard,
+      };
+    });
   },
 
   upsertCustomer: (customer) => {

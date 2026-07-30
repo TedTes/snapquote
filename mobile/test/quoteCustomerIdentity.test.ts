@@ -216,4 +216,55 @@ describe("quote customer identity is a live lookup by customerId, not a snapshot
     expect(state.customers.filter((c) => c.id === "cust-1")).toHaveLength(1);
     expect(state.quotes).toHaveLength(2);
   });
+
+  it("edits a local customer record without changing quote ids", () => {
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-a", customerId: "cust-1", customer: customer({ id: "cust-1", name: "Alice Anderson" }) }),
+    );
+
+    useQuoteStore.getState().updateCustomer("cust-1", {
+      name: "Alice Updated",
+      address: "42 Queen St, Toronto",
+    });
+
+    const state = useQuoteStore.getState();
+    const quote = state.quotes.find((candidate) => candidate.id === "quote-a")!;
+    const edited = getQuoteCustomer(quote, state.customers);
+
+    expect(quote.customerId).toBe("cust-1");
+    expect(edited?.name).toBe("Alice Updated");
+    expect(edited?.city).toBe("Toronto");
+  });
+
+  it("merges duplicate customers by moving quotes to the kept customer", () => {
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-a", customerId: "cust-source", customer: customer({ id: "cust-source", name: "Alice A." }) }),
+    );
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-b", customerId: "cust-target", customer: customer({ id: "cust-target", name: "Alice Anderson" }) }),
+    );
+
+    useQuoteStore.getState().mergeCustomers("cust-source", "cust-target");
+
+    const state = useQuoteStore.getState();
+
+    expect(state.customers.some((candidate) => candidate.id === "cust-source")).toBe(false);
+    expect(state.customers.some((candidate) => candidate.id === "cust-target")).toBe(true);
+    expect(state.quotes.every((quote) => quote.customerId === "cust-target")).toBe(true);
+  });
+
+  it("only removes customers that are not linked to quotes", () => {
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-a", customerId: "cust-linked", customer: customer({ id: "cust-linked", name: "Linked Customer" }) }),
+    );
+    useQuoteStore.getState().upsertCustomer(customer({ id: "cust-unused", name: "Unused Customer" }));
+
+    useQuoteStore.getState().removeCustomer("cust-linked");
+    useQuoteStore.getState().removeCustomer("cust-unused");
+
+    const state = useQuoteStore.getState();
+
+    expect(state.customers.some((candidate) => candidate.id === "cust-linked")).toBe(true);
+    expect(state.customers.some((candidate) => candidate.id === "cust-unused")).toBe(false);
+  });
 });
