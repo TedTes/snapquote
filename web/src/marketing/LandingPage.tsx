@@ -3,7 +3,7 @@ import { ProductFlowDemo } from "./components/demo/ProductFlowDemo";
 import { ProgressMeter, QuoteVanMark, StatusPill } from "./components/demo/primitives";
 import "./landing.css";
 
-const supportMailto = "mailto:hello@quotevan.com?subject=QuoteVan%20support";
+const supportMailto = "mailto:tedtfu@gmail.com?subject=QuoteVan%20early%20access";
 
 export function LandingPage() {
   return (
@@ -540,8 +540,8 @@ function StoreBadges() {
           </svg>
         </span>
         <span>
-          <small>iPhone app</small>
-          <strong>App Store</strong>
+          <small>App Store</small>
+          <strong>Coming soon</strong>
         </span>
       </span>
       <span aria-label="QuoteVan Android app status" className="store-badge">
@@ -554,8 +554,8 @@ function StoreBadges() {
           </svg>
         </span>
         <span>
-          <small>Android app</small>
-          <strong>Google Play</strong>
+          <small>Google Play</small>
+          <strong>Coming soon</strong>
         </span>
       </span>
     </div>
