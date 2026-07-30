@@ -2,8 +2,10 @@ import {
   buildStarterPriceBookForTrade,
   computeQuoteTotals,
   createDraftLinesForTrade,
+  deriveCustomerCity,
   getTradeConfig,
   deriveQuoteStatus,
+  inferQuoteWorkType,
   getQuoteSendBlockers,
   isQuoteStale,
   type Customer,
@@ -31,8 +33,8 @@ export type StoredLineItem = QuoteLineItem & { id: string };
 export type QuoteRecord = {
   id: string;
   customerId: string;
-  customerSnapshot?: Customer | null;
   address: string;
+  workType: string;
   jobTitle: string;
   lineItems: StoredLineItem[];
   discount: QuoteDiscount;
@@ -60,10 +62,12 @@ export type QuoteRecord = {
 };
 
 export type WizardState = {
+  customerId: string | null;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
   address: string;
+  workType: string | null;
   jobTitle: string;
   checklist: PainterChecklist;
   transcript: string;
@@ -116,10 +120,12 @@ export const defaultChecklist: PainterChecklist = {
 
 function defaultWizard(): WizardState {
   return {
+    customerId: null,
     customerName: "",
     customerEmail: "",
     customerPhone: "",
     address: "",
+    workType: null,
     jobTitle: "",
     checklist: {
       rooms: { ...defaultChecklist.rooms },
@@ -314,7 +320,11 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     const now = new Date();
     const nowIso = now.toISOString();
 
-    const customer: Customer = {
+    const pickedCustomer = wizard.customerId !== null
+      ? state.customers.find((candidate) => candidate.id === wizard.customerId) ?? null
+      : null;
+
+    const customer: Customer = pickedCustomer ?? {
       id: makeId("cust"),
       orgId,
       name: wizard.customerName.trim() || "Unnamed customer",
@@ -327,6 +337,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
           ? wizard.customerPhone.trim()
           : null,
       address: wizard.address.trim(),
+      city: deriveCustomerCity(wizard.address),
       createdAt: nowIso,
     };
 
@@ -345,8 +356,12 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     const quote: QuoteRecord = {
       id: makeId("quote"),
       customerId: customer.id,
-      customerSnapshot: customer,
-      address: customer.address,
+      address: wizard.address.trim() || customer.address,
+      workType: inferQuoteWorkType({
+        workType: wizard.workType,
+        jobTitle: wizard.jobTitle,
+        checklist: wizard.checklist,
+      }),
       jobTitle: wizard.jobTitle.trim(),
       lineItems,
       discount: { type: "none", value: 0 },
@@ -378,7 +393,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
     };
 
     set((current) => ({
-      customers: [customer, ...current.customers],
+      customers: pickedCustomer !== null ? current.customers : [customer, ...current.customers],
       quotes: [quote, ...current.quotes],
       events: [...current.events, createEvent(quote.id, "created")],
       wizard: defaultWizard(),
@@ -768,17 +783,19 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
   },
 
   upsertCustomer: (customer) => {
+    const normalizedCustomer = normalizeCustomer(customer);
+
     set((state) => {
       const exists = state.customers.some(
-        (candidate) => candidate.id === customer.id,
+        (candidate) => candidate.id === normalizedCustomer.id,
       );
 
       return {
         customers: exists
           ? state.customers.map((candidate) =>
-              candidate.id === customer.id ? customer : candidate,
+              candidate.id === normalizedCustomer.id ? normalizedCustomer : candidate,
             )
-          : [customer, ...state.customers],
+          : [normalizedCustomer, ...state.customers],
       };
     });
   },
@@ -801,10 +818,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
 
   upsertRemoteQuote: (quote) => {
     set((state) => {
-      const existingQuote = state.quotes.find(
-        (candidate) => candidate.id === quote.id,
-      );
-      const localQuote = remoteQuoteToLocal(quote, existingQuote);
+      const localQuote = remoteQuoteToLocal(quote);
       const quoteExists = state.quotes.some(
         (candidate) => candidate.id === quote.id,
       );
@@ -815,11 +829,16 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
       const localEvents = state.events.filter(
         (event) => event.quoteId !== quote.id,
       );
+      const remoteCustomer = quote.customer !== null ? normalizeCustomer(quote.customer) : null;
 
       return {
         customers:
-          quote.customer !== null && !customerExists
-            ? [quote.customer, ...state.customers]
+          remoteCustomer !== null
+            ? customerExists
+              ? state.customers.map((customer) =>
+                  customer.id === remoteCustomer.id ? remoteCustomer : customer,
+                )
+              : [remoteCustomer, ...state.customers]
             : state.customers,
         quotes: quoteExists
           ? state.quotes.map((candidate) =>
@@ -869,13 +888,9 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
       const localEvents = state.events.filter((event) =>
         localQuotes.some((quote) => quote.id === event.quoteId),
       );
-      const remoteQuotes = input.quotes.map((quote) =>
-        remoteQuoteToLocal(
-          quote,
-          state.quotes.find((candidate) => candidate.id === quote.id),
-        ),
-      );
+      const remoteQuotes = input.quotes.map((quote) => remoteQuoteToLocal(quote));
       const remoteEvents = input.quotes.flatMap(remoteQuoteEvents);
+      const remoteCustomers = input.customers.map(normalizeCustomer);
 
       return {
         onboarded: true,
@@ -894,7 +909,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
           input.priceBookItems,
           localPriceBookItems,
         ),
-        customers: mergeById(input.customers, localCustomers),
+        customers: mergeById(remoteCustomers, localCustomers),
         quotes: mergeById(remoteQuotes, localQuotes),
         events: [...remoteEvents, ...localEvents],
       };
@@ -942,35 +957,40 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
         ? persisted.priceBookItems
         : currentState.priceBookItems,
       customers: Array.isArray(persisted.customers)
-        ? persisted.customers
+        ? persisted.customers.map(normalizeCustomer)
         : currentState.customers,
       quotes: Array.isArray(persisted.quotes)
-        ? persisted.quotes.map((quote) => ({
-            ...quote,
-            publicUrl: quote.publicUrl ?? null,
-            customerSnapshot:
-              quote.customerSnapshot !== undefined
-                ? quote.customerSnapshot
-                : (Array.isArray(persisted.customers)
-                    ? persisted.customers.find((customer) => customer.id === quote.customerId) ?? null
-                    : null),
-          }))
+        ? persisted.quotes.map((quote) => {
+            // Legacy persisted records may still carry a customerSnapshot field from
+            // before customer identity was simplified to a plain customerId lookup.
+            // Drop it -- getQuoteCustomer no longer reads it.
+            const { customerSnapshot: _legacySnapshot, ...rest } = quote as QuoteRecord & { customerSnapshot?: unknown };
+
+            return {
+              ...rest,
+              workType: typeof quote.workType === "string" && quote.workType.trim().length > 0
+                ? quote.workType
+                : inferQuoteWorkType(rest),
+              publicUrl: quote.publicUrl ?? null,
+            };
+          })
         : currentState.quotes,
       events: Array.isArray(persisted.events)
         ? persisted.events
         : currentState.events,
-      wizard: persisted.wizard ?? currentState.wizard,
+      wizard: persisted.wizard ? { ...defaultWizard(), ...persisted.wizard } : currentState.wizard,
     };
   },
 }));
 
-function remoteQuoteToLocal(quote: ApiQuote, existingQuote?: QuoteRecord): QuoteRecord {
+function remoteQuoteToLocal(quote: ApiQuote): QuoteRecord {
   return {
     id: quote.id,
     customerId: quote.customerId,
-    customerSnapshot:
-      quote.customer ?? existingQuote?.customerSnapshot ?? null,
     address: quote.address,
+    workType: typeof quote.workType === "string" && quote.workType.trim().length > 0
+      ? quote.workType
+      : inferQuoteWorkType(quote),
     jobTitle: quote.jobTitle,
     lineItems: quote.lineItems,
     discount: quote.discount,
@@ -995,6 +1015,13 @@ function remoteQuoteToLocal(quote: ApiQuote, existingQuote?: QuoteRecord): Quote
     payment: quote.payment,
     createdAt: quote.createdAt,
     updatedAt: quote.updatedAt,
+  };
+}
+
+function normalizeCustomer(customer: Customer): Customer {
+  return {
+    ...customer,
+    city: typeof customer.city === "string" ? customer.city : deriveCustomerCity(customer.address),
   };
 }
 
@@ -1195,11 +1222,17 @@ export function getCustomer(
   return customers.find((customer) => customer.id === customerId);
 }
 
+/**
+ * Single source of truth for a quote's customer: a live lookup by customerId.
+ * Deliberately does not snapshot or infer a name from quote content -- editing
+ * the customer record is the only way its displayed name changes, and it changes
+ * consistently everywhere that customer is linked.
+ */
 export function getQuoteCustomer(
   quote: QuoteRecord,
   customers: Customer[],
 ): Customer | null {
-  return quote.customerSnapshot ?? getCustomer(customers, quote.customerId) ?? null;
+  return getCustomer(customers, quote.customerId) ?? null;
 }
 
 function cloneQuoteAsDraft(

@@ -1,17 +1,22 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Mail, MapPin, Phone } from "lucide-react-native";
+import { Mail, MapPin, Phone, User, X } from "lucide-react-native";
 import { router } from "expo-router";
-import { Alert, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import type { Customer } from "@snapquote/shared";
 import { AnimatedScreenContent } from "../../components/AnimatedScreenContent";
 import { Screen } from "../../components/base";
 import { NewQuoteHeader, NewQuoteTitle, SectionKicker, StickyAction } from "../../components/NewQuoteScaffold";
 import { colors } from "../../components/theme";
 import { useQuoteStore } from "../../state/quoteStore";
 
+const MIN_SEARCH_LENGTH = 2;
+const MAX_SUGGESTIONS = 5;
+
 export default function NewQuoteCustomerScreen() {
   const wizard = useQuoteStore((state) => state.wizard);
   const updateWizard = useQuoteStore((state) => state.updateWizard);
+  const customers = useQuoteStore((state) => state.customers);
 
   const [name, setName] = useState(wizard.customerName);
   const [phone, setPhone] = useState(wizard.customerPhone);
@@ -21,6 +26,43 @@ export default function NewQuoteCustomerScreen() {
   const [showNameError, setShowNameError] = useState(false);
   const [showPhoneError, setShowPhoneError] = useState(false);
   const [showAddressError, setShowAddressError] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(wizard.customerId);
+
+  const selectedCustomer = useMemo(
+    () => (selectedCustomerId !== null ? customers.find((candidate) => candidate.id === selectedCustomerId) ?? null : null),
+    [selectedCustomerId, customers]
+  );
+
+  const suggestions = useMemo(() => {
+    if (selectedCustomer !== null) {
+      return [];
+    }
+
+    const term = name.trim().toLowerCase();
+
+    if (term.length < MIN_SEARCH_LENGTH) {
+      return [];
+    }
+
+    return customers.filter((customer) => customer.name.toLowerCase().includes(term)).slice(0, MAX_SUGGESTIONS);
+  }, [name, customers, selectedCustomer]);
+
+  function pickCustomer(customer: Customer) {
+    setSelectedCustomerId(customer.id);
+    setName(customer.name);
+    setPhone(customer.phone ?? "");
+    setEmail(customer.email ?? "");
+    setShowNameError(false);
+    setShowPhoneError(false);
+
+    if (address.trim().length === 0) {
+      setAddress(customer.address);
+    }
+  }
+
+  function clearSelectedCustomer() {
+    setSelectedCustomerId(null);
+  }
 
   function cancelQuote() {
     Alert.alert("Cancel quote?", "The details on this new quote will be cleared.", [
@@ -56,6 +98,7 @@ export default function NewQuoteCustomerScreen() {
     }
 
     updateWizard({
+      customerId: selectedCustomerId,
       customerName: trimmedName,
       customerPhone: trimmedPhone,
       customerEmail: trimmedEmail,
@@ -72,25 +115,61 @@ export default function NewQuoteCustomerScreen() {
         <NewQuoteTitle title="Who's it for?" />
 
         <FieldBlock label="Customer name">
-          <TextInput
-            onChangeText={(value) => {
-              setName(value);
-              setShowNameError(false);
-            }}
-            placeholder="Full name"
-            placeholderTextColor={colors.ink3}
-            style={styles.input}
-            value={name}
-          />
-          {showNameError ? (
-            <Text style={styles.fieldError}>Customer name is required before the checklist.</Text>
-          ) : null}
+          {selectedCustomer !== null ? (
+            <View style={styles.linkedCustomer}>
+              <View style={styles.linkedCustomerIcon}>
+                <User color={colors.ink2} size={14} strokeWidth={2.2} />
+              </View>
+              <View style={styles.linkedCustomerText}>
+                <Text style={styles.linkedCustomerName} numberOfLines={1}>{selectedCustomer.name}</Text>
+                <Text style={styles.linkedCustomerHint}>Existing customer</Text>
+              </View>
+              <Pressable accessibilityRole="button" hitSlop={8} onPress={clearSelectedCustomer} style={styles.linkedCustomerClear}>
+                <X color={colors.ink3} size={16} strokeWidth={2.4} />
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                onChangeText={(value) => {
+                  setName(value);
+                  setShowNameError(false);
+                }}
+                placeholder="Full name"
+                placeholderTextColor={colors.ink3}
+                style={styles.input}
+                value={name}
+              />
+              {showNameError ? (
+                <Text style={styles.fieldError}>Customer name is required before the checklist.</Text>
+              ) : null}
+              {suggestions.length > 0 ? (
+                <View style={styles.suggestions}>
+                  {suggestions.map((customer) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={customer.id}
+                      onPress={() => pickCustomer(customer)}
+                      style={styles.suggestionRow}
+                    >
+                      <User color={colors.ink3} size={13} strokeWidth={2.2} />
+                      <View style={styles.suggestionText}>
+                        <Text numberOfLines={1} style={styles.suggestionName}>{customer.name}</Text>
+                        <Text numberOfLines={1} style={styles.suggestionAddress}>{customer.address}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </>
+          )}
         </FieldBlock>
 
         <FieldBlock label="Phone">
-          <View style={styles.inputWithIcon}>
+          <View style={[styles.inputWithIcon, selectedCustomer !== null ? styles.inputDisabled : null]}>
             <Phone color={colors.ink3} size={15} strokeWidth={2} />
             <TextInput
+              editable={selectedCustomer === null}
               keyboardType="phone-pad"
               onChangeText={(value) => {
                 setPhone(value);
@@ -108,10 +187,11 @@ export default function NewQuoteCustomerScreen() {
         </FieldBlock>
 
         <FieldBlock label="Email · sends the quote">
-          <View style={styles.inputWithIcon}>
+          <View style={[styles.inputWithIcon, selectedCustomer !== null ? styles.inputDisabled : null]}>
             <Mail color={colors.ink3} size={15} strokeWidth={2} />
             <TextInput
               autoCapitalize="none"
+              editable={selectedCustomer === null}
               keyboardType="email-address"
               onChangeText={setEmail}
               placeholder="name@email.com"
@@ -202,6 +282,80 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     paddingVertical: 0
+  },
+  inputDisabled: {
+    backgroundColor: colors.surfaceMuted
+  },
+  linkedCustomer: {
+    alignItems: "center",
+    backgroundColor: colors.greenBg,
+    borderColor: colors.greenBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    height: 50,
+    paddingHorizontal: 12
+  },
+  linkedCustomerIcon: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  linkedCustomerText: {
+    flex: 1,
+    gap: 1,
+    minWidth: 0
+  },
+  linkedCustomerName: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  linkedCustomerHint: {
+    color: colors.ink2,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  linkedCustomerClear: {
+    alignItems: "center",
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  suggestions: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: "hidden"
+  },
+  suggestionRow: {
+    alignItems: "center",
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 9,
+    height: 44,
+    paddingHorizontal: 12
+  },
+  suggestionText: {
+    flex: 1,
+    gap: 0,
+    minWidth: 0
+  },
+  suggestionName: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  suggestionAddress: {
+    color: colors.ink3,
+    fontSize: 11,
+    fontWeight: "600"
   },
   fieldError: {
     color: colors.red,

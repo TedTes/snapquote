@@ -7,7 +7,7 @@ import {
 } from "../src/state/quoteStore";
 import type { Customer } from "@snapquote/shared";
 
-const now = "2026-07-29T12:00:00.000Z";
+const now = "2026-07-30T12:00:00.000Z";
 const orgId = "00000000-0000-4000-8000-000000000001";
 
 function customer(overrides: Partial<Customer> = {}): Customer {
@@ -17,7 +17,8 @@ function customer(overrides: Partial<Customer> = {}): Customer {
     name: "Alice Anderson",
     email: null,
     phone: null,
-    address: "18 Victor Ave",
+    address: "18 Victor Ave, Toronto",
+    city: "Toronto",
     createdAt: now,
     ...overrides,
   };
@@ -29,7 +30,8 @@ function apiQuote(overrides: Partial<ApiQuote> = {}): ApiQuote {
     orgId,
     customerId: "cust-shared",
     customer: customer(),
-    address: "18 Victor Ave",
+    address: "18 Victor Ave, Toronto",
+    workType: "interior_repaint",
     jobTitle: "Interior repaint",
     status: "sent",
     publicToken: "token-a",
@@ -82,7 +84,7 @@ function me(): MeResponse {
   };
 }
 
-describe("quote customer identity stability", () => {
+describe("quote customer identity is a live lookup by customerId, not a snapshot", () => {
   beforeEach(() => {
     useQuoteStore.setState({
       priceBookItems: [],
@@ -92,98 +94,126 @@ describe("quote customer identity stability", () => {
     });
   });
 
-  it("does not rename an existing quote when a new quote reuses the same customer id with a different name", () => {
-    const quoteA = apiQuote({
-      id: "quote-a",
-      customer: customer({ id: "cust-shared", name: "Alice Anderson" }),
-    });
-
-    useQuoteStore.getState().upsertRemoteQuote(quoteA);
-    expect(getQuoteCustomer(useQuoteStore.getState().quotes[0]!, useQuoteStore.getState().customers)?.name).toBe(
-      "Alice Anderson",
+  it("updates the displayed name on every quote linked to a customer when that customer is edited", () => {
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-a", customerId: "cust-1", customer: customer({ id: "cust-1", name: "Alice Anderson" }) }),
+    );
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-b", customerId: "cust-1", customer: customer({ id: "cust-1", name: "Alice Anderson" }) }),
     );
 
-    // Creating quote B resolves to the same backend customer row (e.g. matched by phone/email),
-    // but the row's name was later reported as "Bob" -- this must not retroactively rename quote A.
-    const quoteB = apiQuote({
-      id: "quote-b",
-      customer: customer({ id: "cust-shared", name: "Bob Baker" }),
-    });
-
-    useQuoteStore.getState().upsertRemoteQuote(quoteB);
+    // Editing the shared customer (e.g. fixing a typo) must be reflected on both quotes.
+    useQuoteStore.getState().upsertCustomer(customer({ id: "cust-1", name: "Alice A. Anderson" }));
 
     const state = useQuoteStore.getState();
-    const storedQuoteA = state.quotes.find((q) => q.id === "quote-a")!;
-    const storedQuoteB = state.quotes.find((q) => q.id === "quote-b")!;
+    const quoteA = state.quotes.find((q) => q.id === "quote-a")!;
+    const quoteB = state.quotes.find((q) => q.id === "quote-b")!;
 
-    expect(getQuoteCustomer(storedQuoteA, state.customers)?.name).toBe("Alice Anderson");
-    expect(getQuoteCustomer(storedQuoteB, state.customers)?.name).toBe("Bob Baker");
+    expect(getQuoteCustomer(quoteA, state.customers)?.name).toBe("Alice A. Anderson");
+    expect(getQuoteCustomer(quoteB, state.customers)?.name).toBe("Alice A. Anderson");
   });
 
-  it("updates an existing quote from the server's quote customer snapshot", () => {
-    const quoteA = apiQuote({ id: "quote-a", customer: customer({ name: "Alice Anderson" }) });
-    useQuoteStore.getState().upsertRemoteQuote(quoteA);
+  it("keeps two different customers' quotes distinct -- renaming one never affects the other", () => {
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-a", customerId: "cust-1", customer: customer({ id: "cust-1", name: "Alice Anderson" }) }),
+    );
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-b", customerId: "cust-2", customer: customer({ id: "cust-2", name: "Bob Baker" }) }),
+    );
 
-    // Once the backend owns quote-level customer snapshots, the quote payload is authoritative.
-    const quoteARefetched = apiQuote({ id: "quote-a", customer: customer({ name: "Alice Updated" }) });
-    useQuoteStore.getState().upsertRemoteQuote(quoteARefetched);
+    useQuoteStore.getState().upsertCustomer(customer({ id: "cust-1", name: "Alice Renamed" }));
 
     const state = useQuoteStore.getState();
-    const storedQuoteA = state.quotes.find((q) => q.id === "quote-a")!;
-    expect(getQuoteCustomer(storedQuoteA, state.customers)?.name).toBe("Alice Updated");
+    const quoteA = state.quotes.find((q) => q.id === "quote-a")!;
+    const quoteB = state.quotes.find((q) => q.id === "quote-b")!;
+
+    expect(getQuoteCustomer(quoteA, state.customers)?.name).toBe("Alice Renamed");
+    expect(getQuoteCustomer(quoteB, state.customers)?.name).toBe("Bob Baker");
   });
 
-  it("preserves each quote's captured customer name across a full remote hydration (app restart / login)", () => {
-    const quoteA = apiQuote({ id: "quote-a", customer: customer({ id: "cust-1", name: "Alice Anderson" }) });
-    const quoteB = apiQuote({ id: "quote-b", customer: customer({ id: "cust-2", name: "Bob Baker" }) });
+  it("does not require or read a customerSnapshot field -- QuoteRecord carries only customerId", () => {
+    useQuoteStore.getState().upsertRemoteQuote(apiQuote({ id: "quote-a", customer: customer({ name: "Alice Anderson" }) }));
 
+    const quote = useQuoteStore.getState().quotes[0]!;
+    expect("customerSnapshot" in quote).toBe(false);
+    expect(quote.customerId).toBe("cust-shared");
+  });
+
+  it("resolves a full remote hydration purely from customerId, even across multiple runs", () => {
     useQuoteStore.getState().hydrateRemoteState({
       me: me(),
       priceBookItems: [],
       customers: [customer({ id: "cust-1", name: "Alice Anderson" }), customer({ id: "cust-2", name: "Bob Baker" })],
-      quotes: [quoteA, quoteB],
+      quotes: [
+        apiQuote({ id: "quote-a", customerId: "cust-1", customer: customer({ id: "cust-1", name: "Alice Anderson" }) }),
+        apiQuote({ id: "quote-b", customerId: "cust-2", customer: customer({ id: "cust-2", name: "Bob Baker" }) }),
+      ],
     });
 
-    // Simulate a later hydration where the backend customer rows have drifted (should not happen
-    // after the server-side fix, but the client must stay correct even if it did).
+    // A later hydration reflects an edited customer name -- the live source of truth.
     useQuoteStore.getState().hydrateRemoteState({
       me: me(),
       priceBookItems: [],
-      customers: [customer({ id: "cust-1", name: "Someone Else" }), customer({ id: "cust-2", name: "Bob Baker" })],
+      customers: [customer({ id: "cust-1", name: "Alice Updated" }), customer({ id: "cust-2", name: "Bob Baker" })],
       quotes: [
-        apiQuote({ id: "quote-a", customer: customer({ id: "cust-1", name: "Alice Anderson" }) }),
-        apiQuote({ id: "quote-b", customer: customer({ id: "cust-2", name: "Bob Baker" }) }),
+        apiQuote({ id: "quote-a", customerId: "cust-1", customer: customer({ id: "cust-1", name: "Alice Updated" }) }),
+        apiQuote({ id: "quote-b", customerId: "cust-2", customer: customer({ id: "cust-2", name: "Bob Baker" }) }),
       ],
     });
 
     const state = useQuoteStore.getState();
-    const storedQuoteA = state.quotes.find((q) => q.id === "quote-a")!;
-    const storedQuoteB = state.quotes.find((q) => q.id === "quote-b")!;
+    const quoteA = state.quotes.find((q) => q.id === "quote-a")!;
+    const quoteB = state.quotes.find((q) => q.id === "quote-b")!;
 
-    expect(getQuoteCustomer(storedQuoteA, state.customers)?.name).toBe("Alice Anderson");
-    expect(getQuoteCustomer(storedQuoteB, state.customers)?.name).toBe("Bob Baker");
+    expect(getQuoteCustomer(quoteA, state.customers)?.name).toBe("Alice Updated");
+    expect(getQuoteCustomer(quoteB, state.customers)?.name).toBe("Bob Baker");
   });
 
-  it("captures the customer snapshot on a local (offline) draft and keeps it independent of later customer edits", () => {
+  it("creates a new local customer for a fresh offline draft, with a job address independent of the customer's own address", () => {
     useQuoteStore.getState().updateWizard({
       customerName: "Local Customer",
-      address: "42 Draft St",
+      address: "42 Draft St, Etobicoke",
       jobTitle: "Kitchen refresh",
     });
 
     const draft = useQuoteStore.getState().generateDraftFromWizard();
-    expect(getQuoteCustomer(draft, useQuoteStore.getState().customers)?.name).toBe("Local Customer");
+    const state = useQuoteStore.getState();
 
-    // A second local draft for a different customer must not affect the first draft's identity.
-    useQuoteStore.getState().updateWizard({
-      customerName: "Second Local Customer",
-      address: "7 Other Ave",
-      jobTitle: "Bathroom repair",
+    expect(state.customers.some((c) => c.id === draft.customerId)).toBe(true);
+    expect(getQuoteCustomer(draft, state.customers)?.name).toBe("Local Customer");
+    expect(draft.address).toBe("42 Draft St, Etobicoke");
+  });
+
+  it("reuses a picked existing customer for a new offline draft instead of creating a duplicate", () => {
+    useQuoteStore.setState({
+      customers: [customer({ id: "cust-existing", name: "Existing Customer", address: "9 Main St, Toronto" })],
     });
-    useQuoteStore.getState().generateDraftFromWizard();
+
+    useQuoteStore.getState().updateWizard({
+      customerId: "cust-existing",
+      customerName: "Existing Customer",
+      address: "17 Second Job Site Rd, Toronto",
+      jobTitle: "Second job for the same customer",
+    });
+
+    const draft = useQuoteStore.getState().generateDraftFromWizard();
+    const state = useQuoteStore.getState();
+
+    expect(draft.customerId).toBe("cust-existing");
+    expect(state.customers).toHaveLength(1);
+    expect(draft.address).toBe("17 Second Job Site Rd, Toronto");
+  });
+
+  it("does not duplicate a customer record when a second quote reuses the same customerId via sync", () => {
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-a", customerId: "cust-1", customer: customer({ id: "cust-1", name: "Alice Anderson" }) }),
+    );
+    useQuoteStore.getState().upsertRemoteQuote(
+      apiQuote({ id: "quote-b", customerId: "cust-1", customer: customer({ id: "cust-1", name: "Alice Anderson" }) }),
+    );
 
     const state = useQuoteStore.getState();
-    const firstDraft = state.quotes.find((q) => q.id === draft.id)!;
-    expect(getQuoteCustomer(firstDraft, state.customers)?.name).toBe("Local Customer");
+    expect(state.customers.filter((c) => c.id === "cust-1")).toHaveLength(1);
+    expect(state.quotes).toHaveLength(2);
   });
 });

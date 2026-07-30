@@ -1,5 +1,6 @@
 import { File, Paths } from "expo-file-system";
 import * as Linking from "expo-linking";
+import { deriveCustomerCity } from "@snapquote/shared";
 import type {
   Customer,
   PriceBookItem,
@@ -23,6 +24,7 @@ import {
   useQuoteStore,
   type QuoteRecord,
 } from "../state/quoteStore";
+import { quoteCustomerIdForSync } from "./quoteSync";
 
 type AuthStatus = "loading" | "signed_out" | "signed_in";
 
@@ -314,6 +316,7 @@ async function syncLocalDataAfterLogin(input: {
         email: customer.email ?? undefined,
         phone: customer.phone,
         address: customer.address,
+        city: customer.city || deriveCustomerCity(customer.address),
       });
       customerIdMap.set(customer.id, remoteCustomer.id);
       syncedCustomerIds.push(customer.id);
@@ -323,28 +326,20 @@ async function syncLocalDataAfterLogin(input: {
   }
 
   for (const quote of localQuotes) {
-    const customer = local.customers.find(
-      (candidate) => candidate.id === quote.customerId,
-    );
-    const remoteCustomerId = customerIdMap.get(quote.customerId) ?? quote.customerId;
-    const quoteCustomer = quote.customerSnapshot ?? customer ?? null;
+    const customerId = quoteCustomerIdForSync({
+      quoteCustomerId: quote.customerId,
+      customerIdMap,
+    });
 
-    if (!quoteCustomer && isLocalCustomerId(quote.customerId)) {
+    if (customerId === null) {
       continue;
     }
 
     try {
       const created = await snapquoteApi.createQuote({
-        customerId: quoteCustomer ? undefined : isLocalCustomerId(remoteCustomerId) ? undefined : remoteCustomerId,
-        customer: quoteCustomer
-          ? {
-              name: quoteCustomer.name,
-              email: quoteCustomer.email ?? undefined,
-              phone: quoteCustomer.phone,
-              address: quote.address,
-            }
-          : undefined,
+        customerId,
         address: quote.address,
+        workType: quote.workType,
         jobTitle: quote.jobTitle,
         checklist: quote.checklist,
         transcript: quote.transcript,

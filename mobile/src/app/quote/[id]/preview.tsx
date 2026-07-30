@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { QuoteDiscount } from "@snapquote/shared";
+import { deriveCustomerCity, type QuoteDiscount } from "@snapquote/shared";
 import {
   AnimatedSheetContent,
   SheetModal,
@@ -144,14 +144,26 @@ export default function QuotePreviewScreen() {
       let quoteIdToSend = quote.id;
 
       if (quote.id.startsWith("quote-")) {
+        // A local quote's customer already has a real backend id when it was picked from
+        // an existing (already-synced) customer -- local-only ids use a "cust-" prefix.
+        // Reference it directly instead of sending an inline customer object.
+        const pickedRemoteCustomerId =
+          customer !== null && !customer.id.startsWith("cust-") ? customer.id : null;
+
         const created = await snapquoteApi.createQuote({
-          customer: {
-            name: customer?.name ?? "Unnamed customer",
-            email: customer?.email ?? null,
-            phone: customer?.phone ?? null,
-            address: quote.address,
-          },
+          ...(pickedRemoteCustomerId !== null
+            ? { customerId: pickedRemoteCustomerId }
+            : {
+                customer: {
+                  name: customer?.name ?? "Unnamed customer",
+                  email: customer?.email ?? null,
+                  phone: customer?.phone ?? null,
+                  address: quote.address,
+                  city: customer?.city || deriveCustomerCity(quote.address),
+                },
+              }),
           address: quote.address,
+          workType: quote.workType,
           jobTitle: quote.jobTitle,
           checklist: quote.checklist,
           transcript: quote.transcript,

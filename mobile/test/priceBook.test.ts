@@ -37,6 +37,7 @@ function quoteWithYellowLine(priceBookItemId: string): QuoteRecord {
     id: "quote-local",
     customerId: "customer-local",
     address: "18 Victor Ave",
+    workType: "interior_repaint",
     jobTitle: "Interior repair",
     lineItems: [
       {
@@ -211,6 +212,7 @@ describe("price book state", () => {
       email: "maya@example.com",
       phone: null,
       address: "18 Victor Ave",
+      city: "Toronto",
       createdAt: now,
     };
     const syncedItem = item({

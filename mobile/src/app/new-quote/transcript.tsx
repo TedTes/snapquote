@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getTradeConfig, type PainterChecklist } from "@snapquote/shared";
+import { deriveCustomerCity, getTradeConfig, inferQuoteWorkType, type PainterChecklist } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { AnimatedScreenContent } from "../../components/AnimatedScreenContent";
 import { Screen } from "../../components/base";
@@ -109,20 +109,39 @@ export default function NewQuoteTranscriptScreen() {
         return;
       }
 
+      // A picked customer only has a real customerId once it's synced to the backend
+      // (local-only customers use a "cust-" prefixed id). Reference it directly rather
+      // than sending an inline customer object, which would otherwise be treated as a
+      // new/matched customer server-side.
+      const pickedRemoteCustomerId =
+        currentWizard.customerId !== null && !currentWizard.customerId.startsWith("cust-")
+          ? currentWizard.customerId
+          : null;
+
       const quote = await snapquoteApi.createQuote({
         address: currentWizard.address.trim(),
+        workType: inferQuoteWorkType({
+          workType: currentWizard.workType,
+          jobTitle: currentWizard.jobTitle,
+          checklist: currentWizard.checklist,
+        }),
         jobTitle: currentWizard.jobTitle.trim(),
         checklist: currentWizard.checklist,
         transcript: currentWizard.transcript,
         audioStoragePath: currentWizard.audioStoragePath,
         audioContentType: currentWizard.audioContentType,
         audioDurationSeconds: currentWizard.audioDurationSeconds,
-        customer: {
-          name: currentWizard.customerName.trim() || "Unnamed customer",
-          email: currentWizard.customerEmail.trim() || undefined,
-          phone: currentWizard.customerPhone.trim() || undefined,
-          address: currentWizard.address.trim(),
-        },
+        ...(pickedRemoteCustomerId !== null
+          ? { customerId: pickedRemoteCustomerId }
+          : {
+              customer: {
+                name: currentWizard.customerName.trim() || "Unnamed customer",
+                email: currentWizard.customerEmail.trim() || undefined,
+                phone: currentWizard.customerPhone.trim() || undefined,
+                address: currentWizard.address.trim(),
+                city: deriveCustomerCity(currentWizard.address),
+              },
+            }),
       });
 
       upsertRemoteQuote(quote);
