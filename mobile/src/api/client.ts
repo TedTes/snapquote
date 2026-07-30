@@ -31,7 +31,7 @@ function envValue(key: string): string | undefined {
 
 type RequestOptions = {
   body?: unknown;
-  method?: "GET" | "POST" | "PATCH";
+  method?: "DELETE" | "GET" | "POST" | "PATCH";
   skipAuth?: boolean | undefined;
   timeoutMs?: number | undefined;
 };
@@ -354,6 +354,20 @@ export const snapquoteApi = {
       method: "PATCH",
       body: input
     }),
+
+  deleteCustomer: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/v1/customers/${id}`, {
+      method: "DELETE"
+    }),
+
+  mergeCustomer: (sourceCustomerId: string, targetCustomerId: string) =>
+    request<{ sourceCustomerId: string; targetCustomer: ApiCustomer; reassignedQuoteIds: string[] }>(
+      `/v1/customers/${sourceCustomerId}/merge`,
+      {
+        method: "POST",
+        body: { targetCustomerId }
+      }
+    ),
 
   listQuotes: () => request<{ quotes: ApiQuote[] }>("/v1/quotes"),
 

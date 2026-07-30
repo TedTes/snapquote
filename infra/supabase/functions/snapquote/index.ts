@@ -41,7 +41,7 @@ import {
 const corsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-snapquote-org-id, stripe-signature, x-snapquote-webhook-secret, x-snapquote-admin-secret",
-  "access-control-allow-methods": "GET,POST,PATCH,OPTIONS"
+  "access-control-allow-methods": "DELETE,GET,POST,PATCH,OPTIONS"
 };
 
 const defaultOrgId = Deno.env.get("SNAPQUOTE_DEFAULT_ORG_ID") ?? "00000000-0000-4000-8000-000000000001";
@@ -177,6 +177,9 @@ const customerPatchSchema = customerSchema.partial().refine(
   (input) => Object.values(input).some((value) => value !== undefined),
   "At least one customer field is required"
 );
+const customerMergeSchema = z.object({
+  targetCustomerId: z.string().uuid()
+});
 const workTypeSchema = z.enum(["interior_repaint", "exterior_trim"]);
 
 const createQuoteSchema = z.object({
@@ -454,6 +457,14 @@ Deno.serve(async (request) => {
 
     if (route.method === "PATCH" && match(route.path, "/v1/customers/:id")) {
       return json(await updateCustomer(db, request, params(route.path, "/v1/customers/:id").id));
+    }
+
+    if (route.method === "DELETE" && match(route.path, "/v1/customers/:id")) {
+      return json(await deleteCustomer(db, request, params(route.path, "/v1/customers/:id").id));
+    }
+
+    if (route.method === "POST" && match(route.path, "/v1/customers/:id/merge")) {
+      return json(await mergeCustomer(db, request, params(route.path, "/v1/customers/:id/merge").id));
     }
 
     if (route.method === "GET" && route.path === "/v1/quotes") {
@@ -1652,6 +1663,59 @@ async function updateCustomer(db: SupabaseClient, request: Request, customerId: 
   return customerResponse(row);
 }
 
+async function deleteCustomer(db: SupabaseClient, request: Request, customerId: string) {
+  const orgId = orgIdFromRequest(request);
+  await single(db.from("snapquote_customers").select("id").eq("org_id", orgId).eq("id", customerId));
+  const quoteCount = await countCustomerQuotes(db, orgId, customerId);
+
+  if (quoteCount > 0) {
+    throw new HttpError(409, "Merge or reassign this customer's quotes before deleting.");
+  }
+
+  must(await db.from("snapquote_customers").delete().eq("org_id", orgId).eq("id", customerId));
+
+  return { id: customerId, deleted: true };
+}
+
+async function mergeCustomer(db: SupabaseClient, request: Request, sourceCustomerId: string) {
+  const orgId = orgIdFromRequest(request);
+  const input = parse(customerMergeSchema, await request.json());
+
+  if (input.targetCustomerId === sourceCustomerId) {
+    throw new HttpError(409, "Choose a different customer to merge into.");
+  }
+
+  await single(db.from("snapquote_customers").select("id").eq("org_id", orgId).eq("id", sourceCustomerId));
+  const target = await single(db.from("snapquote_customers").select("*").eq("org_id", orgId).eq("id", input.targetCustomerId));
+  const { data: quoteRows, error: quoteError } = await db
+    .from("snapquote_quotes")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("customer_id", sourceCustomerId);
+
+  if (quoteError) {
+    throw quoteError;
+  }
+
+  const reassignedQuoteIds = (quoteRows ?? []).map((row) => String(row.id));
+
+  if (reassignedQuoteIds.length > 0) {
+    must(await db
+      .from("snapquote_quotes")
+      .update({ customer_id: input.targetCustomerId })
+      .eq("org_id", orgId)
+      .eq("customer_id", sourceCustomerId));
+  }
+
+  must(await db.from("snapquote_customers").delete().eq("org_id", orgId).eq("id", sourceCustomerId));
+
+  return {
+    sourceCustomerId,
+    targetCustomer: customerResponse(target),
+    reassignedQuoteIds
+  };
+}
+
 async function createQuote(db: SupabaseClient, request: Request) {
   const orgId = orgIdFromRequest(request);
   const input = parse(createQuoteSchema, await request.json());
@@ -2697,6 +2761,20 @@ async function assertCustomerContactAvailable(
   if (existing !== null && String(existing.id) !== customerId) {
     throw new HttpError(409, "Another customer already uses that contact detail.");
   }
+}
+
+async function countCustomerQuotes(db: SupabaseClient, orgId: string, customerId: string) {
+  const { count, error } = await db
+    .from("snapquote_quotes")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId);
+
+  if (error) {
+    throw error;
+  }
+
+  return count ?? 0;
 }
 
 async function listLines(db: SupabaseClient, quoteId: string): Promise<(QuoteLineItem & { id: string })[]> {
