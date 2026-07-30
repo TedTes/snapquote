@@ -1643,6 +1643,7 @@ async function createQuote(db: SupabaseClient, request: Request) {
         phone: null,
         address: input.address
       });
+  const quoteCustomer = quoteCustomerSnapshotColumns(customer);
 
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
   const priceBookItems = await listPriceBook(db, orgId);
@@ -1682,6 +1683,7 @@ async function createQuote(db: SupabaseClient, request: Request) {
   const quote = await single(db.from("snapquote_quotes").insert({
     org_id: orgId,
     customer_id: customer.id,
+    ...quoteCustomer,
     address: input.address,
     job_title: input.jobTitle ?? "",
     valid_until: validUntil,
@@ -1869,6 +1871,7 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
   const quote = await single(db.from("snapquote_quotes").select("*").eq("org_id", orgId).eq("id", quoteId)) as QuoteRow;
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", quote.org_id));
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
+  const quoteCustomer = quoteCustomerResponse(quote, customer);
   const lineItems = await listLines(db, quote.id);
   const publicLink = await ensurePublicQuoteLink(db, quote.id);
   const totals = quote.total_cents === null
@@ -1885,7 +1888,7 @@ async function getQuoteResponse(db: SupabaseClient, orgId: string, quoteId: stri
     orgId: quote.org_id,
     org: orgResponse(org),
     customerId: quote.customer_id,
-    customer: customerResponse(customer),
+    customer: quoteCustomer,
     address: quote.address,
     jobTitle: quote.job_title,
     status: quote.status,
@@ -2069,17 +2072,18 @@ async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) 
   const orgId = orgIdFromRequest(request);
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)) as QuoteRow;
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
+  const quoteCustomer = quoteCustomerResponse(quote, customer);
   const lineItems = await listLines(db, quoteId);
 
   if (quote.status !== "draft") {
     throw new HttpError(409, "Only draft quotes can be sent");
   }
 
-  if (input.channels.includes("email") && !customer.email) {
+  if (input.channels.includes("email") && !stringOrNull(quoteCustomer.email)) {
     throw new HttpError(409, "Customer email is required before sending");
   }
 
-  if (input.channels.includes("sms") && !customer.phone) {
+  if (input.channels.includes("sms") && !stringOrNull(quoteCustomer.phone)) {
     throw new HttpError(409, "Customer phone is required before texting");
   }
 
@@ -2105,16 +2109,17 @@ async function followUpQuote(db: SupabaseClient, request: Request, quoteId: stri
   const orgId = orgIdFromRequest(request);
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)) as QuoteRow;
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
+  const quoteCustomer = quoteCustomerResponse(quote, customer);
 
   if (quote.status !== "sent" && quote.status !== "viewed") {
     throw new HttpError(409, "Only sent quotes awaiting a response can be followed up");
   }
 
-  if (input.channels.includes("email") && !customer.email) {
+  if (input.channels.includes("email") && !stringOrNull(quoteCustomer.email)) {
     throw new HttpError(409, "Customer email is required before following up");
   }
 
-  if (input.channels.includes("sms") && !customer.phone) {
+  if (input.channels.includes("sms") && !stringOrNull(quoteCustomer.phone)) {
     throw new HttpError(409, "Customer phone is required before texting a follow-up");
   }
 
@@ -2196,6 +2201,9 @@ async function cloneQuoteAsDraft(db: SupabaseClient, orgId: string, quoteId: str
   const cloned = await single(db.from("snapquote_quotes").insert({
     org_id: orgId,
     customer_id: source.customer_id,
+    customer_name: source.customer_name,
+    customer_email: source.customer_email,
+    customer_phone: source.customer_phone,
     address: source.address,
     job_title: source.job_title,
     status: "draft",
@@ -2338,6 +2346,7 @@ async function createPublicQuotePayment(db: SupabaseClient, token: string) {
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", link.quote_id)) as QuoteRow;
   const org = await refreshStripeAccountStatus(db, quote.org_id);
   const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
+  const quoteCustomer = quoteCustomerResponse(quote, customer);
 
   if (!quote.total_cents || quote.total_cents <= 0) {
     throw new HttpError(409, "This quote is not ready for payment");
@@ -2374,7 +2383,7 @@ async function createPublicQuotePayment(db: SupabaseClient, token: string) {
     "payment_method_types[0]": "card",
     success_url: successUrl,
     cancel_url: cancelUrl,
-    customer_email: customer.email ? String(customer.email) : undefined,
+    customer_email: quoteCustomer.email ? String(quoteCustomer.email) : undefined,
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": currency,
     "line_items[0][price_data][unit_amount]": String(amountCents),
@@ -2609,26 +2618,29 @@ function publicQuoteResponse<T extends {
 }
 
 async function createCustomerFromInput(db: SupabaseClient, orgId: string, input: z.infer<typeof customerSchema>) {
-  return await upsertCustomerFromInput(db, orgId, input);
+  return await insertCustomerFromInput(db, orgId, input);
 }
 
 async function upsertCustomerFromInput(db: SupabaseClient, orgId: string, input: z.infer<typeof customerSchema>) {
   const existing = await findExistingCustomer(db, orgId, input);
-  const email = normalizedEmail(input.email);
 
   if (existing !== null) {
-    return await single(db.from("snapquote_customers").update({
-      name: input.name,
-      email: email ?? stringOrNull(existing.email),
-      phone: input.phone ?? stringOrNull(existing.phone),
-      address: input.address
-    }).eq("id", String(existing.id)).eq("org_id", orgId).select("*"));
+    // Reuse the matched customer's identity as-is. Do not overwrite name/email/phone/address
+    // here -- this runs implicitly on every quote creation, and a matching email/phone (e.g.
+    // reused test contact info, or two customers sharing a number) must never silently rename
+    // an existing customer and every quote already tied to them. Explicit edits go through
+    // updateCustomer (PATCH /v1/customers/:id) instead.
+    return existing;
   }
 
+  return await insertCustomerFromInput(db, orgId, input);
+}
+
+async function insertCustomerFromInput(db: SupabaseClient, orgId: string, input: z.infer<typeof customerSchema>) {
   return await single(db.from("snapquote_customers").insert({
     org_id: orgId,
     name: input.name,
-    email,
+    email: normalizedEmail(input.email),
     phone: input.phone ?? null,
     address: input.address
   }).select("*"));
@@ -3208,7 +3220,7 @@ function normalizedEmail(email: string | null | undefined) {
 }
 
 function stringOrNull(value: unknown) {
-  return typeof value === "string" ? value : null;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 function searchTerm(value: string) {
@@ -3224,6 +3236,26 @@ function customerResponse(row: Record<string, unknown>) {
     phone: row.phone,
     address: row.address,
     createdAt: row.created_at
+  };
+}
+
+function quoteCustomerSnapshotColumns(customer: Record<string, unknown>) {
+  return {
+    customer_name: stringOrNull(customer.name) ?? "Unnamed customer",
+    customer_email: stringOrNull(customer.email),
+    customer_phone: stringOrNull(customer.phone)
+  };
+}
+
+function quoteCustomerResponse(quote: QuoteRow, customer: Record<string, unknown>) {
+  const profile = customerResponse(customer);
+
+  return {
+    ...profile,
+    name: stringOrNull(quote.customer_name) ?? stringOrNull(profile.name) ?? "Unnamed customer",
+    email: stringOrNull(quote.customer_email) ?? stringOrNull(profile.email),
+    phone: stringOrNull(quote.customer_phone) ?? stringOrNull(profile.phone),
+    address: quote.address
   };
 }
 
