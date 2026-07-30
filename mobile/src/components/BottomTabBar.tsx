@@ -36,7 +36,7 @@ export function BottomTabBar() {
             onPress={startQuote}
             style={styles.actionButton}
           >
-            <Plus color={colors.onDark} size={31} strokeWidth={2.55} />
+            <Plus color={colors.onDark} size={25} strokeWidth={2.55} />
           </Pressable>
         </View>
       </View>
