@@ -4,6 +4,7 @@
     "slug": "quotevan",
     "scheme": "quotevan",
     "version": "0.1.0",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -21,17 +22,41 @@
         {
           "photosPermission": "Allow QuoteVan to choose a business logo from your photo library."
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "ios": {
-      "bundleIdentifier": "com.tedtes.snapquote",
+      "bundleIdentifier": "com.tedtes.quotevan",
       "supportsTablet": false
     },
     "android": {
-      "package": "com.snapquote.mobile"
-    }
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1E1D19"
+      },
+      "package": "com.tedtes.quotevan",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F6F0"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "cc2bb629-9196-43f6-8a6d-4612eb3ae09e"
+      }
+    },
+    "owner": "tedros"
   }
 }

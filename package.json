@@ -13,6 +13,7 @@
     "dev:mobile": "pnpm --filter @snapquote/mobile dev",
     "dev:mobile:clear": "pnpm --filter @snapquote/mobile exec expo start --clear",
     "dev:web": "pnpm --filter @snapquote/web dev",
+    "eas-build-post-install": "pnpm --filter @snapquote/shared build",
     "build:web": "pnpm --filter @snapquote/web build",
     "supabase:db:push": "cd infra/supabase && supabase db push",
     "supabase:functions:serve": "cd infra/supabase && supabase functions serve snapquote --env-file ../../.env",
