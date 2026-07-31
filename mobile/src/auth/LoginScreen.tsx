@@ -4,6 +4,7 @@ import { AlertCircle, ChevronLeft } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -17,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../components/base";
 import { QuoteMark } from "../components/QuoteMark";
 import { colors } from "../components/theme";
+import { legalUrls } from "../utils/legal";
 import { useAuthStore } from "./authStore";
 
 function AuthBackground() {
@@ -177,8 +179,15 @@ export default function LoginScreen() {
             ) : null}
 
             <Text style={styles.legal}>
-              By continuing you agree to our <Text style={styles.legalLink}>Terms</Text> &amp;{" "}
-              <Text style={styles.legalLink}>Privacy Policy</Text>.
+              By continuing you agree to our{" "}
+              <Text onPress={() => void Linking.openURL(legalUrls.terms)} style={styles.legalLink}>
+                Terms
+              </Text>{" "}
+              &amp;{" "}
+              <Text onPress={() => void Linking.openURL(legalUrls.privacy)} style={styles.legalLink}>
+                Privacy Policy
+              </Text>
+              .
             </Text>
           </View>
         </ScrollView>

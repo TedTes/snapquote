@@ -23,6 +23,7 @@ import { businessInitials } from "../utils/format";
 import { useQuoteStore } from "../state/quoteStore";
 import { useAuthStore } from "../auth/authStore";
 import { snapquoteApi, userFacingErrorMessage } from "../api/client";
+import { legalUrls } from "../utils/legal";
 
 type PaymentConnectionState = {
   accountId: string | null;
@@ -246,6 +247,34 @@ export default function SettingsScreen() {
             label="Send quotes from"
             last
             onPress={() => Alert.alert("Sending email", "Email sender setup is not connected yet.")}
+          />
+        </SettingsSection>
+
+        <SettingsSection label="Legal & support">
+          <SettingsRow
+            detail="How QuoteVan handles account, quote, customer, and payment data"
+            icon={<Lock color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Privacy Policy"
+            onPress={() => void Linking.openURL(legalUrls.privacy)}
+          />
+          <SettingsRow
+            detail="Your responsibilities when creating, sending, and collecting deposits"
+            icon={<FileText color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Terms of Service"
+            onPress={() => void Linking.openURL(legalUrls.terms)}
+          />
+          <SettingsRow
+            detail="Request deletion of your account and associated app data"
+            icon={<Users color={colors.ink2} size={16} strokeWidth={2.1} />}
+            label="Account deletion"
+            onPress={() => void Linking.openURL(legalUrls.accountDeletion)}
+          />
+          <SettingsRow
+            detail="Get help with quotes, payments, privacy, or store review"
+            icon={<Mail color={colors.ink2} size={15} strokeWidth={2.1} />}
+            label="Support"
+            last
+            onPress={() => void Linking.openURL(legalUrls.support)}
           />
         </SettingsSection>
 

@@ -154,14 +154,17 @@ export function LandingPage() {
 
       <footer className="landing-footer">
         <div className="landing-footer-inner">
-          <span className="landing-footer-brand">QuoteVan</span>
+          <div className="landing-footer-copy">
+            <span className="landing-footer-brand">QuoteVan</span>
+            <p className="landing-footer-note">Customer quote links are private by URL.</p>
+          </div>
           <nav className="landing-footer-links">
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
+            <a href="/account-deletion">Account deletion</a>
             <a href="/support">Support</a>
           </nav>
         </div>
-        <p className="landing-footer-note">Customer quote links are private by URL.</p>
       </footer>
     </div>
   );
