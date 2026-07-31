@@ -13,6 +13,7 @@ apps/mobile/web-build
 mobile/.expo
 mobile/.expo-shared
 mobile/web-build
+mobile/assets/store/
 infra/.data
 supabase/**/.temp
 infra/supabase/**/.temp
