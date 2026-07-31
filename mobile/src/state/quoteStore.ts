@@ -562,24 +562,32 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
         return state;
       }
 
+      const key = line.priceBookItemKey ?? (slugKey(line.description) || `line_${line.id}`);
+      const existingItem = state.priceBookItems.find(
+        (candidate) => candidate.key === key,
+      );
       const item: PriceBookItem = {
-        id: makeId("pbi"),
+        id: existingItem?.id ?? makeId("pbi"),
         orgId,
-        key: line.priceBookItemKey ?? slugKey(line.description),
-        name: line.description,
+        key,
+        name: priceBookNameFromLineDescription(line.description),
         description: line.description,
         unit: line.unit ?? "flat",
         pricing: { type: "fixed", unitPriceCents: line.unitPriceCents },
         kind: line.kind,
         starter: false,
         confirmedAt: now,
-        usageCount: 1,
-        createdAt: now,
+        usageCount: (existingItem?.usageCount ?? 0) + 1,
+        createdAt: existingItem?.createdAt ?? now,
         updatedAt: now,
       };
 
       return {
-        priceBookItems: [item, ...state.priceBookItems],
+        priceBookItems: existingItem
+          ? state.priceBookItems.map((candidate) =>
+              candidate.id === existingItem.id ? item : candidate,
+            )
+          : [item, ...state.priceBookItems],
         quotes: state.quotes.map((candidate) =>
           candidate.id === quoteId
             ? withUpdatedAt({
@@ -1415,6 +1423,16 @@ function slugKey(value: string): string {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 80);
+}
+
+function priceBookNameFromLineDescription(description: string): string {
+  const clean = description.replace(/\s+/g, " ").trim();
+
+  if (clean.length <= 160) {
+    return clean || "Untitled item";
+  }
+
+  return `${clean.slice(0, 157).trimEnd()}...`;
 }
 
 function makeId(prefix: string): string {

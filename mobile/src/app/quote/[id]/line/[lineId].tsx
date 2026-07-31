@@ -442,6 +442,14 @@ function findPatchedLine(
   lines: Array<QuoteLineItem & { id: string }>,
   target: QuoteLineItem,
 ): (QuoteLineItem & { id: string }) | undefined {
+  if (target.id) {
+    const byId = lines.find((line) => line.id === target.id);
+
+    if (byId) {
+      return byId;
+    }
+  }
+
   return lines.find(
     (line) =>
       line.position === target.position &&

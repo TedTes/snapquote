@@ -486,6 +486,7 @@ export function quoteLineFromRow(row: LineRow): QuoteLineItem & { id: string } {
 
 export function lineInsert(quoteId: string, line: QuoteLineItem) {
   return {
+    ...(line.id ? { id: line.id } : {}),
     quote_id: quoteId,
     position: line.position,
     description: line.description,

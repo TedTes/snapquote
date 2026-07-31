@@ -169,6 +169,66 @@ describe("price book state", () => {
     expect(line?.matchState).toBe("green");
   });
 
+  it("reuses an existing local price item when saving a priced line with the same key", () => {
+    const starter = item({
+      id: "00000000-0000-4000-8000-000000000107",
+      key: "primer_coat",
+      name: "Primer coat",
+      unit: "room",
+      kind: "material",
+      pricing: {
+        type: "room_size",
+        prices: { small: 8000, medium: 12000, large: 18000 },
+      },
+      usageCount: 2,
+    });
+    const quote = quoteWithYellowLine(starter.id);
+    quote.lineItems = [
+      {
+        id: "line-primer",
+        position: 0,
+        description: "Primer coat",
+        quantity: 2,
+        unit: "flat",
+        unitPriceCents: 2000,
+        kind: "material",
+        source: "manual",
+        priceBookItemId: null,
+        priceBookItemKey: null,
+        matchConfidence: null,
+        matchState: "green",
+      },
+    ];
+
+    useQuoteStore.setState({
+      priceBookItems: [starter],
+      quotes: [quote],
+    });
+
+    useQuoteStore.getState().saveLineToPriceBook("quote-local", "line-primer");
+
+    const items = useQuoteStore.getState().priceBookItems;
+    const line = useQuoteStore.getState().quotes[0]?.lineItems[0];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: starter.id,
+      key: "primer_coat",
+      name: "Primer coat",
+      unit: "flat",
+      kind: "material",
+      starter: false,
+      usageCount: 3,
+      pricing: { type: "fixed", unitPriceCents: 2000 },
+    });
+    expect(line).toMatchObject({
+      source: "price_book",
+      priceBookItemId: starter.id,
+      priceBookItemKey: "primer_coat",
+      matchConfidence: 1,
+      matchState: "green",
+    });
+  });
+
   it("archives a local price item from the active list", () => {
     const active = item({ confirmedAt: now });
     useQuoteStore.setState({ priceBookItems: [active] });

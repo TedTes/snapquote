@@ -2045,8 +2045,13 @@ async function patchQuote(db: SupabaseClient, request: Request, quoteId: string)
   let lineItems = await listLines(db, quoteId);
 
   if (input.lineItems !== undefined) {
+    const existingLineIds = new Set(lineItems.map((line) => line.id));
     must(await db.from("snapquote_quote_line_items").delete().eq("quote_id", quoteId));
-    const normalized = input.lineItems.map((line: QuoteLineItem, index: number) => ({ ...line, position: index }));
+    const normalized = input.lineItems.map((line: QuoteLineItem, index: number) => ({
+      ...line,
+      id: line.id && existingLineIds.has(line.id) ? line.id : undefined,
+      position: index
+    }));
     if (normalized.length > 0) {
       must(await db.from("snapquote_quote_line_items").insert(normalized.map((line: QuoteLineItem) => lineInsert(quoteId, line))));
     }
@@ -2116,19 +2121,40 @@ async function saveLineToPriceBook(db: SupabaseClient, request: Request, quoteId
     throw new HttpError(409, "Line must have a unit price before it can be saved to the price book");
   }
 
-  const item = await single(db.from("snapquote_price_book_items").insert({
-    org_id: orgId,
-    key: slugKey(line.description),
-    name: line.description,
+  const key = priceBookKeyFromLine(line);
+  const now = new Date().toISOString();
+  const existingItem = await maybeSingle(
+    db.from("snapquote_price_book_items")
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("key", key)
+      .limit(1)
+  ) as PriceBookRow | null;
+  const itemPatch = {
+    name: priceBookNameFromLineDescription(line.description),
     description: line.description,
     unit: line.unit ?? "flat",
-    pricing_type: "fixed",
-    unit_price_cents: line.unit_price_cents,
     kind: line.kind,
     starter: false,
-    confirmed_at: new Date().toISOString(),
-    usage_count: 1
-  }).select("*"));
+    confirmed_at: now,
+    usage_count: existingItem ? existingItem.usage_count + 1 : 1,
+    updated_at: now,
+    archived_at: null,
+    ...pricingColumns({ type: "fixed", unitPriceCents: line.unit_price_cents })
+  };
+  const item = existingItem
+    ? await single(
+        db.from("snapquote_price_book_items")
+          .update(itemPatch)
+          .eq("id", existingItem.id)
+          .eq("org_id", orgId)
+          .select("*")
+      )
+    : await single(db.from("snapquote_price_book_items").insert({
+        org_id: orgId,
+        key,
+        ...itemPatch
+      }).select("*"));
 
   must(await db.from("snapquote_quote_line_items").update({
     source: "price_book",
@@ -3850,6 +3876,20 @@ function addDays(date: Date, days: number) {
 
 function slugKey(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
+}
+
+function priceBookKeyFromLine(line: LineRow) {
+  return slugKey(line.description) || `line_${line.id.replaceAll("-", "").slice(0, 32)}`;
+}
+
+function priceBookNameFromLineDescription(description: string) {
+  const clean = description.replace(/\s+/g, " ").trim();
+
+  if (clean.length <= 160) {
+    return clean || "Untitled item";
+  }
+
+  return `${clean.slice(0, 157).trimEnd()}...`;
 }
 
 function messageFromError(error: unknown) {
