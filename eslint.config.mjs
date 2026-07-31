@@ -8,6 +8,7 @@ export default [
       "**/coverage/**",
       "**/node_modules/**",
       "mobile/.expo/**",
+      "mobile/assets/store/**",
       "mobile/babel.config.cjs",
       "mobile/metro.config.cjs",
       "infra/supabase/functions/**"

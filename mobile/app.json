@@ -30,7 +30,10 @@
     },
     "ios": {
       "bundleIdentifier": "com.tedtes.quotevan",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
