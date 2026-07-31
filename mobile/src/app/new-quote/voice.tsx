@@ -3,6 +3,7 @@ import { File } from "expo-file-system";
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
+  setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState
 } from "expo-audio";
@@ -84,11 +85,13 @@ export default function NewQuoteVoiceScreen() {
         audioDurationSeconds: null,
         transcriptionSource: null
       });
+      await enableRecordingMode();
       await recorder.prepareToRecordAsync();
       recorder.record();
       setRecording(true);
     } catch (error) {
-      Alert.alert("Could not start recording", userFacingErrorMessage(error));
+      await disableRecordingMode();
+      Alert.alert("Could not start recording", recordingErrorMessage(error));
     }
   }
 
@@ -100,6 +103,7 @@ export default function NewQuoteVoiceScreen() {
     try {
       const beforeStop = recorder.getStatus();
       await recorder.stop();
+      await disableRecordingMode();
       const afterStop = recorder.getStatus();
       const uri = recorder.uri ?? afterStop.url ?? beforeStop.url;
       const durationSeconds = Math.max(
@@ -117,6 +121,7 @@ export default function NewQuoteVoiceScreen() {
       setAudioDurationSeconds(durationSeconds);
       await transcribeRecording(uri, durationSeconds);
     } catch (error) {
+      await disableRecordingMode();
       setRecording(false);
       Alert.alert("Could not save recording", userFacingErrorMessage(error));
     }
@@ -305,6 +310,39 @@ function notesFromTranscript(transcript: string, extras: string[]) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function enableRecordingMode() {
+  await setAudioModeAsync({
+    allowsRecording: true,
+    playsInSilentMode: true
+  });
+}
+
+async function disableRecordingMode() {
+  try {
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true
+    });
+  } catch (error) {
+    console.warn("QuoteVan could not reset audio mode", error);
+  }
+}
+
+function recordingErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+
+    if (
+      message.includes("recordingdisabledexception") ||
+      message.includes("recording not allowed")
+    ) {
+      return "Microphone recording was not ready. Try again.";
+    }
+  }
+
+  return userFacingErrorMessage(error);
 }
 
 function recordingFileName(uri: string) {
