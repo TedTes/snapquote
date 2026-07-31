@@ -128,11 +128,11 @@ export default function QuotePreviewScreen() {
     if (authStatus !== "signed_in") {
       setShowSendSheet(false);
       Alert.alert(
-        "Continue to send",
-        "Use Apple or Google to send this quote and track customer views.",
+        "You're not signed in",
+        "Sign in with Apple or Google to send this quote and track customer views.",
         [
           { text: "Not now", style: "cancel" },
-          { text: "Continue", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) },
+          { text: "Sign in", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) },
         ],
       );
       return;
