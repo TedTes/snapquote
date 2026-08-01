@@ -1,11 +1,11 @@
 import { Check, CircleAlert, Clock3 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { AnimatedCard } from "./AnimatedCard";
-import { GhostButton } from "./base";
-import { colors, radius, spacing } from "./theme";
-import { formatMoney, formatRelativeToNow } from "../utils/format";
-import type { QuoteRow } from "../state/useQuoteRows";
-import type { StoredLineItem } from "../state/quoteStore";
+import { AnimatedCard } from "../../../shared-ui/AnimatedCard";
+import { GhostButton } from "../../../shared-ui/base";
+import { colors, radius, spacing } from "../../../shared-ui/theme";
+import { formatMoney, formatRelativeToNow } from "../../../utils/format";
+import type { QuoteRow } from "../../../state/useQuoteRows";
+import type { StoredLineItem } from "../../../state/quoteStore";
 import { deriveCustomerCity, deriveJobLabel } from "@snapquote/shared";
 
 export function QuoteCard(props: { row: QuoteRow; onPress: () => void; onFollowUp?: (() => void) | undefined }) {

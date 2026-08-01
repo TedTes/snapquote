@@ -22,19 +22,19 @@ import {
   quoteUnits,
   type PriceBookItem,
 } from "@snapquote/shared";
-import { AnimatedSheetContent, SheetModal } from "../components/AnimatedSheet";
-import { BottomTabBar } from "../components/BottomTabBar";
+import { AnimatedSheetContent, SheetModal } from "../../shared-ui/AnimatedSheet";
+import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import {
   Field,
   PrimaryButton,
   Screen,
   SwatchTab,
-} from "../components/base";
-import { colors, radius, shadowLg, spacing } from "../components/theme";
-import { centsToDollars, dollarsToCents, useQuoteStore } from "../state/quoteStore";
-import { useAuthStore } from "../auth/authStore";
-import { formatMoney } from "../utils/format";
-import { snapquoteApi, userFacingErrorMessage } from "../api/client";
+} from "../../shared-ui/base";
+import { colors, radius, shadowLg, spacing } from "../../shared-ui/theme";
+import { centsToDollars, dollarsToCents, useQuoteStore } from "../../state/quoteStore";
+import { useAuthStore } from "../../state/authStore";
+import { formatMoney } from "../../utils/format";
+import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 
 type RoomSize = "small" | "medium" | "large";
 

@@ -16,14 +16,14 @@ import {
 } from "lucide-react-native";
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { getTradeConfig } from "@snapquote/shared";
-import { BottomTabBar } from "../components/BottomTabBar";
-import { Screen } from "../components/base";
-import { colors, radius } from "../components/theme";
-import { businessInitials } from "../utils/format";
-import { useQuoteStore } from "../state/quoteStore";
-import { useAuthStore } from "../auth/authStore";
-import { snapquoteApi, userFacingErrorMessage } from "../api/client";
-import { legalUrls } from "../utils/legal";
+import { BottomTabBar } from "../../shared-ui/BottomTabBar";
+import { Screen } from "../../shared-ui/base";
+import { colors, radius } from "../../shared-ui/theme";
+import { businessInitials } from "../../utils/format";
+import { useQuoteStore } from "../../state/quoteStore";
+import { useAuthStore } from "../../state/authStore";
+import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
+import { legalUrls } from "../../config/legal";
 
 type PaymentConnectionState = {
   accountId: string | null;

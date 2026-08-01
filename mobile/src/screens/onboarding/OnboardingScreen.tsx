@@ -11,14 +11,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getTradeConfig, type PainterCorePriceInput, type ServicePriceSuggestion } from "@snapquote/shared";
-import { snapquoteApi, userFacingErrorMessage } from "../api/client";
-import { useAuthStore } from "../auth/authStore";
+import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
+import { useAuthStore } from "../../state/authStore";
 import {
   centsToDollars,
   defaultCorePrices,
   dollarsToCents,
   useQuoteStore,
-} from "../state/quoteStore";
+} from "../../state/quoteStore";
 
 export default function OnboardingScreen() {
   const completeOnboarding = useQuoteStore((state) => state.completeOnboarding);

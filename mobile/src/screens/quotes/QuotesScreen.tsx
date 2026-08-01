@@ -16,14 +16,14 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { deriveCustomerCity, deriveJobLabel } from "@snapquote/shared";
-import { BottomTabBar } from "../components/BottomTabBar";
-import { ClipboardQuoteMark } from "../components/ClipboardQuoteMark";
-import { Screen } from "../components/base";
-import { colors, radius } from "../components/theme";
-import { formatMoney, formatShortDate } from "../utils/format";
-import { matchesQuoteSearch, useQuoteRows, type QuoteRow } from "../state/useQuoteRows";
-import type { QuoteRecord } from "../state/quoteStore";
-import { useRemoteQuoteRefresh } from "../sync/useRemoteQuoteRefresh";
+import { BottomTabBar } from "../../shared-ui/BottomTabBar";
+import { ClipboardQuoteMark } from "./components/ClipboardQuoteMark";
+import { Screen } from "../../shared-ui/base";
+import { colors, radius } from "../../shared-ui/theme";
+import { formatMoney, formatShortDate } from "../../utils/format";
+import { matchesQuoteSearch, useQuoteRows, type QuoteRow } from "../../state/useQuoteRows";
+import type { QuoteRecord } from "../../state/quoteStore";
+import { useRemoteQuoteRefresh } from "../../sync/useRemoteQuoteRefresh";
 
 type FilterKey = "all" | "draft" | "sent" | "viewed" | "accepted" | "stale";
 

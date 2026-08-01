@@ -4,19 +4,19 @@ import { useFocusEffect } from "expo-router";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ChevronRight, Merge, Plus, Search, Trash2, Users, X } from "lucide-react-native";
 import { deriveCustomerCity, deriveJobLabel, type Customer } from "@snapquote/shared";
-import { AnimatedSheetContent, SheetModal } from "../components/AnimatedSheet";
-import { BottomTabBar } from "../components/BottomTabBar";
-import { Screen } from "../components/base";
-import { colors, radius, shadowLg } from "../components/theme";
-import { useAuthStore } from "../auth/authStore";
-import { snapquoteApi, userFacingErrorMessage, type CreateCustomerInput } from "../api/client";
+import { AnimatedSheetContent, SheetModal } from "../../shared-ui/AnimatedSheet";
+import { BottomTabBar } from "../../shared-ui/BottomTabBar";
+import { Screen } from "../../shared-ui/base";
+import { colors, radius, shadowLg } from "../../shared-ui/theme";
+import { useAuthStore } from "../../state/authStore";
+import { snapquoteApi, userFacingErrorMessage, type CreateCustomerInput } from "../../api/client";
 import {
   getQuoteStatus,
   useQuoteStore,
   type CustomerFormInput,
   type QuoteRecord,
-} from "../state/quoteStore";
-import { initials } from "../utils/format";
+} from "../../state/quoteStore";
+import { initials } from "../../utils/format";
 
 type CustomerStats = {
   quoteCount: number;

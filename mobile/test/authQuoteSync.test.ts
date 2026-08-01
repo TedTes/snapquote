@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { quoteCustomerIdForSync } from "../src/auth/quoteSync";
+import { quoteCustomerIdForSync } from "../src/sync/quoteSync";
 
 describe("quoteCustomerIdForSync", () => {
   it("uses the mapped remote customer id after a local customer is synced", () => {

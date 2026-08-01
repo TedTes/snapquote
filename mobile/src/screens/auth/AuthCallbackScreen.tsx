@@ -1,6 +1,6 @@
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { useAuthStore } from "./authStore";
-import { colors } from "../components/theme";
+import { useAuthStore } from "../../state/authStore";
+import { colors } from "../../shared-ui/theme";
 
 /**
  * Purely reactive: AuthGate (mounted at the app root) is the sole listener for the

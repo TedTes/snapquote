@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useFocusEffect } from "expo-router";
 import { snapquoteApi } from "../api/client";
-import { useAuthStore } from "../auth/authStore";
+import { useAuthStore } from "../state/authStore";
 import { useQuoteStore } from "../state/quoteStore";
 
 export function useRemoteQuoteRefresh(options: { pollMs?: number } = {}) {

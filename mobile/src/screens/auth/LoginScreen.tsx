@@ -15,11 +15,11 @@ import {
 } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Screen } from "../components/base";
-import { QuoteMark } from "../components/QuoteMark";
-import { colors } from "../components/theme";
-import { legalUrls } from "../utils/legal";
-import { useAuthStore } from "./authStore";
+import { Screen } from "../../shared-ui/base";
+import { QuoteMark } from "../../shared-ui/QuoteMark";
+import { colors } from "../../shared-ui/theme";
+import { legalUrls } from "../../config/legal";
+import { useAuthStore } from "../../state/authStore";
 
 function AuthBackground() {
   const { width, height } = useWindowDimensions();

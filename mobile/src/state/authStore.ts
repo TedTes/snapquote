@@ -23,8 +23,8 @@ import {
   corePricesFromPriceBook,
   useQuoteStore,
   type QuoteRecord,
-} from "../state/quoteStore";
-import { quoteCustomerIdForSync } from "./quoteSync";
+} from "./quoteStore";
+import { quoteCustomerIdForSync } from "../sync/quoteSync";
 
 type AuthStatus = "loading" | "signed_out" | "signed_in";
 

@@ -2,8 +2,8 @@ import { useEffect, type ReactNode } from "react";
 import * as Linking from "expo-linking";
 import { router, usePathname } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
-import { colors } from "../components/theme";
-import { useAuthStore } from "./authStore";
+import { colors } from "../../shared-ui/theme";
+import { useAuthStore } from "../../state/authStore";
 
 export function AuthGate(props: { children: ReactNode }) {
   const pathname = usePathname();

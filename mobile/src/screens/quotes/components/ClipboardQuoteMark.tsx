@@ -1,5 +1,5 @@
 import Svg, { Rect } from "react-native-svg";
-import { colors } from "./theme";
+import { colors } from "../../../shared-ui/theme";
 
 export function ClipboardQuoteMark(props: { size?: number | undefined }) {
   const size = props.size ?? 48;
