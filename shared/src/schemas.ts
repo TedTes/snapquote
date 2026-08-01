@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { quoteVanPlanIds } from "./billing.js";
 import {
   customerResponseActions,
   deliveryChannels,
@@ -60,7 +61,7 @@ export const orgProfileSchema = z.object({
   defaultTerms: z.string().trim().max(4000),
   quoteValidDays: z.number().int().min(1).max(365),
   setupCompletedAt: z.string().datetime().nullable(),
-  plan: z.enum(["trial", "solo", "crew", "expired"])
+  plan: z.enum(quoteVanPlanIds)
 });
 
 export const updateOrgProfileSchema = orgProfileSchema

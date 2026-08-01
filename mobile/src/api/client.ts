@@ -3,6 +3,7 @@ import type {
   PainterCorePriceInput,
   PriceBookItem,
   PriceBookPricing,
+  QuoteVanPlan,
   QuoteDiscount,
   QuoteLineItem,
   QuoteStatus,
@@ -135,6 +136,22 @@ export type MeResponse = {
   entitlements: {
     canSendQuotes: boolean;
     trialEndsAt: string | null;
+    trialExpired?: boolean | undefined;
+    freeSentQuoteLimit?: number | undefined;
+    sentQuoteCount?: number | null | undefined;
+    freeSendsRemaining?: number | null | undefined;
+  };
+  billing?: {
+    plan: QuoteVanPlan;
+    pricing: {
+      currency: "USD";
+      trialDays: number;
+      freeSentQuoteLimit: number;
+    };
+    usage: {
+      sentQuoteCount: number | null;
+      freeSendsRemaining: number | null;
+    };
   };
 };
 
@@ -483,6 +500,17 @@ export function setApiAuthTokenProvider(provider: (() => Promise<string | null>)
   authAccessTokenProvider = provider;
 }
 
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export function isUpgradeRequiredError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 402;
+}
+
 export function userFacingErrorMessage(error: unknown): string {
   const fallback = "Something went wrong. Try again.";
 
@@ -598,7 +626,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         isRecord(data) && "message" in data
           ? String(data["message"])
           : `Request failed with ${response.status}`;
-      throw new Error(message);
+      throw new ApiError(response.status, message);
     }
 
     return data as T;

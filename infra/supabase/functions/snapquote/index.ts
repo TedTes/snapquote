@@ -52,6 +52,62 @@ const appRefreshTokenSeconds = 60 * 60 * 24 * 30;
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 const maxRateLimitBuckets = 2_000;
 
+const quoteVanPricing = {
+  currency: "USD",
+  trialDays: 14,
+  freeSentQuoteLimit: 3,
+  plans: {
+    trial: {
+      id: "trial",
+      name: "Free trial",
+      badge: "Trial",
+      summary: "Try QuoteVan before paying.",
+      detail: "14 days free, includes 3 sent quotes",
+      monthlyPriceCents: 0,
+      standardMonthlyPriceCents: 0,
+      currency: "USD",
+      available: true,
+      sendQuotes: true
+    },
+    solo: {
+      id: "solo",
+      name: "Solo",
+      badge: "Solo",
+      summary: "Unlimited quote sending for one business.",
+      detail: "$19/mo early access, later $29/mo",
+      monthlyPriceCents: 1900,
+      standardMonthlyPriceCents: 2900,
+      currency: "USD",
+      available: true,
+      sendQuotes: true
+    },
+    crew: {
+      id: "crew",
+      name: "Crew",
+      badge: "Crew",
+      summary: "Team workflows, SMS, automations, and reporting.",
+      detail: "Coming later, expected from $49/mo",
+      monthlyPriceCents: null,
+      standardMonthlyPriceCents: 4900,
+      currency: "USD",
+      available: false,
+      sendQuotes: true
+    },
+    expired: {
+      id: "expired",
+      name: "Trial ended",
+      badge: "Expired",
+      summary: "Upgrade to keep sending quote links.",
+      detail: "Drafts and previews stay available",
+      monthlyPriceCents: null,
+      standardMonthlyPriceCents: null,
+      currency: "USD",
+      available: false,
+      sendQuotes: false
+    }
+  }
+} as const;
+
 type AuthSessionPayload = {
   accessToken: string;
   refreshToken: string;
@@ -585,14 +641,14 @@ async function refreshAuthSession(db: SupabaseClient, request: Request) {
     const session = sessionResponse(data.session, data.user);
     const member = await single(db.from("snapquote_org_members").select("*").eq("auth_user_id", data.user.id));
     const org = await single(db.from("snapquote_orgs").select("*").eq("id", member.org_id));
-    return authResponse(session, org, member);
+    return await authResponse(db, session, org, member);
   }
 
   const payload = await verifyAppToken(input.refreshToken, "refresh");
   const member = await single(db.from("snapquote_org_members").select("*").eq("id", payload.sub));
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", member.org_id));
 
-  return authResponse(await createAppSession(member), org, member);
+  return await authResponse(db, await createAppSession(member), org, member);
 }
 
 async function startOAuth(db: SupabaseClient, request: Request) {
@@ -657,7 +713,7 @@ async function authResponseForSupabaseUser(
 
   if (existingMember) {
     const org = await single(db.from("snapquote_orgs").select("*").eq("id", existingMember.org_id));
-    return authResponse(session, org, existingMember);
+    return await authResponse(db, session, org, existingMember);
   }
 
   const email = input.email || user.email;
@@ -695,7 +751,7 @@ async function authResponseForSupabaseUser(
 
   await seedStarterPriceBook(db, String(org.id), false);
 
-  return authResponse(session, org, member);
+  return await authResponse(db, session, org, member);
 }
 
 function sessionResponse(
@@ -710,11 +766,106 @@ function sessionResponse(
   };
 }
 
-function authResponse(
+function quoteVanPlanFromOrg(org: Record<string, unknown>) {
+  const planId = String(org.plan ?? "trial");
+
+  if (planId === "solo" || planId === "crew" || planId === "expired") {
+    return quoteVanPricing.plans[planId];
+  }
+
+  return quoteVanPricing.plans.trial;
+}
+
+async function sendEntitlementResponse(db: SupabaseClient, orgId: string, org: Record<string, unknown>) {
+  const plan = quoteVanPlanFromOrg(org);
+  const trialEndsAt = plan.id === "trial" ? trialEndsAtFromOrg(org) : null;
+  const sentQuoteCount = plan.id === "trial" ? await countSentQuotes(db, orgId) : null;
+  const freeSendsRemaining = sentQuoteCount === null
+    ? null
+    : Math.max(0, quoteVanPricing.freeSentQuoteLimit - sentQuoteCount);
+  const trialExpired = trialEndsAt !== null && Date.now() >= Date.parse(trialEndsAt);
+  const canSendQuotes = plan.id === "trial"
+    ? !trialExpired && sentQuoteCount !== null && sentQuoteCount < quoteVanPricing.freeSentQuoteLimit
+    : plan.sendQuotes;
+
+  return {
+    canSendQuotes,
+    trialEndsAt,
+    trialExpired,
+    freeSentQuoteLimit: quoteVanPricing.freeSentQuoteLimit,
+    sentQuoteCount,
+    freeSendsRemaining
+  };
+}
+
+function billingResponse(org: Record<string, unknown>, entitlements: Awaited<ReturnType<typeof sendEntitlementResponse>>) {
+  return {
+    plan: quoteVanPlanFromOrg(org),
+    pricing: {
+      currency: quoteVanPricing.currency,
+      trialDays: quoteVanPricing.trialDays,
+      freeSentQuoteLimit: quoteVanPricing.freeSentQuoteLimit
+    },
+    usage: {
+      sentQuoteCount: entitlements.sentQuoteCount,
+      freeSendsRemaining: entitlements.freeSendsRemaining
+    }
+  };
+}
+
+function trialEndsAtFromOrg(org: Record<string, unknown>) {
+  const createdAt = typeof org.created_at === "string" ? Date.parse(org.created_at) : Number.NaN;
+
+  if (!Number.isFinite(createdAt)) {
+    return null;
+  }
+
+  return new Date(createdAt + quoteVanPricing.trialDays * 24 * 60 * 60 * 1000).toISOString();
+}
+
+async function countSentQuotes(db: SupabaseClient, orgId: string) {
+  const { count, error } = await db.from("snapquote_quotes")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .not("sent_at", "is", null);
+
+  if (error) {
+    throw error;
+  }
+
+  return count ?? 0;
+}
+
+async function assertOrgCanSendQuote(db: SupabaseClient, orgId: string) {
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  const entitlements = await sendEntitlementResponse(db, orgId, org);
+
+  if (entitlements.canSendQuotes) {
+    return;
+  }
+
+  const plan = quoteVanPlanFromOrg(org);
+
+  if (plan.id === "trial" && entitlements.trialExpired) {
+    throw new HttpError(402, "Your free trial has ended. Upgrade to Solo to keep sending quote links.");
+  }
+
+  if (plan.id === "trial" && entitlements.freeSendsRemaining === 0) {
+    throw new HttpError(402, `You have used your ${quoteVanPricing.freeSentQuoteLimit} free sent quotes. Upgrade to Solo to keep sending quote links.`);
+  }
+
+  throw new HttpError(402, "Upgrade to Solo to keep sending quote links.");
+}
+
+async function authResponse(
+  db: SupabaseClient,
   session: AuthSessionPayload,
   org: Record<string, unknown>,
   member: Record<string, unknown>
 ) {
+  const orgId = String(org.id ?? member.org_id);
+  const entitlements = await sendEntitlementResponse(db, orgId, org);
+
   return {
     session: {
       accessToken: session.accessToken,
@@ -730,10 +881,8 @@ function authResponse(
         role: member.role
       },
       org: orgResponse(org),
-      entitlements: {
-        canSendQuotes: true,
-        trialEndsAt: null
-      }
+      entitlements,
+      billing: billingResponse(org, entitlements)
     }
   };
 }
@@ -810,6 +959,8 @@ async function getMe(db: SupabaseClient, request: Request) {
   const user = await memberFromBearer(db, request) ??
     await single(db.from("snapquote_org_members").select("*").eq("org_id", orgId).limit(1));
 
+  const entitlements = await sendEntitlementResponse(db, orgId, org);
+
   return {
     user: {
       id: user.id,
@@ -819,10 +970,8 @@ async function getMe(db: SupabaseClient, request: Request) {
       role: user.role
     },
     org: orgResponse(org),
-    entitlements: {
-      canSendQuotes: true,
-      trialEndsAt: null
-    }
+    entitlements,
+    billing: billingResponse(org, entitlements)
   };
 }
 
@@ -2191,6 +2340,8 @@ async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) 
   }
 
   assertQuoteCanSend(lineItems);
+  await assertOrgCanSendQuote(db, orgId);
+
   const totals = computeTotalsIfReady({
     lineItems,
     discount: toDiscount(quote.discount_type, quote.discount_value),
