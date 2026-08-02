@@ -368,6 +368,7 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
   const { quote } = props;
   const upsertRemoteQuote = useQuoteStore((state) => state.upsertRemoteQuote);
   const archiveLocalQuote = useQuoteStore((state) => state.archiveQuote);
+  const recordLocalFollowUp = useQuoteStore((state) => state.followUpQuote);
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
   const [quoteAction, setQuoteAction] = useState<"revise" | "duplicate" | null>(null);
   const [archivingQuote, setArchivingQuote] = useState(false);
@@ -435,6 +436,7 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
     try {
       const updated = await snapquoteApi.followUpQuote(quote.id);
       upsertRemoteQuote(updated);
+      recordLocalFollowUp(quote.id);
     } catch (error) {
       Alert.alert("Could not send follow-up", userFacingErrorMessage(error));
     } finally {

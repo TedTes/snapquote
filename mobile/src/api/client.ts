@@ -457,6 +457,12 @@ export const snapquoteApi = {
       body: { channels }
     }),
 
+  resendQuote: (id: string, channels: Array<"email" | "sms"> = ["email"]) =>
+    request<ApiQuote>(`/v1/quotes/${id}/resend`, {
+      method: "POST",
+      body: { channels }
+    }),
+
   followUpQuote: (id: string, channels: Array<"email" | "sms"> = ["email"]) =>
     request<ApiQuote>(`/v1/quotes/${id}/follow-up`, {
       method: "POST",

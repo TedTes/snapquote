@@ -561,6 +561,10 @@ Deno.serve(async (request) => {
       return json(await sendQuote(db, request, params(route.path, "/v1/quotes/:id/send").id));
     }
 
+    if (route.method === "POST" && match(route.path, "/v1/quotes/:id/resend")) {
+      return json(await resendQuote(db, request, params(route.path, "/v1/quotes/:id/resend").id));
+    }
+
     if (route.method === "POST" && match(route.path, "/v1/quotes/:id/follow-up")) {
       return json(await followUpQuote(db, request, params(route.path, "/v1/quotes/:id/follow-up").id));
     }
@@ -2356,6 +2360,33 @@ async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) 
   await createEvent(db, quoteId, "sent", { channel: input.channels.length === 1 ? input.channels[0] : "multi", channels: input.channels, ...delivery });
 
   return response;
+}
+
+async function resendQuote(db: SupabaseClient, request: Request, quoteId: string) {
+  const input = parse(sendSchema, await request.json().catch(() => ({})));
+  const orgId = orgIdFromRequest(request);
+  const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)) as QuoteRow;
+  const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
+
+  if (quote.status !== "sent" && quote.status !== "viewed") {
+    throw new HttpError(409, "Only sent quotes awaiting a response can be resent");
+  }
+
+  if (input.channels.includes("email") && !stringOrNull(customer.email)) {
+    throw new HttpError(409, "Customer email is required before resending");
+  }
+
+  if (input.channels.includes("sms") && !stringOrNull(customer.phone)) {
+    throw new HttpError(409, "Customer phone is required before texting a quote link");
+  }
+
+  const response = await getQuoteResponse(db, orgId, quoteId);
+  const delivery = await deliverQuoteNotification("quote_sent", response, input.channels);
+  const now = new Date().toISOString();
+  must(await db.from("snapquote_quotes").update({ updated_at: now }).eq("id", quoteId).eq("org_id", orgId));
+  await createEvent(db, quoteId, "sent", { channel: input.channels.length === 1 ? input.channels[0] : "multi", channels: input.channels, resend: true, ...delivery });
+
+  return await getQuoteResponse(db, orgId, quoteId);
 }
 
 async function followUpQuote(db: SupabaseClient, request: Request, quoteId: string) {

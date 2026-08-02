@@ -201,6 +201,7 @@ type QuoteStoreState = {
   saveLineToPriceBook: (quoteId: string, lineId: string) => void;
 
   sendQuote: (quoteId: string) => void;
+  recordQuoteResend: (quoteId: string) => void;
   followUpQuote: (quoteId: string) => void;
   deleteDraftQuote: (quoteId: string) => void;
   archiveQuote: (quoteId: string) => void;
@@ -630,6 +631,28 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
         events: [
           ...state.events,
           createEvent(quoteId, "sent", { channel: "email" }),
+        ],
+      };
+    });
+  },
+
+  recordQuoteResend: (quoteId) => {
+    const now = new Date().toISOString();
+
+    set((state) => {
+      const quote = state.quotes.find((candidate) => candidate.id === quoteId);
+
+      if (!quote) {
+        return state;
+      }
+
+      return {
+        quotes: state.quotes.map((candidate) =>
+          candidate.id === quoteId ? { ...candidate, updatedAt: now } : candidate,
+        ),
+        events: [
+          ...state.events,
+          createEvent(quoteId, "sent", { channel: "email", resend: true }),
         ],
       };
     });
