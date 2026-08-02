@@ -104,8 +104,8 @@ supabase secrets set OPENAI_API_KEY=<key>
 supabase secrets set OPENAI_MODEL=gpt-4.1-mini
 supabase secrets set SNAPQUOTE_PUBLIC_BASE_URL=https://quotes.your-domain.com
 supabase secrets set RESEND_API_KEY=<resend-api-key>
-supabase secrets set SNAPQUOTE_FROM_EMAIL='SnapQuote <quotes@your-domain.com>'
-supabase secrets set SNAPQUOTE_REPLY_TO_EMAIL=owner@your-domain.com
+supabase secrets set SNAPQUOTE_FROM_EMAIL='QuoteVan <quotes@quotevan.com>'
+supabase secrets set SNAPQUOTE_REPLY_TO_EMAIL=support@quotevan.com
 supabase secrets set SNAPQUOTE_DEFAULT_ORG_ID=00000000-0000-4000-8000-000000000001
 ```
 

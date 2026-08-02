@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { contactEmails, mailtoUrl } from "../contact";
 import { ProductFlowDemo } from "./components/demo/ProductFlowDemo";
 import { ProgressMeter, QuoteVanMark, StatusPill } from "./components/demo/primitives";
 import "./landing.css";
 
-const supportMailto = "mailto:tedtfu@gmail.com?subject=QuoteVan%20early%20access";
+const helloMailto = mailtoUrl(contactEmails.hello, { subject: "QuoteVan early access" });
 
 export function LandingPage() {
   return (
@@ -20,7 +21,7 @@ export function LandingPage() {
             <a href="#customer">Customer view</a>
             <a href="#book">Price book</a>
           </nav>
-          <a className="btn btn-primary btn-small" href={supportMailto}>Get started</a>
+          <a className="btn btn-primary btn-small" href={helloMailto}>Get started</a>
         </div>
       </header>
 
@@ -137,7 +138,7 @@ export function LandingPage() {
             <p>
               Build clean, customer-ready quotes with prices you control — right there on site.
             </p>
-            <a className="final-cta-button" href={supportMailto}>
+            <a className="final-cta-button" href={helloMailto}>
               <span className="final-cta-button-icon" aria-hidden="true" />
               <span className="final-cta-button-label">Start your first quote free</span>
             </a>
@@ -146,7 +147,7 @@ export function LandingPage() {
               <span>Works on your phone</span>
             </div>
             <p className="final-cta-support">
-              Questions? <a href={supportMailto}>Talk to a real person</a>
+              Questions? <a href={helloMailto}>Talk to a real person</a>
             </p>
           </div>
         </section>

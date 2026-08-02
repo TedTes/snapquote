@@ -1,5 +1,7 @@
-const supportEmail = "tedtfu@gmail.com";
-const supportMailto = `mailto:${supportEmail}`;
+import { contactEmails, mailtoUrl } from "./contact";
+
+const supportEmail = contactEmails.support;
+const supportMailto = mailtoUrl(supportEmail);
 
 type LegalPageKind = "privacy" | "terms" | "support" | "account-deletion";
 

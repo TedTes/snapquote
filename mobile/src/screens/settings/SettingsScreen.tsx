@@ -23,6 +23,7 @@ import { businessInitials } from "../../utils/format";
 import { useQuoteStore } from "../../state/quoteStore";
 import { useAuthStore } from "../../state/authStore";
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
+import { contactEmails } from "../../config/contact";
 import { legalUrls } from "../../config/legal";
 
 type PaymentConnectionState = {
@@ -60,7 +61,7 @@ export default function SettingsScreen() {
 
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const totalCount = priceBookItems.length;
-  const senderEmail = me?.user.email ?? "quotes@sharpedge.co";
+  const senderEmail = contactEmails.quotes;
 
   const refreshPaymentStatus = useCallback(async () => {
     if (authStatus !== "signed_in") return;

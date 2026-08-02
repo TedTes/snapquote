@@ -27,6 +27,7 @@ import { displayBusinessName } from "../../utils/format";
 import { QuoteMark } from "../../shared-ui/QuoteMark";
 import { Screen } from "../../shared-ui/base";
 import { colors, radius } from "../../shared-ui/theme";
+import { contactEmails, mailtoUrl } from "../../config/contact";
 
 type ImagePickerModule = typeof import("expo-image-picker");
 type ExpoNativeGlobal = typeof globalThis & {
@@ -129,9 +130,10 @@ export default function ProfileScreen() {
   }
 
   async function openFeedback() {
-    const subject = encodeURIComponent("QuoteVan feedback");
-    const body = encodeURIComponent(`Account: ${email}\n\n`);
-    const url = `mailto:tedtfu@gmail.com?subject=${subject}&body=${body}`;
+    const url = mailtoUrl(contactEmails.support, {
+      subject: "QuoteVan feedback",
+      body: `Account: ${email}\n\n`
+    });
     const canOpen = await Linking.canOpenURL(url);
 
     if (canOpen) {
@@ -139,7 +141,7 @@ export default function ProfileScreen() {
       return;
     }
 
-    Alert.alert("Help & feedback", "Email feedback to tedtfu@gmail.com.");
+    Alert.alert("Help & feedback", `Email feedback to ${contactEmails.support}.`);
   }
 
   function confirmDeleteAccount() {
