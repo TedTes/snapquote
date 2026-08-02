@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ChevronRight, Merge, Plus, Search, Trash2, Users, X } from "lucide-react-native";
 import { deriveCustomerCity, deriveJobLabel, type Customer } from "@snapquote/shared";
@@ -342,7 +342,7 @@ export default function CustomersScreen() {
                 <CustomerRow
                   duplicate={duplicateGroups.some((group) => group.some((candidate) => candidate.id === customer.id))}
                   key={customer.id}
-                  onPress={() => setEditingCustomerId(customer.id)}
+                  onPress={() => router.push({ pathname: "/customers/[id]", params: { id: customer.id } })}
                   stats={statsByCustomerId.get(customer.id) ?? emptyStats}
                   customer={customer}
                   withDivider={index < filteredCustomers.length - 1}
