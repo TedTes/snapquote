@@ -78,6 +78,61 @@ button {
   margin: 0 auto 18px;
 }
 
+.billing-return-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.billing-return-card {
+  width: min(100%, 460px);
+  padding: 34px 26px 28px;
+  border: 1px solid #ded9cd;
+  border-radius: 18px;
+  background: #fffdfa;
+  box-shadow: 0 16px 60px rgb(29 28 25 / 10%);
+  text-align: center;
+}
+
+.billing-return-card h1 {
+  margin-top: 2px;
+  font-size: 30px;
+}
+
+.billing-return-card p:not(.eyebrow) {
+  margin: 14px auto 0;
+  max-width: 34ch;
+  color: #646058;
+  line-height: 1.45;
+}
+
+.billing-return-card button,
+.billing-return-card a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  border-radius: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.billing-return-card button {
+  width: 100%;
+  margin-top: 24px;
+  border: 0;
+  background: #1d1c19;
+  color: #fffdfa;
+  cursor: pointer;
+}
+
+.billing-return-card a {
+  margin-top: 12px;
+  padding: 0 16px;
+  color: #646058;
+}
+
 .eyebrow,
 .section-label,
 .quote-meta span {

@@ -463,7 +463,11 @@ Deno.serve(async (request) => {
       return json(await uploadAvatar(db, request));
     }
 
-    if (route.method === "GET" && route.path === "/v1/billing/portal") {
+    if (route.method === "POST" && route.path === "/v1/billing/checkout") {
+      return json(await createBillingCheckout(db, request));
+    }
+
+    if ((route.method === "GET" || route.method === "POST") && route.path === "/v1/billing/portal") {
       return json(await billingPortal(db, request));
     }
 
@@ -782,15 +786,14 @@ function quoteVanPlanFromOrg(org: Record<string, unknown>) {
 
 async function sendEntitlementResponse(db: SupabaseClient, orgId: string, org: Record<string, unknown>) {
   const plan = quoteVanPlanFromOrg(org);
-  const trialEndsAt = plan.id === "trial" ? trialEndsAtFromOrg(org) : null;
-  const sentQuoteCount = plan.id === "trial" ? await countSentQuotes(db, orgId) : null;
-  const freeSendsRemaining = sentQuoteCount === null
-    ? null
-    : Math.max(0, quoteVanPricing.freeSentQuoteLimit - sentQuoteCount);
+  const billingStatus = orgBillingStatus(org);
+  const trialEndsAt = trialEndsAtFromOrg(org);
+  const sentQuoteCount = await countSentQuotes(db, orgId);
+  const freeSendsRemaining = Math.max(0, quoteVanPricing.freeSentQuoteLimit - sentQuoteCount);
   const trialExpired = trialEndsAt !== null && Date.now() >= Date.parse(trialEndsAt);
-  const canSendQuotes = plan.id === "trial"
-    ? !trialExpired && sentQuoteCount !== null && sentQuoteCount < quoteVanPricing.freeSentQuoteLimit
-    : plan.sendQuotes;
+  const trialCanSend = !trialExpired && sentQuoteCount < quoteVanPricing.freeSentQuoteLimit;
+  const paidCanSend = plan.id === "solo" && (billingStatus === "active" || billingStatus === "trialing");
+  const canSendQuotes = paidCanSend || trialCanSend;
 
   return {
     canSendQuotes,
@@ -805,6 +808,11 @@ async function sendEntitlementResponse(db: SupabaseClient, orgId: string, org: R
 function billingResponse(org: Record<string, unknown>, entitlements: Awaited<ReturnType<typeof sendEntitlementResponse>>) {
   return {
     plan: quoteVanPlanFromOrg(org),
+    status: {
+      stripeStatus: orgBillingStatus(org),
+      currentPeriodEnd: typeof org.billing_current_period_end === "string" ? org.billing_current_period_end : null,
+      cancelAtPeriodEnd: Boolean(org.billing_cancel_at_period_end)
+    },
     pricing: {
       currency: quoteVanPricing.currency,
       trialDays: quoteVanPricing.trialDays,
@@ -849,12 +857,21 @@ async function assertOrgCanSendQuote(db: SupabaseClient, orgId: string) {
   }
 
   const plan = quoteVanPlanFromOrg(org);
+  const billingStatus = orgBillingStatus(org);
 
-  if (plan.id === "trial" && entitlements.trialExpired) {
+  if (plan.id === "solo" && (billingStatus === "past_due" || billingStatus === "unpaid")) {
+    throw new HttpError(402, "Your Solo payment needs attention. Update billing to keep sending quote links.");
+  }
+
+  if (plan.id === "solo") {
+    throw new HttpError(402, "Your Solo subscription is not active. Update billing to keep sending quote links.");
+  }
+
+  if (entitlements.trialExpired) {
     throw new HttpError(402, "Your free trial has ended. Upgrade to Solo to keep sending quote links.");
   }
 
-  if (plan.id === "trial" && entitlements.freeSendsRemaining === 0) {
+  if (entitlements.freeSendsRemaining === 0) {
     throw new HttpError(402, `You have used your ${quoteVanPricing.freeSentQuoteLimit} free sent quotes. Upgrade to Solo to keep sending quote links.`);
   }
 
@@ -1034,9 +1051,180 @@ async function billingPortal(db: SupabaseClient, request: Request) {
     throw new HttpError(401, "Sign in before managing billing.");
   }
 
-  const url = envFirst("QUOTEVAN_BILLING_PORTAL_URL", "SNAPQUOTE_BILLING_PORTAL_URL") ?? null;
+  const orgId = orgIdFromRequest(request);
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  const customerId = stringOrNull(org.stripe_billing_customer_id);
 
-  return { url };
+  if (!customerId) {
+    throw new HttpError(409, "Start Solo before managing a subscription.");
+  }
+
+  let session: Record<string, any>;
+
+  try {
+    session = await stripePost("billing_portal/sessions", {
+      customer: customerId,
+      return_url: billingPortalReturnUrl()
+    });
+  } catch (error) {
+    if (!isMissingStripeResource(error)) {
+      throw error;
+    }
+
+    must(await db.from("snapquote_orgs").update({
+      stripe_billing_customer_id: null,
+      stripe_billing_subscription_id: null,
+      stripe_billing_status: "trial",
+      billing_current_period_end: null,
+      billing_cancel_at_period_end: false,
+      plan: "trial",
+      billing_updated_at: new Date().toISOString()
+    }).eq("id", orgId));
+
+    throw new HttpError(409, "This subscription belongs to a different Stripe mode. Start Solo again in the current mode.");
+  }
+
+  return {
+    provider: "stripe",
+    mode: stripeMode(),
+    url: session.url
+  };
+}
+
+async function createBillingCheckout(db: SupabaseClient, request: Request) {
+  const member = await memberFromBearer(db, request);
+
+  if (!member?.auth_user_id) {
+    throw new HttpError(401, "Sign in before upgrading.");
+  }
+
+  const orgId = orgIdFromRequest(request);
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  const plan = quoteVanPlanFromOrg(org);
+
+  if (plan.id === "solo" && stringOrNull(org.stripe_billing_customer_id)) {
+    return billingPortal(db, request);
+  }
+
+  const customerId = await ensureStripeBillingCustomer(db, org, member);
+  const session = await stripePost("checkout/sessions", {
+    mode: "subscription",
+    customer: customerId,
+    client_reference_id: orgId,
+    success_url: billingSuccessUrl(),
+    cancel_url: billingCancelUrl(),
+    "line_items[0][quantity]": "1",
+    "line_items[0][price]": stripeBillingPriceIdSolo(),
+    "metadata[kind]": "quotevan_subscription",
+    "metadata[org_id]": orgId,
+    "subscription_data[metadata][kind]": "quotevan_subscription",
+    "subscription_data[metadata][org_id]": orgId
+  });
+
+  const now = new Date().toISOString();
+  must(await db.from("snapquote_orgs").update({
+    stripe_billing_customer_id: customerId,
+    billing_checkout_session_id: session.id,
+    stripe_billing_status: "checkout_started",
+    billing_updated_at: now
+  }).eq("id", orgId));
+
+  return {
+    provider: "stripe",
+    mode: stripeMode(),
+    url: session.url,
+    checkoutUrl: session.url,
+    sessionId: session.id
+  };
+}
+
+async function ensureStripeBillingCustomer(
+  db: SupabaseClient,
+  org: Record<string, any>,
+  member: Record<string, any>
+) {
+  const existingCustomerId = stringOrNull(org.stripe_billing_customer_id);
+  const customerName = billingCustomerName(org, member);
+  const customerEmail = stringOrNull(member.email) ?? undefined;
+
+  if (existingCustomerId) {
+    try {
+      const customer = await stripeGet(`customers/${encodeURIComponent(existingCustomerId)}`);
+
+      if (!customer.deleted) {
+        const patch: Record<string, string> = {};
+
+        if (shouldUpdateBillingCustomerName(customer.name, customerName, customerEmail)) {
+          patch.name = customerName;
+        }
+
+        if (!stringOrNull(customer.email) && customerEmail) {
+          patch.email = customerEmail;
+        }
+
+        if (Object.keys(patch).length > 0) {
+          await stripePost(`customers/${encodeURIComponent(existingCustomerId)}`, patch);
+        }
+
+        return existingCustomerId;
+      }
+    } catch (error) {
+      if (!isMissingStripeResource(error)) {
+        throw error;
+      }
+    }
+  }
+
+  const orgId = String(org.id);
+  const customer = await stripePost("customers", {
+    email: customerEmail,
+    name: customerName,
+    "metadata[kind]": "quotevan_billing",
+    "metadata[org_id]": orgId
+  });
+  const customerId = String(customer.id);
+
+  must(await db.from("snapquote_orgs").update({
+    stripe_billing_customer_id: customerId,
+    stripe_billing_subscription_id: null,
+    billing_current_period_end: null,
+    billing_cancel_at_period_end: false,
+    billing_updated_at: new Date().toISOString()
+  }).eq("id", orgId));
+
+  return customerId;
+}
+
+function billingCustomerName(org: Record<string, unknown>, member: Record<string, unknown>) {
+  const orgName = stringOrNull(org.name);
+
+  if (orgName) {
+    return orgName;
+  }
+
+  const memberName = stringOrNull(member.name);
+
+  if (memberName && memberName.toLowerCase() !== "owner") {
+    return memberName;
+  }
+
+  return normalizedEmail(stringOrNull(member.email)) ?? "QuoteVan customer";
+}
+
+function shouldUpdateBillingCustomerName(currentName: unknown, nextName: string, currentEmail: string | undefined) {
+  const normalizedCurrentName = stringOrNull(currentName)?.toLowerCase() ?? null;
+  const normalizedNextName = nextName.trim().toLowerCase();
+
+  if (!normalizedCurrentName) {
+    return true;
+  }
+
+  if (normalizedCurrentName === normalizedNextName) {
+    return false;
+  }
+
+  return normalizedCurrentName === "owner" ||
+    (typeof currentEmail === "string" && normalizedCurrentName === currentEmail.trim().toLowerCase());
 }
 
 async function deleteAccount(db: SupabaseClient, request: Request) {
@@ -1089,14 +1277,18 @@ async function adminOpsHealth(db: SupabaseClient, request: Request) {
       emailWebhookUrl: hasAnyEnv("QUOTE_EMAIL_WEBHOOK_URL", "SNAPQUOTE_EMAIL_WEBHOOK_URL"),
       inboundEmailSecret: hasAnyEnv("QUOTEVAN_INBOUND_EMAIL_SECRET", "SNAPQUOTE_INBOUND_EMAIL_SECRET", "SNAPQUOTE_EMAIL_WEBHOOK_SECRET"),
       openAiApiKey: hasEnv("OPENAI_API_KEY"),
-      stripeSecretKey: hasEnv("STRIPE_SECRET_KEY"),
-      stripeWebhookSecret: hasEnv("STRIPE_WEBHOOK_SECRET"),
+      stripeMode: stripeMode(),
+      stripeSecretKey: hasStripeEnv("STRIPE_SECRET_KEY"),
+      stripeWebhookSecret: hasStripeEnv("STRIPE_WEBHOOK_SECRET"),
+      stripeBillingPriceIdSolo: hasStripeEnv("STRIPE_BILLING_PRICE_ID_SOLO"),
       stripeConnectReturnUrl: hasAnyEnv("QUOTEVAN_CONNECT_RETURN_URL", "SNAPQUOTE_CONNECT_RETURN_URL"),
       twilioAccountSid: hasEnv("TWILIO_ACCOUNT_SID"),
       twilioAuthToken: hasEnv("TWILIO_AUTH_TOKEN"),
       twilioFromPhone: hasAnyEnv("TWILIO_FROM_PHONE", "SNAPQUOTE_FROM_PHONE"),
       adminSecret: hasAnyEnv("QUOTEVAN_ADMIN_SECRET", "SNAPQUOTE_ADMIN_SECRET", "SNAPQUOTE_PRICING_INGEST_SECRET"),
-      billingPortalUrl: hasAnyEnv("QUOTEVAN_BILLING_PORTAL_URL", "SNAPQUOTE_BILLING_PORTAL_URL")
+      billingSuccessUrl: hasAnyEnv("QUOTEVAN_BILLING_SUCCESS_URL", "SNAPQUOTE_BILLING_SUCCESS_URL"),
+      billingCancelUrl: hasAnyEnv("QUOTEVAN_BILLING_CANCEL_URL", "SNAPQUOTE_BILLING_CANCEL_URL"),
+      billingPortalReturnUrl: hasAnyEnv("QUOTEVAN_BILLING_PORTAL_RETURN_URL", "SNAPQUOTE_BILLING_PORTAL_RETURN_URL")
     },
     database,
     runtime: {
@@ -1133,6 +1325,123 @@ function hasEnv(name: string) {
 
 function hasAnyEnv(...names: string[]) {
   return names.some((name) => hasEnv(name));
+}
+
+type StripeMode = "test" | "live";
+
+function stripeMode(): StripeMode {
+  const configuredMode = Deno.env.get("STRIPE_MODE")?.trim().toLowerCase();
+
+  if (!configuredMode) {
+    const legacySecret = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
+    return legacySecret.startsWith("sk_live_") ? "live" : "test";
+  }
+
+  if (configuredMode === "live" || configuredMode === "prod" || configuredMode === "production") {
+    return "live";
+  }
+
+  if (configuredMode === "test" || configuredMode === "dev" || configuredMode === "development" || configuredMode === "sandbox") {
+    return "test";
+  }
+
+  throw new HttpError(500, "STRIPE_MODE must be test or live");
+}
+
+function stripeEnv(name: string) {
+  return envFirst(`${name}_${stripeMode().toUpperCase()}`, name);
+}
+
+function hasStripeEnv(name: string) {
+  return Boolean(stripeEnv(name));
+}
+
+function stripeSecretKey() {
+  const mode = stripeMode();
+  const secretKey = stripeEnv("STRIPE_SECRET_KEY");
+
+  if (!secretKey) {
+    throw new HttpError(500, `Stripe ${mode} mode is not configured`);
+  }
+
+  if (mode === "live" && secretKey.startsWith("sk_test_")) {
+    throw new HttpError(500, "Stripe live mode is configured with a test secret key");
+  }
+
+  if (mode === "test" && secretKey.startsWith("sk_live_")) {
+    throw new HttpError(500, "Stripe test mode is configured with a live secret key");
+  }
+
+  return secretKey;
+}
+
+function stripeBillingPriceIdSolo() {
+  const priceId = stripeEnv("STRIPE_BILLING_PRICE_ID_SOLO");
+
+  if (!priceId) {
+    throw new HttpError(500, `Solo billing price is not configured for Stripe ${stripeMode()} mode`);
+  }
+
+  return priceId;
+}
+
+function stripeObjectId(value: unknown) {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+
+  if (typeof value === "object" && value !== null && "id" in value && typeof value.id === "string") {
+    return value.id;
+  }
+
+  return null;
+}
+
+const stripeBillingStatuses = new Set([
+  "active",
+  "canceled",
+  "incomplete",
+  "incomplete_expired",
+  "past_due",
+  "paused",
+  "trialing",
+  "unpaid"
+]);
+
+const orgBillingStatuses = new Set([
+  "trial",
+  "checkout_started",
+  ...stripeBillingStatuses
+]);
+
+function orgBillingStatus(org: Record<string, unknown>) {
+  const status = typeof org.stripe_billing_status === "string" ? org.stripe_billing_status : "trial";
+  return orgBillingStatuses.has(status) ? status : "trial";
+}
+
+function stripeSubscriptionStatus(value: unknown) {
+  const status = typeof value === "string" ? value : "trial";
+  return stripeBillingStatuses.has(status) ? status : "trial";
+}
+
+function planForStripeBillingStatus(status: string) {
+  if (status === "active" || status === "trialing" || status === "past_due") {
+    return "solo";
+  }
+
+  if (status === "canceled" || status === "incomplete_expired" || status === "paused" || status === "unpaid") {
+    return "expired";
+  }
+
+  return "trial";
+}
+
+function stripeTimestampToIso(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return new Date(value * 1000).toISOString();
 }
 
 async function memberFromBearer(db: SupabaseClient, request: Request) {
@@ -2584,7 +2893,7 @@ async function getPaymentConnectStatus(db: SupabaseClient, request: Request) {
 
 async function createPaymentConnectOnboarding(db: SupabaseClient, request: Request) {
   const orgId = orgIdFromRequest(request);
-  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  const org = await refreshStripeAccountStatus(db, orgId);
   const member = await single(db.from("snapquote_org_members").select("*").eq("org_id", orgId).limit(1));
   let accountId = typeof org.stripe_account_id === "string" ? org.stripe_account_id : "";
 
@@ -2738,7 +3047,7 @@ async function confirmPublicQuotePayment(db: SupabaseClient, request: Request, t
 async function handleStripeWebhook(db: SupabaseClient, request: Request) {
   const body = await request.text();
   const signature = request.headers.get("stripe-signature") ?? "";
-  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+  const secret = stripeEnv("STRIPE_WEBHOOK_SECRET");
 
   if (secret) {
     await verifyStripeSignature(body, signature, secret);
@@ -2747,14 +3056,53 @@ async function handleStripeWebhook(db: SupabaseClient, request: Request) {
   const event = JSON.parse(body) as Record<string, any>;
   const object = event.data?.object as Record<string, any> | undefined;
 
-  if (!object || object.object !== "checkout.session") {
+  if (!object) {
     return { received: true };
   }
 
+  if (object.object === "checkout.session") {
+    const kind = String(object.metadata?.kind ?? "");
+
+    if (kind === "quotevan_subscription") {
+      await handleBillingCheckoutSessionWebhook(db, event, object);
+      return { received: true };
+    }
+
+    if (kind === "quote_deposit") {
+      await handleQuoteDepositCheckoutSessionWebhook(db, event, object);
+      return { received: true };
+    }
+
+    console.warn("Ignoring Stripe checkout session with unknown metadata.kind", {
+      eventType: event.type,
+      sessionId: object.id,
+      kind
+    });
+    return { received: true };
+  }
+
+  if (event.type.startsWith("customer.subscription.") && object.object === "subscription") {
+    await updateOrgBillingFromSubscription(db, object);
+    return { received: true };
+  }
+
+  if (event.type === "invoice.payment_failed" && object.object === "invoice") {
+    await handleBillingInvoicePaymentFailed(db, object);
+    return { received: true };
+  }
+
+  return { received: true };
+}
+
+async function handleQuoteDepositCheckoutSessionWebhook(
+  db: SupabaseClient,
+  event: Record<string, any>,
+  object: Record<string, any>
+) {
   const quoteId = String(object.metadata?.quote_id ?? "");
 
   if (!quoteId) {
-    return { received: true };
+    return;
   }
 
   const quote = await single(db.from("snapquote_quotes").select("*").eq("id", quoteId)) as QuoteRow;
@@ -2770,8 +3118,174 @@ async function handleStripeWebhook(db: SupabaseClient, request: Request) {
   } else if (event.type === "checkout.session.expired" || event.type === "checkout.session.async_payment_failed") {
     await markQuotePaymentFailed(db, quote, String(object.id), event);
   }
+}
 
-  return { received: true };
+async function handleBillingCheckoutSessionWebhook(
+  db: SupabaseClient,
+  event: Record<string, any>,
+  object: Record<string, any>
+) {
+  const org = await billingOrgFromStripeObject(db, object);
+
+  if (!org) {
+    return;
+  }
+
+  const patch: Record<string, unknown> = {
+    billing_checkout_session_id: String(object.id),
+    billing_updated_at: new Date().toISOString()
+  };
+  const customerId = stripeObjectId(object.customer);
+  const subscriptionId = stripeObjectId(object.subscription);
+
+  if (customerId) {
+    patch.stripe_billing_customer_id = customerId;
+  }
+
+  if (subscriptionId) {
+    patch.stripe_billing_subscription_id = subscriptionId;
+  }
+
+  if (event.type === "checkout.session.expired" || event.type === "checkout.session.async_payment_failed") {
+    patch.stripe_billing_status = "incomplete_expired";
+
+    if (quoteVanPlanFromOrg(org).id !== "solo") {
+      patch.plan = "trial";
+    }
+  }
+
+  must(await db.from("snapquote_orgs").update(patch).eq("id", org.id));
+
+  if (event.type === "checkout.session.completed" && subscriptionId) {
+    const subscription = await stripeGet(`subscriptions/${encodeURIComponent(subscriptionId)}`);
+    await updateOrgBillingFromSubscription(db, subscription, String(org.id));
+  }
+}
+
+async function handleBillingInvoicePaymentFailed(db: SupabaseClient, invoice: Record<string, any>) {
+  const subscriptionId = stripeInvoiceSubscriptionId(invoice);
+
+  if (subscriptionId) {
+    const subscription = await stripeGet(`subscriptions/${encodeURIComponent(subscriptionId)}`);
+    await updateOrgBillingFromSubscription(db, subscription);
+    return;
+  }
+
+  const org = await billingOrgFromStripeObject(db, invoice);
+
+  if (!org) {
+    return;
+  }
+
+  must(await db.from("snapquote_orgs").update({
+    stripe_billing_status: "past_due",
+    billing_updated_at: new Date().toISOString()
+  }).eq("id", org.id));
+}
+
+async function updateOrgBillingFromSubscription(
+  db: SupabaseClient,
+  subscription: Record<string, any>,
+  fallbackOrgId?: string
+) {
+  const org = await billingOrgFromStripeObject(db, subscription, fallbackOrgId);
+
+  if (!org) {
+    return;
+  }
+
+  const status = stripeSubscriptionStatus(subscription.status);
+  const customerId = stripeObjectId(subscription.customer);
+  const subscriptionId = stripeObjectId(subscription.id);
+  const patch: Record<string, unknown> = {
+    stripe_billing_status: status,
+    billing_current_period_end: stripeTimestampToIso(
+      subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end
+    ),
+    billing_cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+    plan: planForStripeBillingStatus(status),
+    billing_updated_at: new Date().toISOString()
+  };
+
+  if (customerId) {
+    patch.stripe_billing_customer_id = customerId;
+  }
+
+  if (subscriptionId) {
+    patch.stripe_billing_subscription_id = subscriptionId;
+  }
+
+  must(await db.from("snapquote_orgs").update(patch).eq("id", org.id));
+}
+
+async function billingOrgFromStripeObject(
+  db: SupabaseClient,
+  object: Record<string, any>,
+  fallbackOrgId?: string
+) {
+  const metadataOrgId = stringOrNull(
+    object.metadata?.org_id ??
+      object.subscription_details?.metadata?.org_id ??
+      object.parent?.subscription_details?.metadata?.org_id
+  );
+  const clientReferenceOrgId = stringOrNull(object.client_reference_id);
+  const orgId = fallbackOrgId ?? metadataOrgId ?? clientReferenceOrgId;
+
+  if (orgId) {
+    const org = await maybeSingle(db.from("snapquote_orgs").select("*").eq("id", orgId).limit(1));
+
+    if (org) {
+      return org;
+    }
+  }
+
+  const subscriptionId = object.object === "subscription"
+    ? stripeObjectId(object.id)
+    : stripeObjectId(object.subscription);
+
+  if (subscriptionId) {
+    const org = await maybeSingle(db.from("snapquote_orgs")
+      .select("*")
+      .eq("stripe_billing_subscription_id", subscriptionId)
+      .limit(1));
+
+    if (org) {
+      return org;
+    }
+  }
+
+  const customerId = stripeObjectId(object.customer);
+
+  if (customerId) {
+    return await maybeSingle(db.from("snapquote_orgs")
+      .select("*")
+      .eq("stripe_billing_customer_id", customerId)
+      .limit(1));
+  }
+
+  return null;
+}
+
+function stripeInvoiceSubscriptionId(invoice: Record<string, any>) {
+  const directSubscriptionId = stripeObjectId(invoice.subscription);
+
+  if (directSubscriptionId) {
+    return directSubscriptionId;
+  }
+
+  const parentSubscriptionId = stripeObjectId(invoice.parent?.subscription_details?.subscription);
+
+  if (parentSubscriptionId) {
+    return parentSubscriptionId;
+  }
+
+  const line = Array.isArray(invoice.lines?.data)
+    ? invoice.lines.data.find((item: Record<string, any>) =>
+        stripeObjectId(item.subscription) || stripeObjectId(item.parent?.subscription_item_details?.subscription)
+      )
+    : null;
+
+  return stripeObjectId(line?.subscription) ?? stripeObjectId(line?.parent?.subscription_item_details?.subscription);
 }
 
 async function handleInboundEmailReply(db: SupabaseClient, request: Request) {
@@ -2866,11 +3380,26 @@ async function refreshStripeAccountStatus(db: SupabaseClient, orgId: string) {
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
   const accountId = typeof org.stripe_account_id === "string" ? org.stripe_account_id : "";
 
-  if (!accountId || !Deno.env.get("STRIPE_SECRET_KEY")) {
+  if (!accountId || !stripeEnv("STRIPE_SECRET_KEY")) {
     return org;
   }
 
-  const account = await stripeGet(`accounts/${encodeURIComponent(accountId)}`);
+  let account: Record<string, any>;
+
+  try {
+    account = await stripeGet(`accounts/${encodeURIComponent(accountId)}`);
+  } catch (error) {
+    if (!isMissingStripeResource(error)) {
+      throw error;
+    }
+
+    return await single(db.from("snapquote_orgs").update({
+      stripe_account_id: null,
+      stripe_charges_enabled: false,
+      stripe_payouts_enabled: false
+    }).eq("id", orgId).select("*"));
+  }
+
   const chargesEnabled = Boolean(account.charges_enabled);
   const payoutsEnabled = Boolean(account.payouts_enabled);
 
@@ -3193,6 +3722,42 @@ function stripeConnectUrl(configuredUrl: string | undefined, fallbackPath: strin
   return url;
 }
 
+function billingSuccessUrl() {
+  return normalWebRedirectUrl(
+    envFirst("QUOTEVAN_BILLING_SUCCESS_URL", "SNAPQUOTE_BILLING_SUCCESS_URL") ??
+      webBaseUrl("/billing/success?session_id={CHECKOUT_SESSION_ID}"),
+    "Stripe billing success URL"
+  );
+}
+
+function billingCancelUrl() {
+  return normalWebRedirectUrl(
+    envFirst("QUOTEVAN_BILLING_CANCEL_URL", "SNAPQUOTE_BILLING_CANCEL_URL") ??
+      webBaseUrl("/billing/cancelled"),
+    "Stripe billing cancel URL"
+  );
+}
+
+function billingPortalReturnUrl() {
+  return normalWebRedirectUrl(
+    envFirst(
+      "QUOTEVAN_BILLING_PORTAL_RETURN_URL",
+      "SNAPQUOTE_BILLING_PORTAL_RETURN_URL",
+      "QUOTEVAN_BILLING_SUCCESS_URL",
+      "SNAPQUOTE_BILLING_SUCCESS_URL"
+    ) ?? webBaseUrl("/billing"),
+    "Stripe billing portal return URL"
+  );
+}
+
+function normalWebRedirectUrl(url: string, label: string) {
+  if (!url.startsWith("https://") && !url.startsWith("http://")) {
+    throw new HttpError(500, `${label} must be a normal web URL`);
+  }
+
+  return url;
+}
+
 function webBaseUrl(path: string) {
   const baseUrl = envFirst("QUOTEVAN_PUBLIC_BASE_URL", "SNAPQUOTE_PUBLIC_BASE_URL");
 
@@ -3349,11 +3914,7 @@ async function stripeRequest(path: string, input: {
   params: Record<string, string | number | boolean | null | undefined>;
   stripeAccount?: string | undefined;
 }) {
-  const secretKey = Deno.env.get("STRIPE_SECRET_KEY");
-
-  if (!secretKey) {
-    throw new HttpError(500, "Stripe payments are not configured");
-  }
+  const secretKey = stripeSecretKey();
 
   const params = new URLSearchParams();
 
@@ -3377,10 +3938,18 @@ async function stripeRequest(path: string, input: {
 
   if (!response.ok) {
     const message = typeof body.error?.message === "string" ? body.error.message : "Stripe request failed";
-    throw new HttpError(response.status >= 500 ? 502 : 400, message);
+    throw new HttpError(response.status >= 500 ? 502 : response.status, message);
   }
 
   return body;
+}
+
+function isMissingStripeResource(error: unknown) {
+  if (error instanceof HttpError && error.status === 404) {
+    return true;
+  }
+
+  return messageFromError(error).toLowerCase().includes("no such");
 }
 
 async function verifyStripeSignature(body: string, header: string, secret: string) {
@@ -3516,7 +4085,8 @@ function normalizedEmail(email: string | null | undefined) {
 }
 
 function stringOrNull(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function searchTerm(value: string) {

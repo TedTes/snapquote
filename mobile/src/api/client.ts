@@ -143,6 +143,11 @@ export type MeResponse = {
   };
   billing?: {
     plan: QuoteVanPlan;
+    status?: {
+      stripeStatus: string;
+      currentPeriodEnd: string | null;
+      cancelAtPeriodEnd: boolean;
+    } | undefined;
     pricing: {
       currency: "USD";
       trialDays: number;
@@ -275,7 +280,16 @@ export const snapquoteApi = {
       body: input
     }),
 
-  billingPortal: () => request<{ url: string | null }>("/v1/billing/portal"),
+  billingCheckout: () =>
+    request<{ provider: "stripe"; mode: "test" | "live"; url: string; checkoutUrl: string; sessionId: string }>(
+      "/v1/billing/checkout",
+      { method: "POST" }
+    ),
+
+  billingPortal: () =>
+    request<{ provider: "stripe"; mode: "test" | "live"; url: string }>("/v1/billing/portal", {
+      method: "POST"
+    }),
 
   paymentConnectStatus: () =>
     request<{

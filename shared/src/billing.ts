@@ -71,7 +71,7 @@ export const quoteVanPricing = {
   } satisfies Record<QuoteVanPlanId, QuoteVanPlan>
 } as const;
 
-export function quoteVanPlan(planId: QuoteVanPlanId | string | null | undefined): QuoteVanPlan {
+export function quoteVanPlan(planId: string | null | undefined): QuoteVanPlan {
   if (planId === "solo" || planId === "crew" || planId === "expired") {
     return quoteVanPricing.plans[planId];
   }

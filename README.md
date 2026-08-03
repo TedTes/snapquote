@@ -102,11 +102,35 @@ Required or optional Edge Function secrets:
 ```sh
 supabase secrets set OPENAI_API_KEY=<key>
 supabase secrets set OPENAI_MODEL=gpt-4.1-mini
-supabase secrets set SNAPQUOTE_PUBLIC_BASE_URL=https://quotes.your-domain.com
+supabase secrets set QUOTEVAN_PUBLIC_BASE_URL=https://quotevan.com
 supabase secrets set RESEND_API_KEY=<resend-api-key>
 supabase secrets set SNAPQUOTE_FROM_EMAIL='QuoteVan <quotes@quotevan.com>'
 supabase secrets set SNAPQUOTE_REPLY_TO_EMAIL=support@quotevan.com
 supabase secrets set SNAPQUOTE_DEFAULT_ORG_ID=00000000-0000-4000-8000-000000000001
+```
+
+Stripe is controlled by the server-side `STRIPE_MODE` flag. The Edge Function reads mode-specific secrets first, then falls back to the legacy unsuffixed name.
+
+```sh
+supabase secrets set STRIPE_MODE=test
+supabase secrets set STRIPE_SECRET_KEY_TEST=<sk_test_key>
+supabase secrets set STRIPE_WEBHOOK_SECRET_TEST=<whsec_test_secret>
+supabase secrets set STRIPE_BILLING_PRICE_ID_SOLO_TEST=<test_price_id>
+supabase secrets set STRIPE_CONNECT_COUNTRY=CA
+supabase secrets set QUOTEVAN_CONNECT_RETURN_URL=https://quotevan.com/payment/connect/return
+supabase secrets set QUOTEVAN_CONNECT_REFRESH_URL=https://quotevan.com/payment/connect/refresh
+supabase secrets set QUOTEVAN_BILLING_SUCCESS_URL=https://quotevan.com/billing/success
+supabase secrets set QUOTEVAN_BILLING_CANCEL_URL=https://quotevan.com/billing/cancelled
+supabase secrets set QUOTEVAN_BILLING_PORTAL_RETURN_URL=https://quotevan.com/billing
+```
+
+For live payments, set the matching live values and switch only the mode:
+
+```sh
+supabase secrets set STRIPE_SECRET_KEY_LIVE=<sk_live_key>
+supabase secrets set STRIPE_WEBHOOK_SECRET_LIVE=<whsec_live_secret>
+supabase secrets set STRIPE_BILLING_PRICE_ID_SOLO_LIVE=<live_price_id>
+supabase secrets set STRIPE_MODE=live
 ```
 
 ## Auth Redirects

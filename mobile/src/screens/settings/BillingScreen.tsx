@@ -21,6 +21,9 @@ export default function BillingSettingsScreen() {
   const trialExpired = me?.entitlements.trialExpired ?? false;
   const sentQuoteCount = me?.entitlements.sentQuoteCount ?? me?.billing?.usage.sentQuoteCount ?? null;
   const freeSendsRemaining = me?.entitlements.freeSendsRemaining ?? me?.billing?.usage.freeSendsRemaining ?? null;
+  const stripeStatus = me?.billing?.status?.stripeStatus ?? "trial";
+  const currentPeriodEnd = me?.billing?.status?.currentPeriodEnd ?? null;
+  const cancelAtPeriodEnd = me?.billing?.status?.cancelAtPeriodEnd ?? false;
   const soloPlan = quoteVanPricing.plans.solo;
   const planIsSolo = plan.id === "solo";
   const actionLabel = authStatus !== "signed_in"
@@ -73,10 +76,12 @@ export default function BillingSettingsScreen() {
     setOpeningBilling(true);
 
     try {
-      const response = await snapquoteApi.billingPortal();
+      const response = planIsSolo
+        ? await snapquoteApi.billingPortal()
+        : await snapquoteApi.billingCheckout();
 
       if (!response.url) {
-        Alert.alert("Billing not connected", "Subscription checkout is not configured for this build yet.");
+        Alert.alert("Billing not connected", "Subscription billing is not configured for this build yet.");
         return;
       }
 
@@ -137,7 +142,10 @@ export default function BillingSettingsScreen() {
               trialEndsAt,
               trialExpired,
               sentQuoteCount,
-              freeSendsRemaining
+              freeSendsRemaining,
+              stripeStatus,
+              currentPeriodEnd,
+              cancelAtPeriodEnd
             })}
           </Text>
         </View>
@@ -175,9 +183,50 @@ function planStatusText(input: {
   trialExpired: boolean;
   sentQuoteCount: number | null;
   freeSendsRemaining: number | null;
+  stripeStatus: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
 }) {
   if (input.authStatus !== "signed_in") {
     return `${quoteVanPricing.trialDays} days free · ${quoteVanPricing.freeSentQuoteLimit} sent quotes included`;
+  }
+
+  if (input.stripeStatus === "checkout_started" || input.stripeStatus === "incomplete") {
+    return "Checkout started · finish payment";
+  }
+
+  if (input.planId === "solo") {
+    const periodEnd = formatDate(input.currentPeriodEnd);
+
+    if (input.cancelAtPeriodEnd) {
+      return periodEnd ? `Canceling · access until ${periodEnd}` : "Canceling at period end";
+    }
+
+    if (input.stripeStatus === "past_due" || input.stripeStatus === "unpaid") {
+      return "Payment failed · update billing";
+    }
+
+    if (input.stripeStatus === "active") {
+      return periodEnd ? `Solo active · renews ${periodEnd}` : "Solo active";
+    }
+
+    if (input.stripeStatus === "trialing") {
+      return periodEnd ? `Solo trial · renews ${periodEnd}` : "Solo trial active";
+    }
+
+    if (input.stripeStatus === "canceled" || input.stripeStatus === "incomplete_expired" || input.stripeStatus === "paused") {
+      return "Subscription inactive · update billing";
+    }
+
+    return input.detail;
+  }
+
+  if (input.planId === "expired") {
+    if (input.stripeStatus === "past_due" || input.stripeStatus === "unpaid") {
+      return "Payment failed · update billing";
+    }
+
+    return "Subscription inactive · upgrade to send quote links";
   }
 
   if (input.planId === "trial") {
