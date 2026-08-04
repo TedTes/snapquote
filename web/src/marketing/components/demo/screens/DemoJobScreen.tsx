@@ -14,14 +14,14 @@ export function DemoJobScreen({ playback }: DemoJobScreenProps) {
   const tapTarget = measuredTapTarget ?? targetCoordinates(playback.activeEvent?.target);
 
   return (
-    <PhoneFrame time="11:28">
+    <PhoneFrame time="9:14">
       <div ref={screenRef}>
         <WizardHeader step="2 / 4" />
         <StepBar steps={["Customer", "Job", "Notes", "Review"]} activeIndex={1} />
 
         <section className="qv-flow-job">
           <h3>The job</h3>
-          <p>These numbers set quantities. Prices come later from the price book.</p>
+          <p>These numbers set your quantities — the prices come later, from your book.</p>
 
           <div className="qv-flow-job-card">
             <CounterRow label="Small" value="0" />

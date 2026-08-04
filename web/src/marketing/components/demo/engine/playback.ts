@@ -10,6 +10,7 @@ const screenSides: Record<DemoScreenId, DemoScreenSide> = {
   customer: "provider",
   job: "provider",
   notes: "provider",
+  transcriptReview: "provider",
   draftReview: "provider",
   preview: "provider",
   sent: "provider",
@@ -75,8 +76,12 @@ export function targetCoordinates(target?: string): TargetCoordinates | undefine
       return { x: "20%", y: "32%" };
     case "previewSend":
       return { x: "50%", y: "88%" };
+    case "generateDraft":
+      return { x: "50%", y: "91%" };
     case "sendQuote":
-      return { x: "50%", y: "94%" };
+      return { x: "50%", y: "84%" };
+    case "backToQuotes":
+      return { x: "13%", y: "11%" };
     case "quoteEmail":
       return { x: "46%", y: "41%" };
     case "acceptQuote":

@@ -11,6 +11,7 @@ import { DemoNotesScreen } from "./screens/DemoNotesScreen";
 import { DemoPreviewScreen } from "./screens/DemoPreviewScreen";
 import { DemoQuotesScreen } from "./screens/DemoQuotesScreen";
 import { DemoSentScreen } from "./screens/DemoSentScreen";
+import { DemoTranscriptReviewScreen } from "./screens/DemoTranscriptReviewScreen";
 import { DemoCustomerEmailScreen } from "./screens/DemoCustomerEmailScreen";
 import { DemoPublicQuoteScreen } from "./screens/DemoPublicQuoteScreen";
 import { DemoPaymentScreen } from "./screens/DemoPaymentScreen";
@@ -19,7 +20,7 @@ import "./styles/demo-flow.css";
 const providerScenario = quoteFlowScenario.filter(
   (step) =>
     screenSide(step.screen) === "provider"
-    && ["dashboard", "customer", "job", "notes", "draftReview", "preview", "sent", "quotes", "customerProfile"].includes(step.screen),
+    && ["dashboard", "customer", "job", "notes", "transcriptReview", "draftReview", "preview", "sent", "quotes"].includes(step.screen),
 );
 const customerScenario = quoteFlowScenario.filter((step) => screenSide(step.screen) === "customer");
 
@@ -29,7 +30,7 @@ export function ProductFlowDemo() {
       className="qv-provider-stage"
       steps={providerScenario}
       renderScreen={renderProviderScreen}
-      timeScale={2.35}
+      timeScale={1.35}
     />
   );
 }
@@ -55,6 +56,8 @@ function renderProviderScreen(state: DemoPlaybackState) {
       return <DemoJobScreen playback={state} />;
     case "notes":
       return <DemoNotesScreen playback={state} />;
+    case "transcriptReview":
+      return <DemoTranscriptReviewScreen playback={state} />;
     case "draftReview":
       return <DemoDraftReviewScreen playback={state} />;
     case "preview":

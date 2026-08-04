@@ -1,4 +1,5 @@
 import { DemoButton, PhoneFrame, StepBar, WizardHeader } from "../primitives";
+import { isActiveTarget } from "../engine/playback";
 import type { DemoPlaybackState } from "../engine/types";
 
 interface DemoNotesScreenProps {
@@ -9,7 +10,7 @@ export function DemoNotesScreen({ playback }: DemoNotesScreenProps) {
   const isRecording = playback.activeEvent?.type === "record";
 
   return (
-    <PhoneFrame time="11:28">
+    <PhoneFrame time="9:14">
       <WizardHeader step="3 / 4" />
       <StepBar steps={["Customer", "Job", "Notes", "Review"]} activeIndex={2} />
 
@@ -22,11 +23,11 @@ export function DemoNotesScreen({ playback }: DemoNotesScreenProps) {
             {isRecording ? (
               <span>Listening...</span>
             ) : (
-              <span>Water stain on the hallway ceiling...</span>
+              <span>Type anything the checklist didn't cover...</span>
             )}
           </div>
           <div className="qv-flow-note-footer">
-            <small>{isRecording ? "0:24 · tap mic to stop" : "Adds scope, never prices"}</small>
+            <small>{isRecording ? "0:07 · tap mic to stop" : "Adds scope, never prices"}</small>
             <button aria-label="Record note" data-demo-target="mic" type="button">
               {isRecording ? <i aria-hidden="true" /> : <span className="qv-flow-mic-glyph" aria-hidden="true" />}
             </button>
@@ -40,7 +41,7 @@ export function DemoNotesScreen({ playback }: DemoNotesScreenProps) {
 
         <b className="qv-flow-chip-label">Quick add</b>
         <div className="qv-flow-chip-row">
-          <button className="is-active" type="button"><span />patch holes</button>
+          <button type="button"><span />patch holes</button>
           <button type="button"><span />wallpaper</button>
           <button type="button"><span />primer</button>
           <button type="button"><span />materials</button>
@@ -48,7 +49,9 @@ export function DemoNotesScreen({ playback }: DemoNotesScreenProps) {
       </section>
 
       <div className="qv-flow-bottom-cta">
-        <DemoButton disabled={isRecording}>{isRecording ? "Stop recording to continue" : "Next — review →"}</DemoButton>
+        <DemoButton className={isActiveTarget(playback, "nextButton", "tap") ? "is-pressed" : undefined}>
+          Next — review →
+        </DemoButton>
       </div>
     </PhoneFrame>
   );

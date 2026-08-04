@@ -1,62 +1,57 @@
-import { AppHeader, DemoButton, PhoneFrame, Timeline } from "../primitives";
-import { hasPassedEvent, isActiveTarget } from "../engine/playback";
+import { AppHeader, DemoButton, PhoneFrame, TapIndicator, Timeline } from "../primitives";
+import { isActiveTarget, targetCoordinates } from "../engine/playback";
 import type { DemoPlaybackState } from "../engine/types";
-import type { CSSProperties } from "react";
 
 interface DemoSentScreenProps {
   playback: DemoPlaybackState;
 }
 
 export function DemoSentScreen({ playback }: DemoSentScreenProps) {
-  const hasViewed = hasPassedEvent(playback, "viewedStatus", "status") || isActiveTarget(playback, "viewedStatus", "status");
-  const hasAccepted = hasPassedEvent(playback, "acceptStatus", "status") || isActiveTarget(playback, "acceptStatus", "status");
-  const hasPaid = hasPassedEvent(playback, "payStatus", "status") || isActiveTarget(playback, "payStatus", "status");
-  const scrollProgress = playback.step.id === "status-update"
-    ? Math.min(Math.max((playback.elapsedMs - 850) / 2300, 0), 1)
-    : 0;
-  const scrollStyle = { "--qv-sent-scroll-progress": scrollProgress } as CSSProperties;
-  const statusLabel = hasPaid ? "Deposit paid" : hasAccepted ? "Accepted" : hasViewed ? "Viewed" : "Sent";
-  const statusDetail = hasPaid
-    ? "accepted · ready to schedule"
-    : hasAccepted
-      ? "Deposit requested"
-      : hasViewed
-        ? "Customer opened the quote"
-        : "Waiting for customer view";
-  const statusTone = hasAccepted || hasPaid ? "is-accepted" : hasViewed ? "is-viewed" : "is-sent";
+  const tapTarget = targetCoordinates(playback.activeEvent?.target);
 
   return (
-    <PhoneFrame time="11:28">
-      <div className="qv-flow-sent-scroll" style={scrollStyle}>
-        <AppHeader leftAction="‹" rightAction="···" title="Michael" subtitle="18 Victor Ave" />
-        <div className="qv-flow-sent-total">$1,932</div>
-        <div className={`qv-flow-sent-status ${statusTone}`}>
-          <span>{statusLabel}</span>
-          <p>{statusDetail}</p>
+    <PhoneFrame className="qv-flow-sent-detail-screen" time="9:14">
+      <div className="qv-flow-sent-scroll">
+        <AppHeader
+          leftAction={<span data-demo-target="backToQuotes">‹</span>}
+          rightAction="···"
+          title="John Doe"
+          subtitle="Toronto"
+        />
+        <div className="qv-flow-sent-total">$2,018</div>
+        <div className="qv-flow-sent-status is-sent">
+          <span>Sent</span>
+          <p>today at 9:19 AM · valid to Aug 17</p>
         </div>
         <section className="qv-flow-sent-card">
-          <div><span>What you sent</span><b>4 lines</b></div>
+          <div><span>What you sent</span><b>7 lines</b></div>
           <PreviewLine title="Paint walls" sub="2 rooms" price="$840" />
           <PreviewLine title="Paint ceilings" sub="2 rooms" price="$360" />
           <PreviewLine title="Paint trim" sub="2 rooms" price="$320" />
           <PreviewLine title="Paint 2 doors" sub="2 each" price="$190" />
-          <strong>Total <em>$1,932</em></strong>
+          <span className="qv-flow-sent-more">+ 3 more lines</span>
+          <div className="qv-flow-sent-summary">
+            <p>Subtotal <b>$1,786</b></p>
+            <p>Tax (13%) <b>$232</b></p>
+          </div>
+          <strong>Total <em>$2,018</em></strong>
         </section>
         <section className="qv-flow-timeline-card">
           <span>Status timeline</span>
           <Timeline
             items={[
-              { label: "Created", meta: "Jul 26 at 1:16 PM" },
-              { label: "Sent · email", meta: "Jul 26 at 1:17 PM" },
-              hasViewed ? { label: "Viewed", meta: "Jul 26 at 1:18 PM" } : { label: "Not viewed yet", meta: "We'll tell you when they open it", pending: true },
-              hasAccepted ? { label: "Accepted", meta: "Jul 26 at 1:19 PM" } : { label: "Waiting for response", meta: "We'll tell you when they accept", pending: true },
-              hasPaid ? { label: "Deposit paid", meta: "Jul 26 at 1:20 PM" } : { label: "Deposit pending", meta: "Optional upfront payment", pending: true },
+              { label: "Created", meta: "Aug 4 at 9:18 AM" },
+              { label: "Sent · email", meta: "Aug 4 at 9:19 AM" },
+              { label: "Not viewed yet", meta: "We'll tell you when they open it", pending: true },
             ]}
           />
         </section>
       </div>
+      {tapTarget && isActiveTarget(playback, "backToQuotes", "tap") ? (
+        <TapIndicator x={tapTarget.x} y={tapTarget.y} label="Back to quotes" />
+      ) : null}
       <div className="qv-flow-bottom-cta">
-        <DemoButton>Send follow-up</DemoButton>
+        <DemoButton tone="secondary">Follow-up available after 3 days</DemoButton>
       </div>
     </PhoneFrame>
   );

@@ -17,13 +17,13 @@ export function DemoDashboardScreen({ playback }: DemoDashboardScreenProps) {
   const tapTarget = targetCoordinates(playback.activeEvent?.target);
 
   return (
-    <PhoneFrame className="qv-flow-dashboard" time="8:15">
-      <AppHeader eyebrow="Bright Coat Painting" title="Today" subtitle="Friday, Jul 31" avatarText="BC" />
+    <PhoneFrame className="qv-flow-dashboard" time="9:14">
+      <AppHeader eyebrow="Add business name" title="Today" subtitle="Tuesday, Aug 4" avatarText="YB" />
 
       <section className="qv-flow-pipeline">
         <div>
           <span>Open pipeline</span>
-          <b>7 quotes</b>
+          <b>8 quotes</b>
         </div>
         <strong>$14,717</strong>
         <div className="qv-flow-pipeline-bars" aria-hidden="true">
@@ -48,7 +48,7 @@ export function DemoDashboardScreen({ playback }: DemoDashboardScreenProps) {
         </div>
         <div>
           <IconTile tone="amber">◷</IconTile>
-          <span><b>2 quotes to follow up</b><small>Sent 3+ days ago, no reply</small></span>
+          <span><b>6 quotes to follow up</b><small>Sent 3+ days ago, no reply</small></span>
           <strong>Nudge</strong>
         </div>
       </section>
@@ -57,18 +57,27 @@ export function DemoDashboardScreen({ playback }: DemoDashboardScreenProps) {
       <div className="qv-flow-card-stack">
         <QuoteCard
           name="Interior repaint · 2 rooms"
-          meta="Michael · Toronto"
+          meta="James · Toronto"
+          note="2 lines need a price"
+          price="$2,290+"
+          status="draft"
+          statusLabel="Draft"
+          trustState="needsPrice"
+        />
+        <QuoteCard
+          name="Ceiling repaint · 1 room"
+          meta="Maya · Etobicoke"
           note="Ready to send"
-          price="$2,050"
+          price="$980"
           status="draft"
           statusLabel="Draft"
           trustState="confirmed"
         />
         <QuoteCard
-          name="Kitchen + hallway"
-          meta="Avery · Etobicoke"
+          name="Exterior trim + 2 doors"
+          meta="Avery · Toronto"
           note="Follow up · sent 3 days ago"
-          price="$2,237"
+          price="$1,640"
           status="stale"
           statusLabel="Sent"
           trustState="needsOk"

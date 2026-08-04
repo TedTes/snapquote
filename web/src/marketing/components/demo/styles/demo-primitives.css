@@ -581,6 +581,10 @@
   color: var(--qv-demo-amber);
 }
 
+.qv-demo-quote-card.has-neutral .qv-demo-quote-card-main small {
+  color: var(--qv-demo-muted);
+}
+
 .qv-demo-quote-card.has-needsPrice .qv-demo-quote-card-main small,
 .qv-demo-quote-card.has-needsPrice .qv-demo-status-pill.is-draft {
   color: var(--qv-demo-red);
