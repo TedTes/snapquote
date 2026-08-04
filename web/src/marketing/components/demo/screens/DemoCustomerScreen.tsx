@@ -1,5 +1,5 @@
 import { DemoButton, PhoneFrame, StepBar, TapIndicator, WizardHeader } from "../primitives";
-import { isActiveTarget, targetCoordinates } from "../engine/playback";
+import { hasPassedEvent, isActiveTarget, targetCoordinates, typedValue } from "../engine/playback";
 import type { DemoPlaybackState } from "../engine/types";
 
 interface DemoCustomerScreenProps {
@@ -8,6 +8,11 @@ interface DemoCustomerScreenProps {
 
 export function DemoCustomerScreen({ playback }: DemoCustomerScreenProps) {
   const tapTarget = targetCoordinates(playback.activeEvent?.target);
+  const typedCustomerName = typedValue(playback, "customerName");
+  const typedJobTitle = typedValue(playback, "jobTitle");
+  const isTypingCustomer = isActiveTarget(playback, "customerName", "type");
+  const isTypingJobTitle = isActiveTarget(playback, "jobTitle", "type");
+  const isCustomerSelected = hasPassedEvent(playback, "customerName", "type");
 
   return (
     <PhoneFrame time="9:14">
@@ -16,15 +21,41 @@ export function DemoCustomerScreen({ playback }: DemoCustomerScreenProps) {
 
       <section className="qv-flow-form">
         <h3>Who's it for?</h3>
-        <DemoField active={isActiveTarget(playback, "customerName", "type")} label="Customer name" selected>
-          <span className="qv-flow-selected-customer-icon" aria-hidden="true" />
-          <span><b>John Doe</b><small>Existing customer</small></span>
-          <i aria-hidden="true">×</i>
+        {isCustomerSelected ? (
+          <DemoField label="Customer name" selected>
+            <span className="qv-flow-selected-customer-icon" aria-hidden="true">JD</span>
+            <span><b>John Doe</b><small>Existing customer</small></span>
+            <i aria-hidden="true">×</i>
+          </DemoField>
+        ) : (
+          <>
+            <DemoField active={isTypingCustomer} label="Customer name">
+              <span className={typedCustomerName ? "qv-flow-typed-value" : "qv-flow-typed-value is-placeholder"}>
+                {typedCustomerName || "Search or add customer"}
+              </span>
+            </DemoField>
+            {typedCustomerName ? (
+              <div className={isTypingCustomer ? "qv-flow-customer-suggestion is-active" : "qv-flow-customer-suggestion"}>
+                <span className="qv-flow-selected-customer-icon" aria-hidden="true">JD</span>
+                <span><b>John Doe</b><small>Existing customer · tap to use saved details</small></span>
+              </div>
+            ) : null}
+          </>
+        )}
+        <DemoField muted={!isCustomerSelected} label="Phone" icon="phone">
+          {isCustomerSelected ? "4168208937" : "Auto-fills after customer pick"}
         </DemoField>
-        <DemoField label="Phone" icon="phone">4168208937</DemoField>
-        <DemoField label="Email · sends the quote" icon="mail">tedtfu@gmail.com</DemoField>
-        <DemoField label="Job address" icon="pin">Toronto</DemoField>
-        <DemoField label="Job title · optional" muted>e.g. Interior repaint</DemoField>
+        <DemoField muted={!isCustomerSelected} label="Email · sends the quote" icon="mail">
+          {isCustomerSelected ? "tedtfu@gmail.com" : "Saved email"}
+        </DemoField>
+        <DemoField muted={!isCustomerSelected} label="Job address" icon="pin">
+          {isCustomerSelected ? "Toronto" : "Saved address"}
+        </DemoField>
+        <DemoField active={isTypingJobTitle} label="Job title · optional" muted={!typedJobTitle}>
+          <span className={typedJobTitle ? "qv-flow-typed-value" : "qv-flow-typed-value is-placeholder"}>
+            {typedJobTitle || "e.g. Interior repaint"}
+          </span>
+        </DemoField>
       </section>
 
       {tapTarget && playback.activeEvent?.type === "tap" ? (

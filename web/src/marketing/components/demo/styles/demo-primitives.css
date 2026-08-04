@@ -526,11 +526,15 @@
 }
 
 .qv-demo-quote-card-main {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 14px;
   padding: 13px 14px 13px 18px;
+}
+
+.qv-demo-quote-card-main > div:first-child {
+  min-width: 0;
 }
 
 .qv-demo-quote-card-main h4,
@@ -540,6 +544,12 @@
   font-size: 15px;
   line-height: 1.1;
   letter-spacing: -0.015em;
+}
+
+.qv-demo-quote-card-main h4 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qv-demo-quote-card-main p,
@@ -558,15 +568,7 @@
 }
 
 .qv-demo-quote-card-main p::before {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  margin-right: 6px;
-  border: 1.4px solid currentColor;
-  border-top: 0;
-  border-radius: 0 0 999px 999px;
-  content: "";
-  opacity: 0.82;
+  display: none;
 }
 
 .qv-demo-quote-card-main small {

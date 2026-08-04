@@ -16,29 +16,41 @@ export function DemoTranscriptReviewScreen({ playback }: DemoTranscriptReviewScr
 
       <section className="qv-flow-transcript">
         <h3>Check before drafting</h3>
-        <p>Fix any words — you can still edit every line after.</p>
+        <p>The job details are locked. Review the note before QuoteVan builds the draft.</p>
 
-        <div className="qv-flow-locked-checklist">
-          <i aria-hidden="true" />
-          <strong>Checklist locked: 2 medium rooms · walls, ceilings, trim · 2 doors · 2 coats. Voice only adds the extras below.</strong>
-        </div>
+        <div className="qv-flow-review-stack">
+          <article className="qv-flow-locked-summary-card">
+            <div className="qv-flow-locked-summary-head">
+              <i aria-hidden="true" />
+              <span>
+                <b>Locked job checklist</b>
+                <small>Prices will come from your price book.</small>
+              </span>
+            </div>
+            <div className="qv-flow-summary-lines" aria-label="Draft source">
+              <span><b>Rooms</b><small>2 medium</small></span>
+              <span><b>Surfaces</b><small>Walls, ceilings, trim</small></span>
+              <span><b>Doors</b><small>2 doors</small></span>
+              <span><b>Coats</b><small>2 coats</small></span>
+            </div>
+          </article>
 
-        <div className="qv-flow-transcript-head">
-          <span>What you said</span>
-          <b>tap to edit</b>
-        </div>
+          <article className="qv-flow-note-review-card">
+            <div className="qv-flow-note-review-head">
+              <span>What you said</span>
+              <button type="button">Re-listen</button>
+            </div>
+            <p>No extra notes.</p>
+            <small>Nothing else will be added before drafting.</small>
+          </article>
 
-        <div className="qv-flow-transcript-card">
-          <div>
-            <span>0:07</span>
-            <b>Re-listen</b>
-          </div>
-          <p>No extra notes. The quote will be built from the locked checklist.</p>
-        </div>
-
-        <div className="qv-flow-transcript-head">
-          <span>Extras detected</span>
-          <b>confirm before drafting</b>
+          <article className="qv-flow-draft-ready-card">
+            <i aria-hidden="true" />
+            <span>
+              <b>Ready to generate 7 quote lines</b>
+              <small>Walls, ceilings, trim, doors, prep, and labour stay editable.</small>
+            </span>
+          </article>
         </div>
       </section>
 

@@ -82,6 +82,8 @@ export function targetCoordinates(target?: string): TargetCoordinates | undefine
       return { x: "50%", y: "84%" };
     case "backToQuotes":
       return { x: "13%", y: "11%" };
+    case "allQuotesTab":
+      return { x: "14%", y: "25%" };
     case "quoteEmail":
       return { x: "46%", y: "41%" };
     case "acceptQuote":

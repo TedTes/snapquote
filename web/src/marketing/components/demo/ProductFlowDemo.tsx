@@ -65,7 +65,7 @@ function renderProviderScreen(state: DemoPlaybackState) {
     case "sent":
       return <DemoSentScreen playback={state} />;
     case "quotes":
-      return <DemoQuotesScreen />;
+      return <DemoQuotesScreen playback={state} />;
     case "customerProfile":
       return <DemoCustomerProfileScreen />;
     default:
