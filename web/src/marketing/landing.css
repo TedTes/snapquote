@@ -294,6 +294,63 @@
   font-weight: 850;
 }
 
+/* Current app demo */
+.live-section {
+  display: grid;
+  gap: 28px;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 18px 20px 68px;
+}
+
+.live-section .section-copy {
+  max-width: 640px;
+}
+
+.live-section .section-copy h2 {
+  font-size: clamp(29px, 4vw, 42px);
+}
+
+.live-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.live-feature {
+  position: relative;
+  min-height: 118px;
+  padding: 18px 18px 18px 21px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgb(255 253 250 / 72%);
+}
+
+.live-feature::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 0;
+  width: 5px;
+  border-radius: 0 999px 999px 0;
+  background: var(--green);
+  content: "";
+}
+
+.live-feature strong {
+  display: block;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.live-feature p {
+  margin-top: 8px;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 630;
+  line-height: 1.45;
+}
+
 /* Customer inbox */
 .email-dashboard-section,
 .customer-section,
@@ -1644,6 +1701,10 @@
 }
 
 @media (min-width: 720px) {
+  .live-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .how-rail {
     grid-template-columns: repeat(3, 1fr);
     gap: 20px;

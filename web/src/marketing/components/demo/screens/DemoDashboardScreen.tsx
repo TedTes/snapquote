@@ -18,14 +18,14 @@ export function DemoDashboardScreen({ playback }: DemoDashboardScreenProps) {
 
   return (
     <PhoneFrame className="qv-flow-dashboard" time="8:15">
-      <AppHeader eyebrow="Bright Coat Painting" title="Today" subtitle="Sunday, Jul 26" avatarText="BC" />
+      <AppHeader eyebrow="Bright Coat Painting" title="Today" subtitle="Friday, Jul 31" avatarText="BC" />
 
       <section className="qv-flow-pipeline">
         <div>
           <span>Open pipeline</span>
-          <b>9 quotes</b>
+          <b>7 quotes</b>
         </div>
-        <strong>$10,416</strong>
+        <strong>$14,717</strong>
         <div className="qv-flow-pipeline-bars" aria-hidden="true">
           <i />
           <i />
@@ -38,34 +38,39 @@ export function DemoDashboardScreen({ playback }: DemoDashboardScreenProps) {
       <section className="qv-flow-action-list">
         <div>
           <IconTile tone="red">!</IconTile>
-          <span><b>4 drafts need a price</b><small>Red lines are blocking send</small></span>
+          <span><b>1 draft needs a price</b><small>Red lines are blocking send</small></span>
           <strong>Price</strong>
         </div>
         <div>
           <IconTile tone="green">✓</IconTile>
-          <span><b>3 drafts ready to send</b><small>$6,235 fully priced & waiting</small></span>
+          <span><b>4 drafts ready to send</b><small>$8,118 fully priced & waiting</small></span>
           <strong>Send</strong>
+        </div>
+        <div>
+          <IconTile tone="amber">◷</IconTile>
+          <span><b>2 quotes to follow up</b><small>Sent 3+ days ago, no reply</small></span>
+          <strong>Nudge</strong>
         </div>
       </section>
 
       <p className="qv-flow-section-label">Active quotes</p>
       <div className="qv-flow-card-stack">
         <QuoteCard
-          name="Priya"
-          meta="Toronto"
+          name="Interior repaint · 2 rooms"
+          meta="Michael · Toronto"
           note="Ready to send"
-          price="$2,100"
+          price="$2,050"
           status="draft"
           statusLabel="Draft"
           trustState="confirmed"
         />
         <QuoteCard
-          name="Amara"
-          meta="Toronto"
-          note="Viewed · today"
-          price="$1,540"
-          status="viewed"
-          statusLabel="Viewed"
+          name="Kitchen + hallway"
+          meta="Avery · Etobicoke"
+          note="Follow up · sent 3 days ago"
+          price="$2,237"
+          status="stale"
+          statusLabel="Sent"
           trustState="needsOk"
         />
       </div>

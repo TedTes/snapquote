@@ -551,12 +551,44 @@
   font-weight: 640;
 }
 
+.qv-demo-quote-card-main p {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.qv-demo-quote-card-main p::before {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border: 1.4px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 999px 999px;
+  content: "";
+  opacity: 0.82;
+}
+
 .qv-demo-quote-card-main small {
   display: block;
   margin-top: 7px;
   color: var(--qv-demo-green);
   font-size: 12px;
   font-weight: 760;
+}
+
+.qv-demo-quote-card.has-needsOk .qv-demo-quote-card-main small {
+  color: var(--qv-demo-amber);
+}
+
+.qv-demo-quote-card.has-needsPrice .qv-demo-quote-card-main small,
+.qv-demo-quote-card.has-needsPrice .qv-demo-status-pill.is-draft {
+  color: var(--qv-demo-red);
+}
+
+.qv-demo-quote-card.has-needsPrice .qv-demo-status-pill.is-draft {
+  background: var(--qv-demo-red-soft);
+  border-color: #dda9a3;
 }
 
 .qv-demo-quote-card-side {

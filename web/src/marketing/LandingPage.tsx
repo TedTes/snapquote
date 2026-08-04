@@ -16,7 +16,7 @@ export function LandingPage() {
             <span>QuoteVan</span>
           </a>
           <nav aria-label="Landing page" className="landing-nav-links">
-            <a href="#trust">Customer email</a>
+            <a href="#live">App demo</a>
             <a href="#how">How it works</a>
             <a href="#customer">Customer view</a>
             <a href="#book">Price book</a>
@@ -28,16 +28,29 @@ export function LandingPage() {
       <main>
         <section className="hero" id="flow">
           <div className="hero-copy">
-            <p className="landing-eyebrow">QuoteVan for field-service providers</p>
+            <p className="landing-eyebrow">QuoteVan for home-service providers</p>
             <h1>Quote the job before you leave it.</h1>
             <p className="landing-lede">
-              Walk the job, capture the scope, and send a professional quote with prices from your own book.
+              Walk the job, capture the scope, send a professional quote, and keep the customer history in one place.
             </p>
             <StoreBadges />
           </div>
 
           <div className="hero-demo" aria-label="QuoteVan provider quote creation flow">
             <ProductFlowDemo />
+          </div>
+        </section>
+
+        <section className="live-section" id="live">
+          <div className="section-copy">
+            <p className="landing-eyebrow">Now in the app</p>
+            <h2>The demo follows the real workflow.</h2>
+          </div>
+          <div className="live-grid" aria-label="QuoteVan features shown in the app demo">
+            <LiveFeature title="Job-first quote cards" text="Cards lead with the work, then show customer and city underneath." />
+            <LiveFeature title="Customer profiles" text="Call, email, quote history, new quote, resend link, copy link, follow-up, and archive stay together." />
+            <LiveFeature title="Price book review" text="Green prices come from the provider's book; unresolved lines stay blocked before send." />
+            <LiveFeature title="Quote links and deposits" text="Customers can view, accept, decline, and pay a deposit from the private quote page." />
           </div>
         </section>
 
@@ -78,9 +91,9 @@ export function LandingPage() {
             <h2>Checklist. Talk it through. Send.</h2>
           </div>
           <ol className="how-rail" aria-label="Three steps from job walkthrough to sent quote">
-            <HowStep index="01" title="Walk the job" text="Capture details, rooms, and quantities." />
-            <HowStep index="02" title="Review the quote" text="Lines match your price book." />
-            <HowStep index="03" title="Send and track" text="See when it's viewed or accepted." />
+            <HowStep index="01" title="Pick the customer" text="Reuse the customer record, then name the job." />
+            <HowStep index="02" title="Review the quote" text="Lines match your price book before send." />
+            <HowStep index="03" title="Send and follow up" text="Track views, acceptance, deposits, and reminders." />
           </ol>
         </section>
 
@@ -180,6 +193,15 @@ function HowStep(props: { index: string; title: string; text: string }) {
         <p>{props.text}</p>
       </div>
     </li>
+  );
+}
+
+function LiveFeature(props: { title: string; text: string }) {
+  return (
+    <article className="live-feature">
+      <strong>{props.title}</strong>
+      <p>{props.text}</p>
+    </article>
   );
 }
 

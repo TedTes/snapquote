@@ -3,6 +3,7 @@ import { ScenarioPlayer } from "./engine/ScenarioPlayer";
 import { screenSide } from "./engine/playback";
 import { quoteFlowScenario } from "./scenarios/quoteFlowScenario";
 import { DemoCustomerScreen } from "./screens/DemoCustomerScreen";
+import { DemoCustomerProfileScreen } from "./screens/DemoCustomerProfileScreen";
 import { DemoDashboardScreen } from "./screens/DemoDashboardScreen";
 import { DemoDraftReviewScreen } from "./screens/DemoDraftReviewScreen";
 import { DemoJobScreen } from "./screens/DemoJobScreen";
@@ -18,7 +19,7 @@ import "./styles/demo-flow.css";
 const providerScenario = quoteFlowScenario.filter(
   (step) =>
     screenSide(step.screen) === "provider"
-    && ["dashboard", "customer", "job", "notes", "draftReview", "preview", "sent"].includes(step.screen),
+    && ["dashboard", "customer", "job", "notes", "draftReview", "preview", "sent", "quotes", "customerProfile"].includes(step.screen),
 );
 const customerScenario = quoteFlowScenario.filter((step) => screenSide(step.screen) === "customer");
 
@@ -62,6 +63,8 @@ function renderProviderScreen(state: DemoPlaybackState) {
       return <DemoSentScreen playback={state} />;
     case "quotes":
       return <DemoQuotesScreen />;
+    case "customerProfile":
+      return <DemoCustomerProfileScreen />;
     default:
       return null;
   }

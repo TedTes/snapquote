@@ -7,7 +7,7 @@ export const quoteFlowScenario: DemoScenarioStep[] = [
     action: "tapFab",
     durationMs: 1700,
     caption: "Tap the center plus",
-    voiceover: "The provider starts a quote from the same action available across the app.",
+    voiceover: "The provider starts from the dashboard, with follow-ups, ready drafts, and active quotes visible first.",
     events: [
       {
         id: "tap-fab",
@@ -25,8 +25,8 @@ export const quoteFlowScenario: DemoScenarioStep[] = [
     screen: "customer",
     action: "typeCustomer",
     durationMs: 2600,
-    caption: "Customer and job details, quickly",
-    voiceover: "Basic customer and job details create the quote shell before any pricing happens.",
+    caption: "Pick a customer, then name the job",
+    voiceover: "Customer records stay linked to quotes, while the job label keeps each card distinct.",
     events: [
       {
         id: "type-customer-name",
@@ -243,8 +243,16 @@ export const quoteFlowScenario: DemoScenarioStep[] = [
     id: "quotes-list",
     screen: "quotes",
     action: "openQuotes",
-    durationMs: 2200,
-    caption: "Back to the quote list",
-    voiceover: "The provider can see live quotes, prior revisions, and follow-up status.",
+    durationMs: 2600,
+    caption: "Quotes stay job-first",
+    voiceover: "The quote list shows the job as the title, customer as context, plus follow-up and revision status.",
+  },
+  {
+    id: "customer-profile",
+    screen: "customerProfile",
+    action: "openCustomer",
+    durationMs: 3200,
+    caption: "Customer history is one tap away",
+    voiceover: "Customer profiles keep call, email, quote history, resend, copy link, follow-up, and archive actions together.",
   },
 ];

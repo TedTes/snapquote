@@ -14,6 +14,7 @@ const screenSides: Record<DemoScreenId, DemoScreenSide> = {
   preview: "provider",
   sent: "provider",
   quotes: "provider",
+  customerProfile: "provider",
   customerEmail: "customer",
   publicQuote: "customer",
   payment: "customer",

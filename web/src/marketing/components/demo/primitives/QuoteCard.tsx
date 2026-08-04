@@ -29,7 +29,7 @@ export function QuoteCard({
   className,
 }: QuoteCardProps) {
   return (
-    <article className={cx("qv-demo-quote-card", muted && "is-muted", className)}>
+    <article className={cx("qv-demo-quote-card", `has-${trustState}`, muted && "is-muted", className)}>
       <TrustSwatch state={trustState} size="stripe" />
       <div className="qv-demo-quote-card-main">
         <div>

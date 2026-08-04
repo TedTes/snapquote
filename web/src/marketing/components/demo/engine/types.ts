@@ -9,6 +9,7 @@ export type DemoScreenId =
   | "preview"
   | "sent"
   | "quotes"
+  | "customerProfile"
   | "customerEmail"
   | "publicQuote"
   | "payment";
@@ -24,6 +25,7 @@ export type DemoActionId =
   | "sendQuote"
   | "trackViewed"
   | "openQuotes"
+  | "openCustomer"
   | "openEmail"
   | "openProposal"
   | "payDeposit"
