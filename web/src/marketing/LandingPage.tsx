@@ -16,7 +16,7 @@ export function LandingPage() {
             <span>QuoteVan</span>
           </a>
           <nav aria-label="Landing page" className="landing-nav-links">
-            <a href="#live">App demo</a>
+            <a href="#flow">App demo</a>
             <a href="#how">How it works</a>
             <a href="#customer">Customer view</a>
             <a href="#book">Price book</a>
