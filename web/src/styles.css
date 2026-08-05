@@ -204,6 +204,40 @@ h2 {
   background: #f7f4eb;
 }
 
+.quote-notice {
+  display: grid;
+  gap: 4px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5e0d6;
+  background: #fbfaf6;
+}
+
+.quote-notice strong {
+  color: #1d1c19;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.quote-notice span {
+  color: #646058;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.quote-notice.paid {
+  border-color: #b8ddcc;
+  background: #e6f3ed;
+}
+
+.quote-notice.paid strong {
+  color: #217052;
+}
+
+.quote-notice.muted {
+  background: #f7f4eb;
+}
+
 .payment-panel strong,
 .payment-panel span {
   display: block;

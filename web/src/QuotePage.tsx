@@ -79,11 +79,14 @@ type LoadState =
   | { kind: "error"; message: string }
   | { kind: "ready"; quote: PublicQuote };
 
+type PaymentNotice = "paid" | "cancelled" | null;
+
 export function QuotePage(props: { token: string }) {
   const { token } = props;
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [action, setAction] = useState<"accept" | "decline" | null>(null);
   const [paymentAction, setPaymentAction] = useState<"starting" | "confirming" | null>(null);
+  const [paymentNotice, setPaymentNotice] = useState<PaymentNotice>(null);
 
   useEffect(() => {
     let canceled = false;
@@ -106,6 +109,10 @@ export function QuotePage(props: { token: string }) {
             method: "POST",
             body: JSON.stringify({ sessionId: paymentSessionId })
           });
+          setPaymentNotice("paid");
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (paymentState === "cancelled") {
+          setPaymentNotice("cancelled");
           window.history.replaceState({}, document.title, window.location.pathname);
         }
 
@@ -197,6 +204,8 @@ export function QuotePage(props: { token: string }) {
           <Meta label="Valid Until" value={formatDate(quote.validUntil)} />
         </div>
 
+        <PaymentNoticeBanner notice={paymentNotice} quote={quote} />
+
         <section className="customer-section">
           <p className="section-label">Prepared for</p>
           <h2>{quote.customer?.name ?? "Customer"}</h2>
@@ -219,18 +228,18 @@ export function QuotePage(props: { token: string }) {
                 <strong>{line.description}</strong>
                 <span>{describeQuantity(line.quantity, line.unit)}</span>
               </div>
-              <strong>{line.unitPriceCents === null ? "$--" : formatMoney(Math.round(line.quantity * line.unitPriceCents))}</strong>
+              <strong>{line.unitPriceCents === null ? "$--" : formatMoney(Math.round(line.quantity * line.unitPriceCents), quoteCurrency(quote))}</strong>
             </div>
           ))}
         </section>
 
         <section className="totals">
-          <TotalRow label="Subtotal" value={formatMoney(quote.totals?.subtotalCents ?? null)} />
+          <TotalRow label="Subtotal" value={formatMoney(quote.totals?.subtotalCents ?? null, quoteCurrency(quote))} />
           {quote.totals && quote.totals.discountCents > 0 ? (
-            <TotalRow label="Discount" value={`-${formatMoney(quote.totals.discountCents)}`} />
+            <TotalRow label="Discount" value={`-${formatMoney(quote.totals.discountCents, quoteCurrency(quote))}`} />
           ) : null}
-          <TotalRow label={`Tax (${Math.round(quote.taxRate * 100)}%)`} value={formatMoney(quote.totals?.taxCents ?? null)} />
-          <TotalRow strong label="Total" value={formatMoney(quote.totals?.totalCents ?? null)} />
+          <TotalRow label={`Tax (${Math.round(quote.taxRate * 100)}%)`} value={formatMoney(quote.totals?.taxCents ?? null, quoteCurrency(quote))} />
+          <TotalRow strong label="Total" value={formatMoney(quote.totals?.totalCents ?? null, quoteCurrency(quote))} />
         </section>
 
         <section className="terms">
@@ -256,26 +265,44 @@ function depositAmountCents(quote: PublicQuote) {
   return payment.depositAmountCents ?? Math.round(totalCents * (payment.depositPercent / 100));
 }
 
+function remainingBalanceCents(quote: PublicQuote) {
+  const totalCents = quote.totals?.totalCents ?? null;
+
+  if (totalCents === null) {
+    return null;
+  }
+
+  return Math.max(0, totalCents - (quote.payment?.paidAmountCents ?? 0));
+}
+
+function quoteCurrency(quote: PublicQuote) {
+  return quote.payment?.currency ?? "USD";
+}
+
 function quoteIsExpired(quote: PublicQuote) {
   return new Date() > new Date(`${quote.validUntil}T23:59:59`);
 }
 
-function canStartDepositPayment(quote: PublicQuote) {
-  const payment = quote.payment;
-  const depositAmount = depositAmountCents(quote);
+function PaymentNoticeBanner(props: { notice: PaymentNotice; quote: PublicQuote }) {
+  if (props.quote.payment?.status === "paid") {
+    return (
+      <section className="quote-notice paid">
+        <strong>Quote accepted, deposit paid.</strong>
+        <span>Receipt sent. The service provider has been notified.</span>
+      </section>
+    );
+  }
 
-  return Boolean(
-    payment &&
-    payment.providerConnected &&
-    payment.status !== "paid" &&
-    depositAmount !== null &&
-    depositAmount > 0 &&
-    quote.status !== "accepted" &&
-    quote.status !== "declined" &&
-    quote.status !== "expired" &&
-    quote.status !== "superseded" &&
-    !quoteIsExpired(quote)
-  );
+  if (props.notice === "cancelled") {
+    return (
+      <section className="quote-notice muted">
+        <strong>Payment was cancelled.</strong>
+        <span>Your quote is still available. You can pay the deposit when ready.</span>
+      </section>
+    );
+  }
+
+  return null;
 }
 
 function PaymentPanel(props: {
@@ -286,18 +313,21 @@ function PaymentPanel(props: {
   const payment = props.quote.payment;
   const totalCents = props.quote.totals?.totalCents ?? null;
   const depositAmount = depositAmountCents(props.quote);
+  const currency = quoteCurrency(props.quote);
 
   if (!payment || totalCents === null || depositAmount === null || depositAmount <= 0) {
     return null;
   }
 
   if (payment.status === "paid") {
+    const remaining = remainingBalanceCents(props.quote);
+
     return (
       <section className="payment-panel paid">
         <div>
           <p className="section-label">Deposit</p>
-          <strong>{formatMoney(payment.paidAmountCents)} paid</strong>
-          <span>The sender has been notified.</span>
+          <strong>{formatMoney(payment.paidAmountCents, currency)} paid</strong>
+          <span>{remaining === null ? "Receipt sent. The sender has been notified." : `${formatMoney(remaining, currency)} remaining. Receipt sent.`}</span>
         </div>
       </section>
     );
@@ -308,7 +338,7 @@ function PaymentPanel(props: {
       <section className="payment-panel muted">
         <div>
           <p className="section-label">Deposit</p>
-          <strong>{formatMoney(depositAmount)} due to schedule</strong>
+          <strong>{formatMoney(depositAmount, currency)} due to schedule</strong>
           <span>Online payment is not enabled yet. Reply to the email to arrange payment.</span>
         </div>
       </section>
@@ -319,20 +349,30 @@ function PaymentPanel(props: {
     return null;
   }
 
+  if (props.quote.status !== "accepted") {
+    return (
+      <section className="payment-panel muted">
+        <div>
+          <p className="section-label">Deposit</p>
+          <strong>{formatMoney(depositAmount, currency)} due to schedule</strong>
+          <span>Accept the quote first, then pay online. Secure payment by Stripe.</span>
+        </div>
+      </section>
+    );
+  }
+
   const buttonLabel = props.action === "confirming"
     ? "Confirming payment..."
     : props.action === "starting"
-      ? "Opening checkout..."
-      : props.quote.status === "accepted"
-        ? `Pay ${formatMoney(depositAmount)} deposit`
-        : `Accept & pay ${formatMoney(depositAmount)} deposit`;
+      ? "Opening secure checkout..."
+      : `Pay ${formatMoney(depositAmount, currency)} deposit`;
 
   return (
     <section className="payment-panel">
       <div>
         <p className="section-label">Deposit</p>
-        <strong>{formatMoney(depositAmount)} due to schedule</strong>
-        <span>Secure card checkout. Your payment goes to the service provider.</span>
+        <strong>{formatMoney(depositAmount, currency)} due to schedule</strong>
+        <span>Secure payment by Stripe. Apple Pay, Google Pay, Link, and cards are available when supported.</span>
       </div>
       <button disabled={props.action !== null} onClick={() => void props.onPay()}>{buttonLabel}</button>
     </section>
@@ -345,11 +385,13 @@ function ResponsePanel(props: {
   onRespond: (action: "accept" | "decline") => Promise<void>;
 }) {
   if (props.quote.status === "accepted") {
+    const paid = props.quote.payment?.status === "paid";
+
     return (
       <div className="response-wrap">
         <div className="response accepted">
-          <strong>Quote accepted</strong>
-          <span>The sender has been notified.</span>
+          <strong>{paid ? "Quote accepted and deposit paid" : "Quote accepted"}</strong>
+          <span>{paid ? "Receipt sent. The sender has been notified." : "The sender has been notified. You can pay the deposit above."}</span>
         </div>
       </div>
     );
@@ -378,20 +420,6 @@ function ResponsePanel(props: {
       </div>
     );
   }
-
-  if (canStartDepositPayment(props.quote)) {
-    return (
-      <div className="response-wrap">
-        <div className="actions deposit-response-actions">
-          <button className="decline" disabled={props.action !== null} onClick={() => void props.onRespond("decline")}>
-            {props.action === "decline" ? "Declining..." : "Decline quote"}
-          </button>
-        </div>
-        <p className="action-note">Paying the deposit accepts the quote and notifies the sender.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="response-wrap">
       <div className="actions">
@@ -463,14 +491,19 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return await response.json() as T;
 }
 
-function formatMoney(cents: number | null) {
+function formatMoney(cents: number | null, currency = "USD") {
   if (cents === null) return "$--";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency: normalizeCurrencyCode(currency),
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   }).format(cents / 100);
+}
+
+function normalizeCurrencyCode(currency: string) {
+  const normalized = currency.trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(normalized) ? normalized : "USD";
 }
 
 function formatDate(iso: string) {
