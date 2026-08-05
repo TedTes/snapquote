@@ -59,7 +59,7 @@ export default function OnboardingScreen() {
 
         if (!cancelled && suggestedValues && !hasEditedCorePrices.current) {
           setCorePriceValues(suggestedValues);
-          setSuggestionNotice("Published starter suggestions loaded. Confirm or edit before use.");
+          setSuggestionNotice("Editable starter defaults loaded. These are not market rates; confirm or edit before use.");
         }
       } catch {
         if (!cancelled) {

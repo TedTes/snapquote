@@ -360,7 +360,7 @@ function EmptyPriceBookState(props: {
       <Text style={styles.emptyHeadline}>Build your price book</Text>
       <Text style={styles.emptyCopy}>
         This is where your prices live. QuoteVan drafts the scope of a job, but
-        pulls every dollar from here — so it never guesses.
+        pulls every dollar from here — so it never guesses or uses market-rate estimates.
       </Text>
 
       <Pressable
@@ -402,8 +402,8 @@ function ZeroRealPricesCard(props: {
       <View style={styles.zeroRealBody}>
         <Text style={styles.zeroRealTitle}>No confirmed prices yet</Text>
         <Text style={styles.zeroRealText}>
-          Confirm starter prices or add one custom item. Only confirmed prices
-          can match green on quotes.
+          Starter prices are editable defaults, not market rates. Confirm or
+          edit them before they match green on quotes.
         </Text>
       </View>
       <View style={styles.zeroRealActions}>
@@ -691,7 +691,7 @@ function PriceItemModal(props: {
       </Text>
       <Text style={styles.sheetSubtitle}>
         {item.confirmedAt === null
-          ? "Review the details once. Confirmed items match green next time."
+          ? "This is an editable starter default, not a market rate. Confirmed items match green next time."
           : "Keep the item name and price current for future quotes."}
       </Text>
 
