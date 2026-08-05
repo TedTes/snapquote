@@ -18,6 +18,7 @@ import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View
 import { getTradeConfig } from "@snapquote/shared";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import { Screen } from "../../shared-ui/base";
+import { InlineProgressPanel } from "../../shared-ui/ProgressExperience";
 import { colors, radius } from "../../shared-ui/theme";
 import { businessInitials } from "../../utils/format";
 import { useQuoteStore } from "../../state/quoteStore";
@@ -32,6 +33,7 @@ type PaymentConnectionState = {
   payoutsEnabled: boolean;
   connected: boolean;
 };
+type PaymentSetupPhase = "idle" | "checking" | "preparing" | "opening";
 
 export default function SettingsScreen() {
   const businessName = useQuoteStore((state) => state.businessName);
@@ -46,6 +48,7 @@ export default function SettingsScreen() {
   const authStatus = useAuthStore((state) => state.status);
   const setMe = useAuthStore((state) => state.setMe);
   const [paymentRefreshing, setPaymentRefreshing] = useState(false);
+  const [paymentSetupPhase, setPaymentSetupPhase] = useState<PaymentSetupPhase>("idle");
   const [paymentStatusKnown, setPaymentStatusKnown] = useState(false);
   const [paymentConnection, setPaymentConnection] = useState<PaymentConnectionState | null>(null);
   const tradeConfig = getTradeConfig(activeTrade);
@@ -58,6 +61,7 @@ export default function SettingsScreen() {
   };
   const paymentStatus = paymentState.connected ? "connected" : paymentState.accountId ? "pending" : "setup";
   const isCheckingPaymentStatus = authStatus === "signed_in" && (!paymentStatusKnown || paymentRefreshing);
+  const isOpeningPaymentSetup = paymentSetupPhase !== "idle";
 
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const totalCount = priceBookItems.length;
@@ -118,6 +122,7 @@ export default function SettingsScreen() {
     }
 
     try {
+      setPaymentSetupPhase("checking");
       const status = await snapquoteApi.paymentConnectStatus();
       setPaymentConnection({
         accountId: status.accountId,
@@ -134,13 +139,17 @@ export default function SettingsScreen() {
         return;
       }
 
+      setPaymentSetupPhase("preparing");
       const onboarding = await snapquoteApi.startPaymentConnectOnboarding();
       if (!onboarding.url.startsWith("https://") && !onboarding.url.startsWith("http://")) {
         throw new Error("Payment setup link is not ready yet.");
       }
+      setPaymentSetupPhase("opening");
       await Linking.openURL(onboarding.url);
     } catch (error) {
       Alert.alert("Could not open payment setup", userFacingErrorMessage(error));
+    } finally {
+      setPaymentSetupPhase("idle");
     }
   }
 
@@ -227,9 +236,11 @@ export default function SettingsScreen() {
 
         <SettingsSection label="Sending">
           <SettingsRow
-            customValue={<ConnectionBadge loading={isCheckingPaymentStatus} status={paymentStatus} />}
+            customValue={<ConnectionBadge loading={isCheckingPaymentStatus || isOpeningPaymentSetup} status={paymentStatus} />}
             detail={
-              isCheckingPaymentStatus
+              isOpeningPaymentSetup
+                ? "Preparing secure Stripe setup..."
+                : isCheckingPaymentStatus
                 ? "Checking Stripe status..."
                 : paymentStatus === "connected"
                   ? "Customers can pay quote deposits"
@@ -241,6 +252,14 @@ export default function SettingsScreen() {
             label="Online deposits"
             onPress={() => void openPaymentSetup()}
           />
+          {isOpeningPaymentSetup ? (
+            <View style={styles.paymentProgressWrap}>
+              <InlineProgressPanel
+                helper="You will finish account verification on Stripe."
+                title="Preparing online deposits"
+              />
+            </View>
+          ) : null}
           <SettingsRow
             customValue={<VerifiedBadge />}
             detail={senderEmail}
@@ -444,6 +463,12 @@ const styles = StyleSheet.create({
   },
   rowLast: {
     borderBottomWidth: 0
+  },
+  paymentProgressWrap: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    padding: 12,
+    paddingTop: 0
   },
   rowIcon: {
     alignItems: "center",

@@ -15,6 +15,7 @@ import { deriveCustomerCity, getTradeConfig, inferQuoteWorkType, type PainterChe
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { AnimatedScreenContent } from "../../shared-ui/AnimatedScreenContent";
 import { Screen } from "../../shared-ui/base";
+import { ProgressModal } from "../../shared-ui/ProgressExperience";
 import {
   NewQuoteHeader,
   NewQuoteTitle,
@@ -287,6 +288,11 @@ export default function NewQuoteTranscriptScreen() {
           <Text style={styles.backToNotesText}>← Back to notes</Text>
         </Pressable>
       </View>
+      <ProgressModal
+        helper="QuoteVan is preparing editable line items from this job."
+        title="Building quote"
+        visible={generating}
+      />
     </Screen>
   );
 }

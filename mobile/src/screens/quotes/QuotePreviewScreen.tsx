@@ -17,6 +17,7 @@ import {
   AnimatedSheetContent,
   SheetModal,
 } from "../../shared-ui/AnimatedSheet";
+import { InlineProgressPanel } from "../../shared-ui/ProgressExperience";
 import {
   Banner,
   Card,
@@ -418,6 +419,13 @@ export default function QuotePreviewScreen() {
           </Card>
 
           <Banner tone="green">All lines priced — safe to send.</Banner>
+
+          {sending ? (
+            <InlineProgressPanel
+              helper="The customer gets a private quote link by email."
+              title="Sending quote"
+            />
+          ) : null}
 
           <PrimaryButton
             disabled={!customer?.email || sending}

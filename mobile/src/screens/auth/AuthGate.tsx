@@ -1,8 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import * as Linking from "expo-linking";
 import { router, usePathname } from "expo-router";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
-import { colors } from "../../shared-ui/theme";
+import { AppLoadingScreen } from "../../shared-ui/ProgressExperience";
 import { useAuthStore } from "../../state/authStore";
 
 export function AuthGate(props: { children: ReactNode }) {
@@ -69,21 +68,8 @@ export function AuthGate(props: { children: ReactNode }) {
   }, [isAuthRoute, isCallbackRoute, isOnboardingRoute, me?.org.setupCompletedAt, status]);
 
   if (status === "loading") {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.ink} />
-      </View>
-    );
+    return <AppLoadingScreen />;
   }
 
   return props.children;
 }
-
-const styles = StyleSheet.create({
-  loading: {
-    alignItems: "center",
-    backgroundColor: colors.bg,
-    flex: 1,
-    justifyContent: "center",
-  },
-});
