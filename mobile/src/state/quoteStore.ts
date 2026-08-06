@@ -214,6 +214,7 @@ type QuoteStoreState = {
     patch: {
       name?: string;
       description?: string;
+      unit?: PriceBookItem["unit"];
       pricing?: PriceBookPricing;
     },
   ) => void;
@@ -791,6 +792,7 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
           ...(patch.description !== undefined
             ? { description: patch.description }
             : {}),
+          ...(patch.unit !== undefined ? { unit: patch.unit } : {}),
           ...(patch.pricing !== undefined ? { pricing: patch.pricing } : {}),
           updatedAt: now,
         };

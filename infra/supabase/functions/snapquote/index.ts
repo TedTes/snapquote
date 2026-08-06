@@ -299,6 +299,7 @@ const quotePatchSchema = z.object({
 const priceBookPatchSchema = z.object({
   name: z.string().trim().min(1).max(160).optional(),
   description: z.string().trim().max(1000).optional(),
+  unit: z.enum(["room", "each", "hour", "flat", "sqft", "lnft", "day"]).optional(),
   pricing: pricingSchema.optional(),
   confirmed: z.boolean().optional()
 });
@@ -2017,6 +2018,10 @@ async function updatePriceBookItem(db: SupabaseClient, request: Request, id: str
 
   if (input.description !== undefined) {
     patch.description = input.description;
+  }
+
+  if (input.unit !== undefined) {
+    patch.unit = input.unit;
   }
 
   if (input.confirmed !== undefined) {

@@ -14,7 +14,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from "react-native";
@@ -25,12 +24,12 @@ import {
 import { AnimatedSheetContent, SheetModal } from "../../shared-ui/AnimatedSheet";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import {
-  Field,
-  PrimaryButton,
   Screen,
   SwatchTab,
 } from "../../shared-ui/base";
-import { colors, radius, shadowLg, spacing } from "../../shared-ui/theme";
+import { SectionHeader } from "../../shared-ui/layout";
+import { AppText } from "../../shared-ui/text";
+import { colors, fontStyles, radius, shadowLg, spacing, typography } from "../../shared-ui/theme";
 import { centsToDollars, dollarsToCents, useQuoteStore } from "../../state/quoteStore";
 import { useAuthStore } from "../../state/authStore";
 import { formatMoney } from "../../utils/format";
@@ -75,6 +74,7 @@ export default function PriceBookScreen() {
     input: {
       name: string;
       description: string;
+      unit: PriceBookItem["unit"];
       pricing: PriceBookItem["pricing"];
     },
   ) {
@@ -186,11 +186,20 @@ export default function PriceBookScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.header}>
-              <View style={styles.titleRow}>
-                <Text style={styles.title}>Price book</Text>
-                <Text style={styles.itemCount}>
-                  {priceBookItems.length} items
-                </Text>
+              <View style={styles.headerStatus}>
+                <View
+                  style={[
+                    styles.headerStatusDot,
+                    starterCount > 0 ? styles.headerStatusDotReview : null,
+                  ]}
+                />
+                <AppText style={styles.headerStatusText} variant="headerSummary">
+                  {priceBookHeaderSummary({
+                    confirmedCount,
+                    starterCount,
+                    totalCount: priceBookItems.length,
+                  })}
+                </AppText>
               </View>
               <View style={styles.headerActions}>
                 <Pressable
@@ -247,6 +256,7 @@ export default function PriceBookScreen() {
                       void saveExistingPrice(item, {
                         name: item.name,
                         description: item.description,
+                        unit: item.unit,
                         pricing,
                       });
                     }}
@@ -260,9 +270,15 @@ export default function PriceBookScreen() {
       ) : (
         <View style={styles.emptyScreen}>
           <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title}>Price book</Text>
-              <Text style={styles.itemCount}>0 items</Text>
+            <View style={styles.headerStatus}>
+              <View style={[styles.headerStatusDot, styles.headerStatusDotEmpty]} />
+              <AppText style={styles.headerStatusText} variant="headerSummary">
+                {priceBookHeaderSummary({
+                  confirmedCount: 0,
+                  starterCount: 0,
+                  totalCount: 0,
+                })}
+              </AppText>
             </View>
           </View>
 
@@ -282,6 +298,7 @@ export default function PriceBookScreen() {
         {editingItem ? (
           <PriceItemModal
             item={editingItem}
+            key={editingItem.id}
             onClose={() => setEditingItemId(null)}
             archiving={archivingItemId === editingItem.id}
             saving={
@@ -324,10 +341,12 @@ function BookStrengthCard(props: {
   return (
     <View style={styles.strengthCard}>
       <View style={styles.strengthTop}>
-        <Text style={styles.strengthLabel}>Book strength</Text>
-        <Text style={styles.strengthCount}>
+        <AppText style={styles.strengthLabel} variant="sectionLabel">
+          Book strength
+        </AppText>
+        <AppText style={styles.strengthCount} variant="rowTitle">
           {props.confirmedCount} of {props.totalCount} confirmed
-        </Text>
+        </AppText>
       </View>
       <View style={styles.strengthBars}>
         {segments.map((index) => (
@@ -357,11 +376,13 @@ function EmptyPriceBookState(props: {
         <BookOpen color={colors.ink} size={42} strokeWidth={1.9} />
       </View>
 
-      <Text style={styles.emptyHeadline}>Build your price book</Text>
-      <Text style={styles.emptyCopy}>
+      <AppText style={styles.emptyHeadline} variant="rowTitle">
+        Build your price book
+      </AppText>
+      <AppText style={styles.emptyCopy} variant="body">
         This is where your prices live. QuoteVan drafts the scope of a job, but
         pulls every dollar from here — so it never guesses or uses market-rate estimates.
-      </Text>
+      </AppText>
 
       <Pressable
         accessibilityRole="button"
@@ -369,7 +390,9 @@ function EmptyPriceBookState(props: {
         style={styles.emptyPrimary}
       >
         <Plus color={colors.onDark} size={16} strokeWidth={2.8} />
-        <Text style={styles.emptyPrimaryText}>Set up starter prices</Text>
+        <AppText style={styles.emptyPrimaryText} tone="onDark" variant="button">
+          Set up starter prices
+        </AppText>
       </Pressable>
 
       <Pressable
@@ -377,14 +400,16 @@ function EmptyPriceBookState(props: {
         hitSlop={10}
         onPress={props.onAddManual}
       >
-        <Text style={styles.manualLink}>Or add an item manually</Text>
+        <AppText style={styles.manualLink} variant="button">
+          Or add an item manually
+        </AppText>
       </Pressable>
 
       <View style={styles.emptyLock}>
         <Lock color={colors.ink3} size={11} />
-        <Text style={styles.emptyLockText}>
+        <AppText style={styles.emptyLockText} variant="meta">
           Prices come only from your book or you
-        </Text>
+        </AppText>
       </View>
     </View>
   );
@@ -400,11 +425,13 @@ function ZeroRealPricesCard(props: {
         <BookOpen color={colors.green} size={22} strokeWidth={2} />
       </View>
       <View style={styles.zeroRealBody}>
-        <Text style={styles.zeroRealTitle}>No confirmed prices yet</Text>
-        <Text style={styles.zeroRealText}>
+        <AppText style={styles.zeroRealTitle} variant="rowTitle">
+          No confirmed prices yet
+        </AppText>
+        <AppText style={styles.zeroRealText} variant="body">
           Starter prices are editable defaults, not market rates. Confirm or
           edit them before they match green on quotes.
-        </Text>
+        </AppText>
       </View>
       <View style={styles.zeroRealActions}>
         <Pressable
@@ -412,7 +439,9 @@ function ZeroRealPricesCard(props: {
           onPress={props.onStarterSetup}
           style={styles.zeroRealPrimary}
         >
-          <Text style={styles.zeroRealPrimaryText}>Setup</Text>
+          <AppText style={styles.zeroRealPrimaryText} tone="onDark" variant="button">
+            Setup
+          </AppText>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -433,10 +462,7 @@ function PriceBookSection(props: {
 }) {
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionLabel}>{props.label}</Text>
-        <Text style={styles.sectionCount}>{props.count}</Text>
-      </View>
+      <SectionHeader count={props.count} label={props.label} />
       <View style={styles.sectionCards}>{props.children}</View>
     </View>
   );
@@ -455,14 +481,16 @@ function ActivePriceItem(props: {
     >
       <View style={[styles.rowStripe, { backgroundColor: colors.green }]} />
       <View style={styles.priceBody}>
-        <Text style={styles.itemName} numberOfLines={1}>
+        <AppText style={styles.itemName} numberOfLines={1} variant="rowTitle">
           {props.item.name}
-        </Text>
-        <Text style={styles.itemSub} numberOfLines={1}>
+        </AppText>
+        <AppText style={styles.itemSub} numberOfLines={1} variant="rowSubtitle">
           {itemMetaSummary(props.item)}
-        </Text>
+        </AppText>
       </View>
-      <Text style={styles.itemPrice}>{priceAmountLabel(props.item)}</Text>
+      <AppText style={styles.itemPrice} variant="amount">
+        {priceAmountLabel(props.item)}
+      </AppText>
       <ChevronRight color={colors.ink3} size={15} strokeWidth={2.2} />
     </Pressable>
   );
@@ -500,15 +528,17 @@ function StarterPriceItem(props: {
         onPress={props.onEdit}
         style={styles.priceBody}
       >
-        <Text style={styles.itemName} numberOfLines={1}>
+        <AppText style={styles.itemName} numberOfLines={1} variant="rowTitle">
           {props.item.name}
-        </Text>
-        <Text style={styles.itemSub} numberOfLines={1}>
+        </AppText>
+        <AppText style={styles.itemSub} numberOfLines={1} variant="rowSubtitle">
           {itemMetaSummary(props.item)}
-        </Text>
+        </AppText>
       </Pressable>
       <View style={styles.starterPriceInline}>
-        <Text style={styles.starterCurrency}>$</Text>
+        <AppText style={styles.starterCurrency} tone="amber" variant="amount">
+          $
+        </AppText>
         <TextInput
           accessibilityLabel={`${props.item.name} starter price`}
           editable={!props.saving}
@@ -633,27 +663,86 @@ function PriceItemModal(props: {
   onSave: (input: {
     name: string;
     description: string;
+    unit: PriceBookItem["unit"];
     pricing: PriceBookItem["pricing"];
   }) => void;
   saving: boolean;
 }) {
   const { item } = props;
   const pricing = item.pricing;
-  const isRoomSize = pricing.type === "room_size";
-  const [name, setName] = useState(item.name);
-  const [description, setDescription] = useState(item.description);
-  const [small, setSmall] = useState(
-    pricing.type === "room_size" ? centsToDollars(pricing.prices.small) : "",
-  );
-  const [medium, setMedium] = useState(
-    pricing.type === "room_size"
-      ? centsToDollars(pricing.prices.medium)
-      : centsToDollars(pricing.unitPriceCents),
-  );
-  const [large, setLarge] = useState(
-    pricing.type === "room_size" ? centsToDollars(pricing.prices.large) : "",
-  );
-  const canSave = name.trim().length > 0 && medium.trim().length > 0;
+  const initialMediumCents = pricing.type === "room_size" ? pricing.prices.medium : pricing.unitPriceCents;
+  const initialRoomPrices =
+    pricing.type === "room_size" ? pricing.prices : roomSizePricesFromActive("medium", initialMediumCents);
+  const [name, setName] = useState(() => shortPriceItemLabel(item));
+  const [description, setDescription] = useState(() => {
+    const trimmedDescription = item.description.trim();
+    return trimmedDescription.length > 0 ? item.description : item.name;
+  });
+  const [unit, setUnit] = useState<(typeof quoteUnits)[number]>(item.unit);
+  const [activeSize, setActiveSize] = useState<RoomSize>("medium");
+  const [small, setSmall] = useState(centsToDollars(initialRoomPrices.small));
+  const [medium, setMedium] = useState(centsToDollars(initialRoomPrices.medium));
+  const [large, setLarge] = useState(centsToDollars(initialRoomPrices.large));
+  const trimmedName = name.trim();
+  const isRoomSize = unit === "room";
+  const activePrice = isRoomSize
+    ? activeSize === "small"
+      ? small
+      : activeSize === "large"
+        ? large
+        : medium
+    : medium;
+  const roomPrices = {
+    small: dollarsToCents(small),
+    medium: dollarsToCents(medium),
+    large: dollarsToCents(large),
+  };
+  const primaryLabel = props.saving ? (props.archiving ? "Archiving..." : "Saving...") : "Save changes";
+  const canSave =
+    trimmedName.length > 0 &&
+    trimmedName.length <= editItemNameMaxLength &&
+    (isRoomSize
+      ? small.trim().length > 0 && medium.trim().length > 0 && large.trim().length > 0
+      : medium.trim().length > 0);
+
+  function selectUnit(nextUnit: (typeof quoteUnits)[number]) {
+    if (nextUnit === unit) {
+      return;
+    }
+
+    if (nextUnit === "room") {
+      const nextRoomPrices = roomSizePricesFromActive("medium", dollarsToCents(medium));
+      setSmall(centsToDollars(nextRoomPrices.small));
+      setMedium(centsToDollars(nextRoomPrices.medium));
+      setLarge(centsToDollars(nextRoomPrices.large));
+      setActiveSize("medium");
+    }
+
+    setUnit(nextUnit);
+  }
+
+  function updateActivePrice(value: string) {
+    if (!isRoomSize) {
+      setMedium(value);
+      return;
+    }
+
+    if (activeSize === "small") {
+      setSmall(value);
+      return;
+    }
+
+    if (activeSize === "large") {
+      setLarge(value);
+      return;
+    }
+
+    setMedium(value);
+  }
+
+  function selectSize(size: RoomSize) {
+    setActiveSize(size);
+  }
 
   function save() {
     if (!canSave || props.saving) {
@@ -662,113 +751,164 @@ function PriceItemModal(props: {
 
     if (isRoomSize) {
       props.onSave({
-        name: name.trim(),
+        name: trimmedName,
         description: description.trim(),
+        unit,
         pricing: {
           type: "room_size",
-          prices: {
-            small: dollarsToCents(small),
-            medium: dollarsToCents(medium),
-            large: dollarsToCents(large),
-          },
+          prices: roomPrices,
         },
       });
       return;
     }
 
     props.onSave({
-      name: name.trim(),
+      name: trimmedName,
       description: description.trim(),
+      unit,
       pricing: { type: "fixed", unitPriceCents: dollarsToCents(medium) },
     });
   }
 
   return (
-    <AnimatedSheetContent style={styles.sheet}>
+    <AnimatedSheetContent style={styles.editSheet}>
       <View style={styles.grabber} />
-      <Text style={styles.sheetTitle}>
-        {item.confirmedAt === null ? "Confirm starter price" : "Edit price"}
-      </Text>
-      <Text style={styles.sheetSubtitle}>
-        {item.confirmedAt === null
-          ? "This is an editable starter default, not a market rate. Confirmed items match green next time."
-          : "Keep the item name and price current for future quotes."}
-      </Text>
 
-      <Field label="Item name" onChangeText={setName} value={name} />
-      <Field
-        label="Description"
-        onChangeText={setDescription}
-        placeholder="Optional note for matching and context"
-        value={description}
-      />
-
-      {isRoomSize ? (
-        <View style={styles.row}>
-          <View style={styles.rowItem}>
-            <Field
-              keyboardType="decimal-pad"
-              label="Small $"
-              onChangeText={setSmall}
-              value={small}
-            />
-          </View>
-          <View style={styles.rowItem}>
-            <Field
-              keyboardType="decimal-pad"
-              label="Medium $"
-              onChangeText={setMedium}
-              value={medium}
-            />
-          </View>
-          <View style={styles.rowItem}>
-            <Field
-              keyboardType="decimal-pad"
-              label="Large $"
-              onChangeText={setLarge}
-              value={large}
-            />
-          </View>
+      <ScrollView contentContainerStyle={styles.editSheetScroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.editHeader}>
+          <AppText style={styles.editSheetTitle} variant="panelTitle">
+            Edit price
+          </AppText>
+          <AppText style={styles.editSheetSubtitle} variant="body">
+            Keep the name and price current so it auto-matches on future quotes.
+          </AppText>
         </View>
-      ) : (
-        <Field
-          keyboardType="decimal-pad"
-          label={`Price ($ / ${item.unit})`}
-          onChangeText={setMedium}
-          value={medium}
-        />
-      )}
 
-      <PrimaryButton
-        disabled={!canSave || props.saving}
-        label={
-          props.saving
-            ? props.archiving
-              ? "Archiving..."
-              : "Saving..."
-            : item.confirmedAt === null
-              ? "Confirm price"
-              : "Save changes"
-        }
-        onPress={save}
-      />
-      <Pressable
-        accessibilityRole="button"
-        disabled={props.saving}
-        onPress={props.onArchive}
-        style={styles.archiveLink}
-      >
-        <Archive color={colors.red} size={14} strokeWidth={2.4} />
-        <Text style={styles.archiveLinkText}>Archive item</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        disabled={props.saving}
-        onPress={props.onClose}
-        style={styles.cancelLink}
-      >
-        <Text style={styles.cancelLinkText}>Cancel</Text>
-      </Pressable>
+        <View style={styles.editSection}>
+          <View style={styles.editFieldHeader}>
+            <AppText style={styles.editFieldLabel} variant="sectionLabel">
+              Item name
+            </AppText>
+            <AppText style={styles.editCharCount} variant="meta">
+              {trimmedName.length} / {editItemNameMaxLength}
+            </AppText>
+          </View>
+          <TextInput
+            accessibilityLabel="Price book item name"
+            autoCorrect={false}
+            maxLength={editItemNameMaxLength}
+            onChangeText={setName}
+            placeholder="Surface prep"
+            placeholderTextColor={colors.ink3}
+            returnKeyType="done"
+            style={styles.editNameInput}
+            value={name}
+          />
+        </View>
+
+        <View style={styles.editSection}>
+          <AppText style={styles.editFieldLabel} variant="sectionLabel">
+            Unit
+          </AppText>
+          <View style={styles.editUnitRowWrap}>
+            <ScrollView contentContainerStyle={styles.editUnitRow} horizontal showsHorizontalScrollIndicator={false}>
+              {quoteUnits.map((option) => (
+                <EditUnitChip
+                  active={unit === option}
+                  key={option}
+                  label={unitChipDisplay(option)}
+                  onPress={() => selectUnit(option)}
+                />
+              ))}
+            </ScrollView>
+            <View pointerEvents="none" style={styles.editUnitScrollHint}>
+              <ChevronRight color={colors.ink3} size={14} strokeWidth={2.4} />
+            </View>
+          </View>
+
+          <AppText style={styles.editFieldLabel} variant="sectionLabel">
+            {priceInputLabel(unit, activeSize)}
+          </AppText>
+          <View style={styles.editPriceInputWrap}>
+            <AppText style={styles.editCurrency} variant="rowSubtitle">
+              $
+            </AppText>
+            <TextInput
+              accessibilityLabel="Price"
+              keyboardType="decimal-pad"
+              onChangeText={updateActivePrice}
+              placeholder="300"
+              placeholderTextColor={colors.ink3}
+              style={styles.editPriceInput}
+              value={activePrice}
+            />
+          </View>
+
+          {isRoomSize ? (
+            <RoomSizePricingCard
+              activeSize={activeSize}
+              onSelectSize={selectSize}
+              prices={roomPrices}
+            />
+          ) : null}
+        </View>
+
+        <View style={styles.editSection}>
+          <View style={styles.editDescriptionHeader}>
+            <AppText style={styles.editFieldLabel} variant="sectionLabel">
+              Description
+            </AppText>
+            <AppText style={styles.editDescriptionHint} variant="meta">
+              optional · shown on quote
+            </AppText>
+          </View>
+          <TextInput
+            accessibilityLabel="Price book item description"
+            multiline
+            onChangeText={setDescription}
+            placeholder="Clean, sand, and patch minor imperfections before painting."
+            placeholderTextColor={colors.ink3}
+            style={styles.editDescriptionInput}
+            value={description}
+          />
+        </View>
+      </ScrollView>
+
+      <View style={styles.editFooter}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={!canSave || props.saving}
+          onPress={save}
+          style={[styles.editPrimary, !canSave || props.saving ? styles.editPrimaryDisabled : null]}
+        >
+          <AppText style={styles.editPrimaryText} tone="onDark" variant="primaryAction">
+            {primaryLabel}
+          </AppText>
+        </Pressable>
+        <View style={styles.editFooterSecondary}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={props.saving}
+            onPress={props.onArchive}
+            style={styles.archiveTextButton}
+          >
+            <Archive color={colors.red} size={14} strokeWidth={2.4} />
+            <AppText style={styles.archiveLinkText} tone="red" variant="button">
+              Archive item
+            </AppText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={props.saving}
+            onPress={props.onClose}
+            style={styles.cancelTextButton}
+          >
+            <AppText style={styles.cancelLinkText} variant="button">
+              Cancel
+            </AppText>
+          </Pressable>
+        </View>
+      </View>
     </AnimatedSheetContent>
   );
 }
@@ -837,7 +977,9 @@ function AddItemModal(props: {
     <AnimatedSheetContent style={styles.addItemSheet}>
       <View style={styles.grabber} />
       <View style={styles.addSheetHeader}>
-        <Text style={styles.addSheetTitle}>Add price book item</Text>
+        <AppText style={styles.addSheetTitle} variant="panelTitle">
+          Add price book item
+        </AppText>
         <Pressable
           accessibilityLabel="Close add price book item"
           accessibilityRole="button"
@@ -851,8 +993,12 @@ function AddItemModal(props: {
 
       <ScrollView contentContainerStyle={styles.addSheetScroll} showsVerticalScrollIndicator={false}>
         <View style={styles.addFieldHeader}>
-          <Text style={styles.addFieldLabel}>Name</Text>
-          <Text style={styles.charCount}>{trimmedName.length} / 60</Text>
+          <AppText style={styles.addFieldLabel} variant="sectionLabel">
+            Name
+          </AppText>
+          <AppText style={styles.charCount} variant="meta">
+            {trimmedName.length} / 60
+          </AppText>
         </View>
         <TextInput
           accessibilityLabel="Price book item name"
@@ -866,7 +1012,9 @@ function AddItemModal(props: {
           value={name}
         />
 
-        <Text style={styles.addFieldLabel}>Unit</Text>
+        <AppText style={styles.addFieldLabel} variant="sectionLabel">
+          Unit
+        </AppText>
         <ScrollView
           contentContainerStyle={styles.addUnitRow}
           horizontal
@@ -882,11 +1030,13 @@ function AddItemModal(props: {
           ))}
         </ScrollView>
 
-        <Text style={styles.addFieldLabel}>
+        <AppText style={styles.addFieldLabel} variant="sectionLabel">
           {isRoomSize ? `Price per ${activeSize} room` : `Price per ${unitChipDisplay(unit)}`}
-        </Text>
+        </AppText>
         <View style={styles.addPriceInputWrap}>
-          <Text style={styles.addCurrency}>$</Text>
+          <AppText style={styles.addCurrency} variant="rowSubtitle">
+            $
+          </AppText>
           <TextInput
             accessibilityLabel="Price"
             keyboardType="decimal-pad"
@@ -924,9 +1074,9 @@ function AddItemModal(props: {
           onPress={save}
           style={[styles.addSheetPrimary, !canSave || props.saving ? styles.addSheetPrimaryDisabled : null]}
         >
-          <Text style={styles.addSheetPrimaryText}>
+          <AppText style={styles.addSheetPrimaryText} tone="onDark" variant="primaryAction">
             {props.saving ? "Adding..." : "Add to price book"}
-          </Text>
+          </AppText>
         </Pressable>
       </View>
     </AnimatedSheetContent>
@@ -940,9 +1090,31 @@ function UnitChip(props: { active: boolean; label: string; onPress: () => void }
       onPress={props.onPress}
       style={[styles.addUnitChip, props.active ? styles.addUnitChipActive : null]}
     >
-      <Text style={[styles.addUnitChipText, props.active ? styles.addUnitChipTextActive : null]}>
+      <AppText
+        style={[styles.addUnitChipText, props.active ? styles.addUnitChipTextActive : null]}
+        tone={props.active ? "onDark" : "secondary"}
+        variant="button"
+      >
         {props.label}
-      </Text>
+      </AppText>
+    </Pressable>
+  );
+}
+
+function EditUnitChip(props: { active: boolean; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={props.onPress}
+      style={[styles.editUnitChip, props.active ? styles.editUnitChipActive : null]}
+    >
+      <AppText
+        style={[styles.editUnitChipText, props.active ? styles.editUnitChipTextActive : null]}
+        tone={props.active ? "onDark" : "secondary"}
+        variant="button"
+      >
+        {props.label}
+      </AppText>
     </Pressable>
   );
 }
@@ -956,7 +1128,9 @@ function RoomSizePricingCard(props: {
     <View style={styles.roomPricingCard}>
       <View style={styles.roomPricingHeader}>
         <RoomPricingMeterIcon />
-        <Text style={styles.roomPricingTitle}>Room size pricing</Text>
+        <AppText style={styles.roomPricingTitle} tone="secondary" variant="button">
+          Room size pricing
+        </AppText>
       </View>
       <View style={styles.roomSizeRow}>
         <RoomSizePill
@@ -978,9 +1152,9 @@ function RoomSizePricingCard(props: {
           value={props.prices.large}
         />
       </View>
-      <Text style={styles.roomPricingHelp}>
+      <AppText style={styles.roomPricingHelp} variant="meta">
         Tap any size to set it directly. Small and large follow your usual ratios until you change them.
-      </Text>
+      </AppText>
     </View>
   );
 }
@@ -1004,26 +1178,30 @@ function AddItemPreview(props: {
 }) {
   return (
     <View style={styles.addPreviewSection}>
-      <Text style={styles.addFieldLabel}>How it'll look in your book</Text>
+      <AppText style={styles.addFieldLabel} variant="sectionLabel">
+        How it'll look in your book
+      </AppText>
       <View style={styles.addPreviewCard}>
         <SwatchTab tone="green" />
         <View style={styles.addPreviewBody}>
           <View style={styles.addPreviewText}>
-            <Text numberOfLines={1} style={styles.addPreviewTitle}>
+            <AppText numberOfLines={1} style={styles.addPreviewTitle} variant="rowTitle">
               {props.name}
-            </Text>
+            </AppText>
             <View style={styles.itemMetaRow}>
-              <Text style={styles.unitBadge}>
+              <AppText style={styles.unitBadge} variant="statusPill">
                 {props.isRoomSize ? "PER ROOM" : unitBadgeFromUnit(props.unit)}
-              </Text>
+              </AppText>
               {props.isRoomSize ? (
-                <Text numberOfLines={1} style={styles.itemSub}>
+                <AppText numberOfLines={1} style={styles.itemSub} variant="rowSubtitle">
                   S {formatMoney(props.roomPrices.small)} · L {formatMoney(props.roomPrices.large)}
-                </Text>
+                </AppText>
               ) : null}
             </View>
           </View>
-          <Text style={styles.addPreviewAmount}>{formatMoney(props.priceCents)}</Text>
+          <AppText style={styles.addPreviewAmount} variant="amount">
+            {formatMoney(props.priceCents)}
+          </AppText>
         </View>
       </View>
     </View>
@@ -1042,18 +1220,109 @@ function RoomSizePill(props: {
       onPress={props.onPress}
       style={[styles.roomSizePill, props.active ? styles.roomSizePillActive : null]}
     >
-      <Text style={[styles.roomSizeLabel, props.active ? styles.roomSizeLabelActive : null]}>
+      <AppText
+        style={[styles.roomSizeLabel, props.active ? styles.roomSizeLabelActive : null]}
+        tone={props.active ? "onDark" : "muted"}
+        variant="statusPill"
+      >
         {props.label}
-      </Text>
-      <Text style={[styles.roomSizeValue, props.active ? styles.roomSizeValueActive : null]}>
+      </AppText>
+      <AppText
+        style={[styles.roomSizeValue, props.active ? styles.roomSizeValueActive : null]}
+        tone={props.active ? "onDark" : "primary"}
+        variant="amount"
+      >
         {formatMoney(props.value)}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
 
 const smallRatio = 0.7;
 const largeRatio = 1.6;
+const editItemNameMaxLength = 40;
+
+function shortPriceItemLabel(item: PriceBookItem): string {
+  const original = item.name.trim();
+
+  if (original.length <= editItemNameMaxLength) {
+    return original;
+  }
+
+  const haystack = `${item.name} ${item.description} ${item.key}`.toLowerCase();
+  const knownLabels: Array<{ label: string; patterns: string[] }> = [
+    {
+      label: "Surface prep",
+      patterns: [
+        "surface prep",
+        "surface preparation",
+        "prepare surfaces",
+        "patch minor",
+        "sand and patch",
+      ],
+    },
+    { label: "Paint ceilings", patterns: ["paint ceilings", "painting ceilings"] },
+    { label: "Paint walls", patterns: ["paint walls", "painting walls"] },
+    { label: "Paint trim", patterns: ["paint trim", "painting trim"] },
+    { label: "Paint doors", patterns: ["paint doors", "painting doors", "paint 2 doors", "paint two doors"] },
+    { label: "Primer coat", patterns: ["primer coat", "primer"] },
+    { label: "Remove wallpaper", patterns: ["remove wallpaper", "wallpaper"] },
+    { label: "Material allowance", patterns: ["material allowance", "materials"] },
+  ];
+
+  for (const entry of knownLabels) {
+    if (entry.patterns.some((pattern) => haystack.includes(pattern))) {
+      return entry.label;
+    }
+  }
+
+  const withoutParenthetical = original.replace(/\s*\([^)]*\)/g, "").trim();
+  const beforeClause =
+    withoutParenthetical.split(/\s+(?:in|for|with|including|after|before|on)\s+/i)[0]?.trim() ??
+    withoutParenthetical;
+  const fallback = titleCaseShortLabel(beforeClause.length > 0 ? beforeClause : original);
+
+  return truncateLabel(fallback);
+}
+
+function titleCaseShortLabel(value: string): string {
+  const words = value
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean);
+
+  return words
+    .map((word, index) => (index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+    .join(" ");
+}
+
+function truncateLabel(value: string): string {
+  const trimmed = value.trim();
+
+  if (trimmed.length <= editItemNameMaxLength) {
+    return trimmed;
+  }
+
+  return trimmed.slice(0, editItemNameMaxLength - 1).trimEnd();
+}
+
+function priceBookHeaderSummary(props: {
+  confirmedCount: number;
+  starterCount: number;
+  totalCount: number;
+}): string {
+  if (props.totalCount === 0) {
+    return "No prices yet";
+  }
+
+  if (props.starterCount === 0) {
+    return `${props.confirmedCount} ${props.confirmedCount === 1 ? "price" : "prices"} ready`;
+  }
+
+  return `${props.confirmedCount} ready · ${props.starterCount} to confirm`;
+}
 
 function roomSizePricesFromActive(
   activeSize: RoomSize,
@@ -1077,6 +1346,14 @@ function unitChipDisplay(unit: (typeof quoteUnits)[number]) {
   if (unit === "sqft") return "sq ft";
   if (unit === "lnft") return "linear ft";
   return unit;
+}
+
+function priceInputLabel(unit: (typeof quoteUnits)[number], activeSize: RoomSize) {
+  if (unit === "room") {
+    return `Price per ${activeSize} room`;
+  }
+
+  return `Price per ${unitChipDisplay(unit)}`;
 }
 
 function unitBadgeFromUnit(unit: (typeof quoteUnits)[number]) {
@@ -1107,21 +1384,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  titleRow: {
-    alignItems: "baseline",
+  headerStatus: {
+    alignItems: "center",
     flexDirection: "row",
-    gap: 10,
+    gap: 7,
   },
-  title: {
-    color: colors.ink,
-    fontSize: 27,
-    fontWeight: "700",
-    letterSpacing: 0,
+  headerStatusDot: {
+    backgroundColor: colors.green,
+    borderRadius: 5,
+    height: 9,
+    width: 9,
   },
-  itemCount: {
-    color: colors.ink3,
-    fontSize: 14,
-    fontWeight: "600",
+  headerStatusDotReview: {
+    backgroundColor: colors.amber,
+  },
+  headerStatusDotEmpty: {
+    backgroundColor: colors.ink3,
+  },
+  headerStatusText: {
+    ...typography.headerSummary,
   },
   headerActions: {
     alignItems: "center",
@@ -1153,16 +1434,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   strengthLabel: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontWeight: "700",
+    ...typography.sectionLabel,
     letterSpacing: 1.7,
-    textTransform: "uppercase",
   },
   strengthCount: {
     color: colors.ink,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
+    ...fontStyles.semibold,
   },
   strengthBars: {
     flexDirection: "row",
@@ -1183,11 +1461,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionLabel: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "700",
+    ...typography.sectionLabel,
     letterSpacing: 1.7,
-    textTransform: "uppercase",
   },
   sectionCount: {
     backgroundColor: colors.surface,
@@ -1196,7 +1471,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "700",
+    ...fontStyles.medium,
     minWidth: 23,
     overflow: "hidden",
     paddingHorizontal: 8,
@@ -1247,9 +1522,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   itemName: {
-    color: colors.ink,
+    ...typography.rowTitle,
     fontSize: 15,
-    fontWeight: "700",
   },
   itemMetaRow: {
     alignItems: "center",
@@ -1264,21 +1538,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink2,
     fontSize: 10,
-    fontWeight: "800",
+    ...fontStyles.semibold,
     overflow: "hidden",
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
   itemSub: {
-    color: colors.ink3,
+    ...typography.rowSubtitle,
     flexShrink: 1,
-    fontSize: 12,
-    fontWeight: "500",
   },
   itemPrice: {
-    color: colors.ink,
+    ...typography.amount,
     fontSize: 14,
-    fontWeight: "700",
     textAlign: "right",
   },
   starterPriceInline: {
@@ -1290,13 +1561,13 @@ const styles = StyleSheet.create({
   starterCurrency: {
     color: colors.amber,
     fontSize: 13,
-    fontWeight: "700",
+    ...fontStyles.semibold,
     marginRight: 3,
   },
   starterInlineInput: {
     color: colors.amber,
     fontSize: 14,
-    fontWeight: "700",
+    ...fontStyles.semibold,
     maxWidth: 52,
     minWidth: 30,
     paddingVertical: 0,
@@ -1324,12 +1595,12 @@ const styles = StyleSheet.create({
   noMatchesTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   noMatchesText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
   },
   emptyFull: {
     alignItems: "center",
@@ -1352,15 +1623,15 @@ const styles = StyleSheet.create({
   },
   emptyHeadline: {
     color: colors.ink,
-    fontSize: 21,
-    fontWeight: "900",
+    fontSize: 18,
+    ...fontStyles.semibold,
     marginBottom: 9,
     textAlign: "center",
   },
   emptyCopy: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 18,
     marginBottom: 26,
     maxWidth: 290,
@@ -1381,12 +1652,12 @@ const styles = StyleSheet.create({
   emptyPrimaryText: {
     color: colors.onDark,
     fontSize: 15,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   manualLink: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   emptyLock: {
     alignItems: "center",
@@ -1397,7 +1668,7 @@ const styles = StyleSheet.create({
   emptyLockText: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.medium,
   },
   zeroRealCard: {
     alignItems: "center",
@@ -1425,12 +1696,12 @@ const styles = StyleSheet.create({
   zeroRealTitle: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   zeroRealText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 16,
   },
   zeroRealActions: {
@@ -1448,7 +1719,7 @@ const styles = StyleSheet.create({
   zeroRealPrimaryText: {
     color: colors.onDark,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   zeroRealSecondary: {
     alignItems: "center",
@@ -1469,7 +1740,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   addSheetScroll: {
-    gap: 15,
+    gap: 14,
     paddingBottom: 18,
     paddingHorizontal: 20,
     paddingTop: 2,
@@ -1483,10 +1754,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   addSheetTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "800",
-    letterSpacing: 0,
+    ...typography.panelTitle,
   },
   addSheetClose: {
     alignItems: "center",
@@ -1504,16 +1772,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   addFieldLabel: {
-    color: colors.ink3,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.9,
-    textTransform: "uppercase",
+    ...typography.sectionLabel,
+    fontSize: 11,
+    letterSpacing: 1.45,
   },
   charCount: {
     color: colors.ink3,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    ...fontStyles.medium,
   },
   addNameInput: {
     backgroundColor: colors.surface,
@@ -1521,8 +1787,8 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     borderWidth: 1,
     color: colors.ink,
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 16,
+    ...fontStyles.regular,
     height: 46,
     paddingHorizontal: 16,
     paddingVertical: 0,
@@ -1537,7 +1803,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 12,
     borderWidth: 1,
-    height: 46,
+    height: 42,
     justifyContent: "center",
     minWidth: 84,
     paddingHorizontal: 16,
@@ -1548,8 +1814,8 @@ const styles = StyleSheet.create({
   },
   addUnitChipText: {
     color: colors.ink2,
-    fontSize: 17,
-    fontWeight: "800",
+    fontSize: 13,
+    ...fontStyles.medium,
   },
   addUnitChipTextActive: {
     color: colors.onDark,
@@ -1566,15 +1832,15 @@ const styles = StyleSheet.create({
   },
   addCurrency: {
     color: colors.ink3,
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 16,
+    ...fontStyles.medium,
     marginRight: 8,
   },
   addPriceInput: {
     color: colors.ink,
     flex: 1,
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 17,
+    ...fontStyles.semibold,
     paddingVertical: 0,
   },
   roomPricingCard: {
@@ -1593,7 +1859,7 @@ const styles = StyleSheet.create({
   roomPricingTitle: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "700",
+    ...fontStyles.medium,
   },
   meterIcon: {
     alignItems: "flex-end",
@@ -1638,7 +1904,7 @@ const styles = StyleSheet.create({
   roomSizeLabel: {
     color: colors.ink3,
     fontSize: 10,
-    fontWeight: "900",
+    ...fontStyles.medium,
     letterSpacing: 1,
     textTransform: "uppercase",
   },
@@ -1648,7 +1914,7 @@ const styles = StyleSheet.create({
   roomSizeValue: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "800",
+    ...fontStyles.semibold,
   },
   roomSizeValueActive: {
     color: colors.onDark,
@@ -1656,7 +1922,7 @@ const styles = StyleSheet.create({
   roomPricingHelp: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "500",
+    ...fontStyles.regular,
     lineHeight: 16,
   },
   addPreviewSection: {
@@ -1685,14 +1951,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   addPreviewTitle: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "800",
+    ...typography.rowTitle,
   },
   addPreviewAmount: {
-    color: colors.ink,
-    fontSize: 19,
-    fontWeight: "800",
+    ...typography.amount,
   },
   addSheetFooter: {
     backgroundColor: colors.surface,
@@ -1705,28 +1967,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.dark,
     borderRadius: 14,
-    height: 56,
+    height: 52,
     justifyContent: "center",
   },
   addSheetPrimaryDisabled: {
     opacity: 0.45,
   },
   addSheetPrimaryText: {
-    color: colors.onDark,
-    fontSize: 18,
-    fontWeight: "900",
+    ...typography.primaryAction,
   },
   modalBackdrop: {
     backgroundColor: "rgba(18,22,28,0.35)",
     flex: 1,
     justifyContent: "flex-end",
   },
-  sheet: {
+  editSheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    gap: spacing.sm,
-    padding: spacing.lg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: "88%",
+    overflow: "hidden",
+    paddingTop: 10,
   },
   grabber: {
     alignSelf: "center",
@@ -1736,71 +1997,185 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     width: 38,
   },
-  sheetTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "800",
+  editSheetScroll: {
+    gap: 18,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+    paddingTop: 4,
   },
-  sheetSubtitle: {
+  editHeader: {
+    gap: 4,
+  },
+  editSection: {
+    gap: 10,
+  },
+  editSheetTitle: {
+    ...typography.panelTitle,
+  },
+  editSheetSubtitle: {
     color: colors.ink2,
     fontSize: 13,
-    marginBottom: spacing.xs,
+    ...fontStyles.regular,
+    lineHeight: 17,
   },
-  row: {
+  editFieldHeader: {
+    alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
+    justifyContent: "space-between",
   },
-  rowItem: {
-    flex: 1,
+  editFieldLabel: {
+    ...typography.sectionLabel,
+    fontSize: 11,
+    letterSpacing: 1.45,
   },
-  fieldLabel: {
-    color: colors.ink2,
-    fontSize: 13,
-    fontWeight: "600",
+  editCharCount: {
+    color: colors.ink3,
+    fontSize: 11,
+    ...fontStyles.medium,
   },
-  unitRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  unitChip: {
-    borderColor: colors.border,
-    borderRadius: radius.pill,
+  editNameInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.dark,
+    borderRadius: 13,
     borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    color: colors.ink,
+    fontSize: 16,
+    ...fontStyles.regular,
+    height: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
   },
-  unitChipActive: {
+  editUnitRowWrap: {
+    position: "relative",
+  },
+  editUnitRow: {
+    gap: 8,
+    paddingRight: 24,
+  },
+  editUnitScrollHint: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    bottom: 0,
+    justifyContent: "center",
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: 26,
+  },
+  editUnitChip: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 11,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: "center",
+    minWidth: 72,
+    paddingHorizontal: 14,
+  },
+  editUnitChipActive: {
     backgroundColor: colors.dark,
     borderColor: colors.dark,
   },
-  unitChipText: {
+  editUnitChipText: {
     color: colors.ink2,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 13,
+    ...fontStyles.medium,
   },
-  unitChipTextActive: {
+  editUnitChipTextActive: {
     color: colors.onDark,
   },
-  cancelLink: {
+  editPriceInputWrap: {
     alignItems: "center",
-    paddingVertical: spacing.xs,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 13,
+    borderWidth: 1,
+    flexDirection: "row",
+    height: 48,
+    paddingHorizontal: 16,
+  },
+  editCurrency: {
+    color: colors.ink3,
+    fontSize: 16,
+    ...fontStyles.medium,
+    marginRight: 8,
+  },
+  editPriceInput: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 17,
+    ...fontStyles.semibold,
+    paddingVertical: 0,
+  },
+  editDescriptionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  editDescriptionHint: {
+    color: colors.ink3,
+    fontSize: 11,
+    ...fontStyles.regular,
+  },
+  editDescriptionInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 13,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 15,
+    ...fontStyles.regular,
+    lineHeight: 21,
+    minHeight: 82,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    textAlignVertical: "top",
+  },
+  editFooter: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    gap: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+  },
+  editPrimary: {
+    alignItems: "center",
+    backgroundColor: colors.dark,
+    borderRadius: 14,
+    height: 52,
+    justifyContent: "center",
+  },
+  editPrimaryDisabled: {
+    opacity: 0.45,
+  },
+  editPrimaryText: {
+    ...typography.primaryAction,
+  },
+  editFooterSecondary: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  cancelTextButton: {
+    paddingVertical: 2,
   },
   cancelLinkText: {
     color: colors.ink3,
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 14,
+    ...fontStyles.medium,
   },
-  archiveLink: {
+  archiveTextButton: {
     alignItems: "center",
     flexDirection: "row",
     gap: 7,
-    justifyContent: "center",
-    paddingTop: spacing.xs,
+    paddingVertical: 2,
   },
   archiveLinkText: {
     color: colors.red,
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 14,
+    ...fontStyles.medium,
   },
 });

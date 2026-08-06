@@ -357,6 +357,7 @@ export const snapquoteApi = {
     input: {
       name?: string | undefined;
       description?: string | undefined;
+      unit?: PriceBookItem["unit"] | undefined;
       pricing?: PriceBookPricing | undefined;
       confirmed?: boolean | undefined;
     }
