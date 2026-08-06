@@ -14,13 +14,15 @@ import {
   Type,
   Users
 } from "lucide-react-native";
-import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { getTradeConfig } from "@snapquote/shared";
 import { BusinessAvatar } from "../../shared-ui/BusinessAvatar";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import { Screen } from "../../shared-ui/base";
+import { SectionHeader } from "../../shared-ui/layout";
 import { InlineProgressPanel } from "../../shared-ui/ProgressExperience";
-import { colors, radius } from "../../shared-ui/theme";
+import { AppText } from "../../shared-ui/text";
+import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 import { useQuoteStore } from "../../state/quoteStore";
 import { useAuthStore } from "../../state/authStore";
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
@@ -158,7 +160,7 @@ export default function SettingsScreen() {
     <Screen edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Settings</Text>
+          <AppText style={styles.title} variant="screenTitle">Settings</AppText>
           <Pressable
             accessibilityLabel="Open profile"
             accessibilityRole="button"
@@ -299,7 +301,9 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
-        <Text style={styles.version}>Account & billing live in your profile · v0.4.1</Text>
+        <AppText style={styles.version} variant="meta">
+          Account & billing live in your profile · v0.4.1
+        </AppText>
       </ScrollView>
       <BottomTabBar />
     </Screen>
@@ -309,7 +313,7 @@ export default function SettingsScreen() {
 function SettingsSection(props: { label: string; children: ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{props.label}</Text>
+      <SectionHeader label={props.label} />
       <View style={styles.sectionCard}>{props.children}</View>
     </View>
   );
@@ -329,16 +333,16 @@ function SettingsRow(props: {
     <Pressable accessibilityRole="button" onPress={props.onPress} style={[styles.row, props.last ? styles.rowLast : null]}>
       <View style={styles.rowIcon}>{props.icon}</View>
       <View style={styles.rowText}>
-        <Text style={styles.rowLabel}>{props.label}</Text>
+        <AppText style={styles.rowLabel} variant="rowTitle">{props.label}</AppText>
         {typeof props.detail === "string" ? (
-          <Text style={styles.rowDetail} numberOfLines={1}>
+          <AppText style={styles.rowDetail} numberOfLines={1} variant="rowSubtitle">
             {props.detail}
-          </Text>
+          </AppText>
         ) : (
           props.detail
         )}
       </View>
-      {props.customValue ?? (props.value ? <Text style={styles.rowValue}>{props.value}</Text> : null)}
+      {props.customValue ?? (props.value ? <AppText style={styles.rowValue} variant="body">{props.value}</AppText> : null)}
       {props.showChevron === false ? null : (
         <ChevronRight color={colors.ink3} size={15} strokeWidth={2.2} />
       )}
@@ -367,9 +371,9 @@ function StrengthDots(props: { confirmed: number; total: number }) {
 function BookStrengthBadge(props: { confirmed: number; total: number }) {
   return (
     <View style={styles.bookBadge}>
-      <Text style={styles.bookBadgeText}>
+      <AppText style={styles.bookBadgeText} variant="statusPill">
         {props.confirmed} of {props.total}
-      </Text>
+      </AppText>
     </View>
   );
 }
@@ -377,7 +381,7 @@ function BookStrengthBadge(props: { confirmed: number; total: number }) {
 function VerifiedBadge() {
   return (
     <View style={styles.verifiedBadge}>
-      <Text style={styles.verifiedText}>Verified</Text>
+      <AppText style={styles.verifiedText} variant="statusPill">Verified</AppText>
     </View>
   );
 }
@@ -389,7 +393,9 @@ function ConnectionBadge(props: { status: "setup" | "pending" | "connected"; loa
 
   return (
     <View style={[styles.verifiedBadge, connected ? null : styles.pendingBadge]}>
-      <Text style={[styles.verifiedText, connected ? null : styles.pendingText]}>{label}</Text>
+      <AppText style={[styles.verifiedText, connected ? null : styles.pendingText]} variant="statusPill">
+        {label}
+      </AppText>
     </View>
   );
 }
@@ -397,7 +403,7 @@ function ConnectionBadge(props: { status: "setup" | "pending" | "connected"; loa
 function TradeValue(props: { label: string }) {
   return (
     <View style={styles.tradeValue}>
-      <Text style={styles.tradeText}>{props.label}</Text>
+      <AppText style={styles.tradeText} variant="body">{props.label}</AppText>
       <Lock color={colors.ink3} size={11} strokeWidth={2.2} />
     </View>
   );
@@ -416,11 +422,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   title: {
-    color: colors.ink,
-    fontSize: 27,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 32
+    ...typography.screenTitle,
   },
   headerAvatar: {
     alignItems: "center",
@@ -433,9 +435,8 @@ const styles = StyleSheet.create({
     gap: 9
   },
   sectionLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.6,
     paddingHorizontal: 3,
     textTransform: "uppercase"
@@ -483,17 +484,17 @@ const styles = StyleSheet.create({
   rowLabel: {
     color: colors.ink,
     fontSize: 14.5,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   rowDetail: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   rowValue: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   strengthDots: {
     flexDirection: "row",
@@ -516,7 +517,7 @@ const styles = StyleSheet.create({
   bookBadgeText: {
     color: colors.amber,
     fontSize: 9,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     textTransform: "uppercase"
   },
   verifiedBadge: {
@@ -530,7 +531,7 @@ const styles = StyleSheet.create({
   verifiedText: {
     color: colors.green,
     fontSize: 9,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     textTransform: "uppercase"
   },
   pendingBadge: {
@@ -548,12 +549,12 @@ const styles = StyleSheet.create({
   tradeText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   version: {
     color: colors.ink3,
     fontSize: 10.5,
-    fontWeight: "600",
+    ...fontStyles.regular,
     paddingBottom: 2,
     marginTop: -2,
     textAlign: "center"

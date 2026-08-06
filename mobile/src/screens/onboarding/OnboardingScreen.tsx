@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getTradeConfig, type PainterCorePriceInput, type ServicePriceSuggestion } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
+import { fontStyles, typography } from "../../shared-ui/theme";
 import { useAuthStore } from "../../state/authStore";
 import {
   centsToDollars,
@@ -327,13 +328,10 @@ const styles = StyleSheet.create({
   kicker: {
     color: "#475467",
     fontSize: 14,
-    fontWeight: "800",
+    ...fontStyles.medium,
   },
   title: {
-    color: "#101828",
-    fontSize: 30,
-    fontWeight: "900",
-    letterSpacing: 0,
+    ...typography.screenTitle,
   },
   field: {
     gap: 6,
@@ -341,7 +339,7 @@ const styles = StyleSheet.create({
   label: {
     color: "#344054",
     fontSize: 14,
-    fontWeight: "800",
+    ...fontStyles.medium,
   },
   input: {
     backgroundColor: "#ffffff",
@@ -365,7 +363,7 @@ const styles = StyleSheet.create({
   suggestionNotice: {
     color: "#2E7D5B",
     fontSize: 13,
-    fontWeight: "700",
+    ...fontStyles.semibold,
     lineHeight: 18,
   },
   primaryAction: {
@@ -382,7 +380,7 @@ const styles = StyleSheet.create({
   primaryActionText: {
     color: "#ffffff",
     fontSize: 18,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   secondaryAction: {
     alignItems: "center",
@@ -391,6 +389,6 @@ const styles = StyleSheet.create({
   secondaryActionText: {
     color: "#475467",
     fontSize: 14,
-    fontWeight: "800",
+    ...fontStyles.medium,
   },
 });

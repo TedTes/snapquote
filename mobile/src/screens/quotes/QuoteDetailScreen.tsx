@@ -23,7 +23,7 @@ import { AnimatedCard } from "../../shared-ui/AnimatedCard";
 import { Banner, EmptyState, Screen, SwatchTab } from "../../shared-ui/base";
 import { fadeEnter, useMotionEnabled } from "../../shared-ui/motion";
 import { apiBaseUrl, snapquoteApi, userFacingErrorMessage } from "../../api/client";
-import { colors, radius, spacing } from "../../shared-ui/theme";
+import { colors, fontStyles, radius, spacing, typography } from "../../shared-ui/theme";
 import { describeQuantity, formatDateTime, formatMoney, formatShortDate } from "../../utils/format";
 import {
   getQuoteBlockers,
@@ -990,9 +990,8 @@ const styles = StyleSheet.create({
     width: 38
   },
   navTitle: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "900",
     letterSpacing: 2.2,
     textTransform: "uppercase"
   },
@@ -1003,16 +1002,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12
   },
   draftNavName: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "800",
+    color: typography.rowTitle.color,
+    fontSize: 19,
+    ...fontStyles.semibold,
     letterSpacing: 0,
-    lineHeight: 24
+    lineHeight: 23
   },
   draftNavMeta: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 18
   },
   draftHeader: {
@@ -1020,17 +1019,17 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   customerName: {
-    color: colors.ink,
-    fontSize: 23,
-    fontWeight: "900",
+    color: typography.screenTitle.color,
+    fontSize: 22,
+    ...fontStyles.semibold,
     letterSpacing: 0,
-    lineHeight: 27,
+    lineHeight: 26,
     textAlign: "center"
   },
   jobMeta: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.regular,
     textAlign: "center"
   },
   coverageCard: {
@@ -1060,7 +1059,7 @@ const styles = StyleSheet.create({
     color: colors.green,
     flex: 1,
     fontSize: 13,
-    fontWeight: "700",
+    ...fontStyles.semibold,
     lineHeight: 17
   },
   coverageHero: {
@@ -1087,7 +1086,7 @@ const styles = StyleSheet.create({
   coverageTitle: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     lineHeight: 22
   },
   coverageTitleComplete: {
@@ -1096,22 +1095,21 @@ const styles = StyleSheet.create({
   coverageSubtitle: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "700"
+    ...fontStyles.regular,
   },
   coverageSubtitleComplete: {
     color: colors.green
   },
   coverageLabel: {
-    color: colors.ink2,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "900",
     letterSpacing: 1.8,
     textTransform: "uppercase"
   },
   coverageCount: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 12,
-    fontWeight: "900"
+    ...fontStyles.medium,
   },
   coverageBars: {
     flexDirection: "row",
@@ -1146,14 +1144,13 @@ const styles = StyleSheet.create({
     width: 10
   },
   coverageLegendText: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontWeight: "600"
-  },
-  lineSection: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "900",
+    ...fontStyles.regular,
+  },
+  lineSection: {
+    ...typography.sectionLabel,
+    fontSize: 11,
     letterSpacing: 1.8,
     marginTop: 4,
     textTransform: "uppercase"
@@ -1199,19 +1196,19 @@ const styles = StyleSheet.create({
   lineTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   lineSub: {
     color: colors.ink3,
     flex: 1,
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.regular,
     marginTop: 2
   },
   lineAmount: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "800"
+    ...fontStyles.bold,
   },
   lineActionArea: {
     alignItems: "flex-end",
@@ -1221,7 +1218,7 @@ const styles = StyleSheet.create({
   suggestedPrice: {
     color: colors.amber,
     fontSize: 11,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   lineActionButton: {
     alignItems: "center",
@@ -1234,7 +1231,7 @@ const styles = StyleSheet.create({
   },
   lineActionText: {
     fontSize: 13,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   addLine: {
     alignItems: "center",
@@ -1250,7 +1247,7 @@ const styles = StyleSheet.create({
   addLineText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   resolveFooter: {
     backgroundColor: "rgba(255,254,250,0.97)",
@@ -1269,15 +1266,14 @@ const styles = StyleSheet.create({
     gap: 3
   },
   footerLabel: {
-    color: colors.ink2,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "900",
     letterSpacing: 1.7,
     textTransform: "uppercase"
   },
   footerStatus: {
     fontSize: 14,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   footerStatusRed: {
     color: colors.red
@@ -1291,7 +1287,7 @@ const styles = StyleSheet.create({
   footerAmount: {
     color: colors.ink,
     fontSize: 31,
-    fontWeight: "900",
+    ...fontStyles.bold,
     lineHeight: 34
   },
   footerAmountBlock: {
@@ -1301,7 +1297,7 @@ const styles = StyleSheet.create({
   footerTax: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "700"
+    ...fontStyles.medium,
   },
   footerPlus: {
     color: colors.ink2,
@@ -1320,9 +1316,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#CCC9BF"
   },
   resolveButtonText: {
-    color: colors.onDark,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.primaryAction,
   },
   resolveButtonTextDisabled: {
     color: colors.ink2
@@ -1335,7 +1329,7 @@ const styles = StyleSheet.create({
   saveLaterText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   footerLock: {
     alignItems: "center",
@@ -1347,7 +1341,7 @@ const styles = StyleSheet.create({
   footerLockText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   detailScreen: {
     flex: 1
@@ -1367,14 +1361,14 @@ const styles = StyleSheet.create({
   detailNavName: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     letterSpacing: 0,
     lineHeight: 17
   },
   detailNavMeta: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 14
   },
   detailHeader: {
@@ -1386,7 +1380,7 @@ const styles = StyleSheet.create({
   detailHeroAmount: {
     color: colors.ink,
     fontSize: 28,
-    fontWeight: "900",
+    ...fontStyles.bold,
     letterSpacing: 0,
     lineHeight: 32
   },
@@ -1421,8 +1415,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border
   },
   detailStatusText: {
+    ...typography.statusPill,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 0.7,
     textTransform: "uppercase"
   },
@@ -1441,12 +1435,12 @@ const styles = StyleSheet.create({
   detailValidUntil: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "700"
+    ...fontStyles.regular,
   },
   detailDepositStatus: {
     color: colors.green,
     fontSize: 12,
-    fontWeight: "800",
+    ...fontStyles.semibold,
     marginTop: 2
   },
   quoteSummaryCard: {
@@ -1465,16 +1459,15 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   summaryHeaderLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.7,
     textTransform: "uppercase"
   },
   summaryHeaderCount: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 12,
-    fontWeight: "900"
+    ...fontStyles.medium,
   },
   summaryLine: {
     alignItems: "center",
@@ -1494,22 +1487,22 @@ const styles = StyleSheet.create({
   summaryLineTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   summaryLineSub: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   summaryLineAmount: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900"
+    ...fontStyles.bold,
   },
   summaryMore: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "700",
+    ...fontStyles.medium,
     paddingBottom: 8,
     paddingTop: 2
   },
@@ -1531,22 +1524,22 @@ const styles = StyleSheet.create({
   summaryTotalLabel: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "700"
+    ...fontStyles.regular,
   },
   summaryTotalLabelStrong: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   summaryTotalValue: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   summaryTotalValueStrong: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "900"
+    ...fontStyles.bold,
   },
   timelineCard: {
     backgroundColor: colors.surface,
@@ -1559,9 +1552,8 @@ const styles = StyleSheet.create({
     paddingTop: 13
   },
   timelineTitle: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "900",
     letterSpacing: 1.6,
     marginBottom: 14,
     textTransform: "uppercase"
@@ -1601,16 +1593,16 @@ const styles = StyleSheet.create({
   timelineLabel: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   timelineDate: {
     color: colors.ink3,
     fontSize: 11
   },
   timelineMuted: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 13,
-    fontWeight: "700"
+    ...fontStyles.medium,
   },
   contactActions: {
     flexDirection: "row",
@@ -1630,7 +1622,7 @@ const styles = StyleSheet.create({
   contactActionText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   detailMut: {
     color: colors.ink3,
@@ -1660,9 +1652,8 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   followUpButtonText: {
-    color: colors.onDark,
+    ...typography.primaryAction,
     fontSize: 14,
-    fontWeight: "900"
   },
   followUpButtonTextDisabled: {
     color: colors.ink3
@@ -1695,7 +1686,7 @@ const styles = StyleSheet.create({
   menuRowText: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   menuNote: {
     backgroundColor: colors.surfaceRaised,
@@ -1704,7 +1695,7 @@ const styles = StyleSheet.create({
   menuNoteText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 15
   }
 });

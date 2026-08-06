@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { ArrowRight, ChevronLeft, X } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors } from "../../../shared-ui/theme";
+import { colors, fontStyles, typography } from "../../../shared-ui/theme";
 
 const steps = ["Customer", "Job", "Notes", "Review"];
 
@@ -107,16 +107,14 @@ const styles = StyleSheet.create({
     width: 36
   },
   eyebrow: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 2.5,
-    textTransform: "uppercase"
+    letterSpacing: 2.1
   },
   stepCount: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.medium,
     minWidth: 36,
     textAlign: "right"
   },
@@ -139,13 +137,13 @@ const styles = StyleSheet.create({
   progressLabel: {
     color: colors.ink3,
     fontSize: 8,
-    fontWeight: "800",
+    ...fontStyles.medium,
     textAlign: "left",
     textTransform: "uppercase"
   },
   progressLabelActive: {
     color: colors.ink,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   titleBlock: {
     gap: 8,
@@ -154,13 +152,13 @@ const styles = StyleSheet.create({
   title: {
     color: colors.ink,
     fontSize: 22,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     letterSpacing: 0
   },
   helper: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 19
   },
   footer: {
@@ -185,18 +183,14 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   primaryText: {
-    color: colors.onDark,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.primaryAction,
   },
   primaryTextDisabled: {
     color: colors.ink3
   },
   sectionKicker: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1,
-    textTransform: "uppercase"
+    letterSpacing: 1
   }
 });

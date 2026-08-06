@@ -1,12 +1,14 @@
 import { useMemo } from "react";
 import { ArrowRight, Check, CircleAlert, ClipboardCheck, Clock3, Lock } from "lucide-react-native";
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { BusinessAvatar } from "../../shared-ui/BusinessAvatar";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import { QuoteCard } from "../quotes/components/QuoteCard";
 import { Screen } from "../../shared-ui/base";
-import { colors, radius } from "../../shared-ui/theme";
+import { SectionHeader } from "../../shared-ui/layout";
+import { AppText } from "../../shared-ui/text";
+import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 import { displayBusinessName, formatMoney } from "../../utils/format";
 import { useAuthStore } from "../../state/authStore";
 import { useQuoteRows } from "../../state/useQuoteRows";
@@ -23,24 +25,34 @@ export default function DashboardScreen() {
   const businessDisplayName = displayBusinessName(businessName, "Add business name");
 
   const metrics = useMemo(() => {
-    const activeRows = rows.filter(
-      (row) => row.status === "draft" || row.status === "sent" || row.status === "viewed"
+    const pipelineRows = rows.filter(
+      (row) =>
+        row.status === "draft" ||
+        row.status === "sent" ||
+        row.status === "viewed" ||
+        row.status === "accepted"
     );
-    const draftRows = rows.filter((row) => row.status === "draft");
+    const draftRows = pipelineRows.filter((row) => row.status === "draft");
     const draftBlockedRows = draftRows.filter((row) => row.blockers.reasons.length > 0);
     const readyRows = draftRows.filter((row) => row.blockers.reasons.length === 0);
-    const staleRows = rows.filter((row) => row.stale);
-    const sentRows = rows.filter((row) => row.status === "sent");
-    const acceptedRows = rows.filter((row) => row.status === "accepted");
-    const viewedRows = rows.filter((row) => row.status === "viewed");
-    const totalValue = activeRows.reduce((sum, row) => sum + (row.totals?.totalCents ?? 0), 0);
+    const staleRows = pipelineRows.filter((row) => row.stale);
+    const sentRows = pipelineRows.filter((row) => row.status === "sent");
+    const acceptedRows = pipelineRows.filter((row) => row.status === "accepted");
+    const viewedRows = pipelineRows.filter((row) => row.status === "viewed");
+    const totalValue = pipelineRows.reduce((sum, row) => sum + (row.totals?.totalCents ?? 0), 0);
     const readyValue = readyRows.reduce((sum, row) => sum + (row.totals?.totalCents ?? 0), 0);
+    const pipelineSegments = [
+      { color: colors.borderStrong, key: "draft", value: draftRows.length },
+      { color: colors.dark, key: "sent", value: sentRows.length + viewedRows.length },
+      { color: colors.green, key: "accepted", value: acceptedRows.length }
+    ].filter((segment) => segment.value > 0);
 
     return {
-      activeRows,
       acceptedRows,
       draftBlockedRows,
       draftRows,
+      pipelineRows,
+      pipelineSegments,
       readyRows,
       readyValue,
       sentRows,
@@ -51,8 +63,8 @@ export default function DashboardScreen() {
   }, [rows]);
 
   const activeQuotes = useMemo(
-    () => [...rows].sort((a, b) => b.quote.updatedAt.localeCompare(a.quote.updatedAt)).slice(0, 4),
-    [rows]
+    () => [...metrics.pipelineRows].sort((a, b) => b.quote.updatedAt.localeCompare(a.quote.updatedAt)).slice(0, 4),
+    [metrics.pipelineRows]
   );
 
   function openQuote(quote: QuoteRecord) {
@@ -68,9 +80,12 @@ export default function DashboardScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.eyebrow}>{businessDisplayName.toUpperCase()}</Text>
-            <Text style={styles.title}>Today</Text>
-            <Text style={styles.date}>{formatToday()}</Text>
+            <AppText style={styles.eyebrow} variant="sectionLabel">
+              {businessDisplayName.toUpperCase()}
+            </AppText>
+            <AppText style={styles.dateTitle} variant="meta">
+              {formatToday()}
+            </AppText>
           </View>
           <Pressable
             accessibilityLabel="Open profile"
@@ -88,29 +103,29 @@ export default function DashboardScreen() {
           <>
             <View style={styles.pipelineCard}>
               <View style={styles.pipelineTopRow}>
-                <Text style={styles.cardLabel}>Open pipeline</Text>
-                <Text style={styles.pipelineCount}>
-                  {metrics.activeRows.length} {metrics.activeRows.length === 1 ? "quote" : "quotes"}
-                </Text>
+                <AppText style={styles.cardLabel} variant="sectionLabel">
+                  Open pipeline
+                </AppText>
+                <AppText variant="meta">
+                  {metrics.pipelineRows.length} {metrics.pipelineRows.length === 1 ? "quote" : "quotes"}
+                </AppText>
               </View>
-              <Text style={styles.pipelineValue}>{formatMoney(metrics.totalValue)}</Text>
+              <AppText style={styles.pipelineValue} variant="pipelineAmount">
+                {formatMoney(metrics.totalValue)}
+              </AppText>
 
               <View style={styles.pipelineTrack}>
-                <PipelineSegment
-                  color={colors.borderStrong}
-                  flexValue={Math.max(metrics.draftRows.length, 1)}
-                  muted={metrics.draftRows.length === 0}
-                />
-                <PipelineSegment
-                  color={colors.dark}
-                  flexValue={Math.max(metrics.sentRows.length + metrics.viewedRows.length, 1)}
-                  muted={metrics.sentRows.length + metrics.viewedRows.length === 0}
-                />
-                <PipelineSegment
-                  color={colors.green}
-                  flexValue={Math.max(metrics.acceptedRows.length, 1)}
-                  muted={metrics.acceptedRows.length === 0}
-                />
+                {metrics.pipelineSegments.length > 0 ? (
+                  metrics.pipelineSegments.map((segment) => (
+                    <PipelineSegment
+                      color={segment.color}
+                      flexValue={segment.value}
+                      key={segment.key}
+                    />
+                  ))
+                ) : (
+                  <PipelineSegment color={colors.border} flexValue={1} />
+                )}
               </View>
 
               <View style={styles.legend}>
@@ -120,7 +135,7 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            <Text style={styles.sectionLabel}>Needs you today</Text>
+            <SectionHeader label="Needs you today" />
             <View style={styles.attentionCard}>
               <AttentionRow
                 action="Price"
@@ -165,10 +180,12 @@ export default function DashboardScreen() {
             </View>
 
             <View style={styles.activeHeader}>
-              <Text style={styles.sectionLabel}>Active quotes</Text>
-              <Pressable accessibilityRole="button" onPress={() => goToQuotes()}>
-                <Text style={styles.seeAll}>See all {rows.length}</Text>
-              </Pressable>
+              <SectionHeader
+                actionLabel={`See all ${metrics.pipelineRows.length}`}
+                label="Active quotes"
+                onActionPress={() => goToQuotes()}
+                style={styles.activeSectionHeader}
+              />
             </View>
 
             {activeQuotes.map((row) => (
@@ -189,14 +206,18 @@ function EmptyDashboardInfo() {
         <ClipboardCheck color={colors.green} size={34} strokeWidth={2.15} />
       </View>
 
-      <Text style={styles.emptyInfoTitle}>Send your first quote</Text>
-      <Text style={styles.emptyInfoCopy}>
+      <AppText style={styles.emptyInfoTitle} variant="rowTitle">
+        Send your first quote
+      </AppText>
+      <AppText style={styles.emptyInfoCopy} variant="body">
         Tap the + below — walk the job, talk it through, and QuoteVan drafts a priced quote from your book.
-      </Text>
+      </AppText>
 
       <View style={styles.emptyLock}>
         <Lock color={colors.ink3} size={11} strokeWidth={2.2} />
-        <Text style={styles.emptyLockText}>No guessed prices — ever</Text>
+        <AppText style={styles.emptyLockText} variant="meta">
+          No guessed prices — ever
+        </AppText>
       </View>
     </View>
   );
@@ -230,11 +251,13 @@ function AttentionRow(props: {
         )}
       </View>
       <View style={styles.attentionText}>
-        <Text style={styles.attentionTitle}>{props.title}</Text>
-        <Text style={styles.attentionSub}>{props.subtitle}</Text>
+        <AppText variant="attentionTitle">{props.title}</AppText>
+        <AppText variant="attentionSubtitle">{props.subtitle}</AppText>
       </View>
       <View style={styles.attentionActionWrap}>
-        <Text style={[styles.attentionAction, { color: palette.fg }]}>{props.action}</Text>
+        <AppText style={styles.attentionAction} tone={props.tone} variant="button">
+          {props.action}
+        </AppText>
         <ArrowRight color={palette.fg} size={14} strokeWidth={2.7} />
       </View>
     </Pressable>
@@ -245,18 +268,20 @@ function Legend(props: { color: string; label: string }) {
   return (
     <View style={styles.legendItem}>
       <View style={[styles.legendDot, { backgroundColor: props.color }]} />
-      <Text style={styles.legendText}>{props.label}</Text>
+      <AppText style={styles.legendText} variant="rowSubtitle">
+        {props.label}
+      </AppText>
     </View>
   );
 }
 
-function PipelineSegment(props: { color: string; flexValue: number; muted: boolean }) {
+function PipelineSegment(props: { color: string; flexValue: number }) {
   return (
     <View
       style={[
         styles.pipelineSegment,
         {
-          backgroundColor: props.muted ? colors.border : props.color,
+          backgroundColor: props.color,
           flex: props.flexValue
         }
       ]}
@@ -301,24 +326,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   eyebrow: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 2.1
+    ...typography.sectionLabel,
+    letterSpacing: 1.7
   },
-  title: {
-    color: colors.ink,
-    fontSize: 27,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 31,
-    marginTop: 4
-  },
-  date: {
+  dateTitle: {
     color: colors.ink2,
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 1
+    fontSize: 14.5,
+    ...fontStyles.regular,
+    lineHeight: 19,
+    marginTop: 4
   },
   avatar: {
     alignItems: "center",
@@ -340,22 +356,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   cardLabel: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.7,
-    textTransform: "uppercase"
+    ...typography.sectionLabel,
+    letterSpacing: 1.5
   },
   pipelineCount: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "700"
+    ...fontStyles.medium,
   },
   pipelineValue: {
-    color: colors.ink,
-    fontSize: 28,
-    fontWeight: "900",
-    letterSpacing: 0,
+    ...typography.pipelineAmount,
     marginTop: 4
   },
   pipelineTrack: {
@@ -384,16 +394,12 @@ const styles = StyleSheet.create({
     width: 8
   },
   legendText: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontWeight: "600"
+    ...typography.rowSubtitle,
+    fontSize: 11
   },
   sectionLabel: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.9,
-    textTransform: "uppercase"
+    ...typography.sectionLabel,
+    letterSpacing: 1.6
   },
   attentionCard: {
     backgroundColor: colors.surface,
@@ -426,14 +432,10 @@ const styles = StyleSheet.create({
     gap: 2
   },
   attentionTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.attentionTitle
   },
   attentionSub: {
-    color: colors.ink3,
-    fontSize: 12,
-    fontWeight: "600"
+    ...typography.attentionSubtitle
   },
   attentionActionWrap: {
     alignItems: "center",
@@ -442,7 +444,7 @@ const styles = StyleSheet.create({
   },
   attentionAction: {
     fontSize: 13,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   activeHeader: {
     alignItems: "center",
@@ -450,10 +452,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 8
   },
+  activeSectionHeader: {
+    flex: 1
+  },
   seeAll: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   emptyCenter: {
     alignItems: "center",
@@ -472,15 +477,15 @@ const styles = StyleSheet.create({
   },
   emptyInfoTitle: {
     color: colors.ink,
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 18,
+    ...fontStyles.semibold,
     marginTop: 17,
     textAlign: "center"
   },
   emptyInfoCopy: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 18,
     marginTop: 9,
     maxWidth: 278,
@@ -495,6 +500,6 @@ const styles = StyleSheet.create({
   emptyLockText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "700"
+    ...fontStyles.medium,
   }
 });

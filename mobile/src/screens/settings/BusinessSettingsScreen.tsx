@@ -6,7 +6,7 @@ import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import { useQuoteStore } from "../../state/quoteStore";
 import { Screen } from "../../shared-ui/base";
-import { colors, radius } from "../../shared-ui/theme";
+import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 
 export default function BusinessSettingsScreen() {
   const authStatus = useAuthStore((state) => state.status);
@@ -178,9 +178,8 @@ const styles = StyleSheet.create({
     width: 36,
   },
   navTitle: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.8,
     textTransform: "uppercase",
   },
@@ -188,16 +187,13 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   title: {
-    color: colors.ink,
-    fontSize: 29,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 34,
+    ...typography.screenTitle,
+    lineHeight: 31,
   },
   subtitle: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 14,
-    fontWeight: "700",
+    ...fontStyles.regular,
     lineHeight: 20,
   },
   card: {
@@ -217,9 +213,8 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   label: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.1,
     textTransform: "uppercase",
   },
@@ -230,7 +225,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "700",
+    ...fontStyles.regular,
     minHeight: 50,
     paddingHorizontal: 13,
   },
@@ -249,8 +244,6 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   saveText: {
-    color: colors.onDark,
-    fontSize: 16,
-    fontWeight: "900",
+    ...typography.primaryAction,
   },
 });

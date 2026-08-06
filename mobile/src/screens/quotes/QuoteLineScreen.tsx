@@ -5,7 +5,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from "react-native";
@@ -25,7 +24,8 @@ import {
   ToggleRow,
   TopBar,
 } from "../../shared-ui/base";
-import { colors, radius, spacing } from "../../shared-ui/theme";
+import { colors, fontStyles, radius, spacing, typography } from "../../shared-ui/theme";
+import { AppText } from "../../shared-ui/text";
 import { describeQuantity, formatMoney } from "../../utils/format";
 import {
   centsToDollars,
@@ -271,18 +271,20 @@ export default function EditLineScreen() {
         <TopBar title="Confirm price" onBack={close} />
         <ScrollView contentContainerStyle={styles.content}>
           <Chip label="Suggested starter price" tone="yellow" />
-          <Text style={styles.description}>{existingLine.description}</Text>
+          <AppText style={styles.description} variant="rowTitle">
+            {existingLine.description}
+          </AppText>
           <Card style={styles.suggestedCard}>
-            <Text style={styles.suggestedLabel}>
+            <AppText style={styles.suggestedLabel} variant="meta">
               {suggestedItem?.name ?? "Starter price"}
-            </Text>
-            <Text style={styles.suggestedPrice}>
+            </AppText>
+            <AppText style={styles.suggestedPrice} variant="amount">
               {formatMoney(suggestedCents)}
-            </Text>
-            <Text style={styles.suggestedHelper}>
+            </AppText>
+            <AppText style={styles.suggestedHelper} variant="body">
               This price comes from your starter price book and hasn't been
               confirmed yet.
-            </Text>
+            </AppText>
           </Card>
           <PrimaryButton
             disabled={saving}
@@ -294,9 +296,9 @@ export default function EditLineScreen() {
             onPress={() => setOverriding(true)}
             style={styles.overrideLink}
           >
-            <Text style={styles.overrideLinkText}>
+            <AppText style={styles.overrideLinkText} variant="button">
               Override with a different price instead
-            </Text>
+            </AppText>
           </Pressable>
         </ScrollView>
       </Screen>
@@ -322,7 +324,7 @@ export default function EditLineScreen() {
         />
 
         <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Unit</Text>
+          <AppText style={styles.fieldLabel} variant="sectionLabel">Unit</AppText>
           <ScrollView
             contentContainerStyle={styles.unitRow}
             horizontal
@@ -338,14 +340,16 @@ export default function EditLineScreen() {
                   unit === option ? styles.unitChipActive : null,
                 ]}
               >
-                <Text
+                <AppText
                   style={[
                     styles.unitChipText,
                     unit === option ? styles.unitChipTextActive : null,
                   ]}
+                  tone={unit === option ? "onDark" : "secondary"}
+                  variant="button"
                 >
                   {unitChipLabel(option)}
-                </Text>
+                </AppText>
               </Pressable>
             ))}
           </ScrollView>
@@ -361,9 +365,13 @@ export default function EditLineScreen() {
             />
           </View>
           <View style={styles.rowItemWide}>
-            <Text style={styles.fieldLabel}>{`Price per ${unitChipLabel(unit)}`}</Text>
+            <AppText style={styles.fieldLabel} variant="sectionLabel">
+              {`Price per ${unitChipLabel(unit)}`}
+            </AppText>
             <View style={styles.priceInputWrap}>
-              <Text style={styles.priceCurrency}>$</Text>
+              <AppText style={styles.priceCurrency} variant="rowSubtitle">
+                $
+              </AppText>
               <TextInput
                 keyboardType="decimal-pad"
                 onChangeText={setPrice}
@@ -378,14 +386,14 @@ export default function EditLineScreen() {
 
         <View style={styles.totalCard}>
           <View>
-            <Text style={styles.totalLabel}>Line total</Text>
-            <Text style={styles.totalFormula}>
+            <AppText style={styles.totalLabel} variant="meta">Line total</AppText>
+            <AppText style={styles.totalFormula} variant="meta">
               {quantity || 0} × {price ? formatMoney(dollarsToCents(price)) : "$0"}
-            </Text>
+            </AppText>
           </View>
-          <Text style={styles.totalAmount}>
+          <AppText style={styles.totalAmount} variant="amount">
             {previewTotalCents !== null ? formatMoney(previewTotalCents) : "$0"}
-          </Text>
+          </AppText>
         </View>
 
         <Card>
@@ -399,21 +407,23 @@ export default function EditLineScreen() {
 
         {canSave ? (
           <View style={styles.previewSection}>
-            <Text style={styles.fieldLabel}>How it'll look</Text>
+            <AppText style={styles.fieldLabel} variant="sectionLabel">
+              How it'll look
+            </AppText>
             <View style={styles.previewCard}>
               <SwatchTab tone="green" />
               <View style={styles.previewBody}>
                 <View style={styles.previewTextBlock}>
-                  <Text numberOfLines={1} style={styles.previewTitle}>
+                  <AppText numberOfLines={1} style={styles.previewTitle} variant="rowTitle">
                     {description.trim()}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.previewSub}>
+                  </AppText>
+                  <AppText numberOfLines={1} style={styles.previewSub} variant="rowSubtitle">
                     {describeQuantity(quantityNumber, unit)} · you priced this
-                  </Text>
+                  </AppText>
                 </View>
-                <Text style={styles.previewAmount}>
+                <AppText style={styles.previewAmount} variant="amount">
                   {formatMoney(lineTotalCents)}
-                </Text>
+                </AppText>
               </View>
             </View>
           </View>
@@ -492,27 +502,25 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   description: {
-    color: colors.ink,
-    fontSize: 17,
-    fontWeight: "700",
+    ...typography.rowTitle,
   },
   suggestedCard: {
     gap: 3,
   },
   suggestedLabel: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
   },
   suggestedPrice: {
-    color: colors.ink,
-    fontSize: 26,
-    fontWeight: "800",
+    fontSize: 22,
+    lineHeight: 28,
   },
   suggestedHelper: {
-    color: colors.ink3,
+    color: colors.ink2,
     fontSize: 12,
     lineHeight: 16,
+    ...fontStyles.regular,
   },
   overrideLink: {
     alignItems: "center",
@@ -521,7 +529,7 @@ const styles = StyleSheet.create({
   overrideLinkText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.medium,
     textDecorationLine: "underline",
   },
   row: {
@@ -539,9 +547,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   fieldLabel: {
-    color: colors.ink2,
-    fontSize: 13,
-    fontWeight: "600",
+    ...typography.sectionLabel,
+    fontSize: 11,
   },
   unitRow: {
     flexDirection: "row",
@@ -562,7 +569,7 @@ const styles = StyleSheet.create({
   unitChipText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.medium,
   },
   unitChipTextActive: {
     color: colors.onDark,
@@ -580,14 +587,14 @@ const styles = StyleSheet.create({
   priceCurrency: {
     color: colors.ink3,
     fontSize: 16,
-    fontWeight: "700",
+    ...fontStyles.medium,
     marginRight: 4,
   },
   priceInput: {
     color: colors.ink,
     flex: 1,
     fontSize: 16,
-    fontWeight: "700",
+    ...fontStyles.semibold,
     paddingVertical: 0,
   },
   totalCard: {
@@ -602,20 +609,21 @@ const styles = StyleSheet.create({
   totalLabel: {
     color: "rgba(255,255,255,0.6)",
     fontSize: 11,
-    fontWeight: "800",
+    ...fontStyles.medium,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   totalFormula: {
     color: "rgba(255,255,255,0.78)",
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.regular,
     marginTop: 3,
   },
   totalAmount: {
     color: colors.onDark,
-    fontSize: 22,
-    fontWeight: "900",
+    fontSize: 20,
+    lineHeight: 25,
+    ...fontStyles.bold,
   },
   previewSection: {
     gap: 6,
@@ -643,19 +651,16 @@ const styles = StyleSheet.create({
     paddingRight: spacing.sm,
   },
   previewTitle: {
-    color: colors.ink,
     fontSize: 14,
-    fontWeight: "800",
+    lineHeight: 18,
   },
   previewSub: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600",
+    ...fontStyles.regular,
   },
   previewAmount: {
-    color: colors.ink,
     fontSize: 15,
-    fontWeight: "900",
   },
   footer: {
     padding: spacing.lg,

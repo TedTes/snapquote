@@ -6,7 +6,7 @@ import type { ApiQuote } from "../../api/client";
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { Banner, Card, Divider, EmptyState, GhostButton, KeyValueRow, PrimaryButton, Screen } from "../../shared-ui/base";
 import { formatLongDate, formatMoney } from "../../utils/format";
-import { colors, spacing } from "../../shared-ui/theme";
+import { colors, fontStyles, spacing, typography } from "../../shared-ui/theme";
 
 export default function PublicQuoteScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
@@ -192,22 +192,18 @@ const styles = StyleSheet.create({
     gap: 4
   },
   eyebrow: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "900",
     letterSpacing: 1.8,
     textTransform: "uppercase"
   },
   title: {
-    color: colors.ink,
-    fontSize: 31,
-    fontWeight: "900",
-    letterSpacing: 0
+    ...typography.screenTitle,
   },
   meta: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 14,
-    fontWeight: "700"
+    ...fontStyles.regular,
   },
   spacer: {
     height: spacing.sm
@@ -215,19 +211,19 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     marginBottom: 6
   },
   bodyText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 19
   },
   finePrint: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   actions: {
     gap: spacing.sm
@@ -242,6 +238,6 @@ const styles = StyleSheet.create({
   resultText: {
     color: colors.ink2,
     fontSize: 14,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   }
 });

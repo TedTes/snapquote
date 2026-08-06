@@ -21,7 +21,7 @@ import {
   NewQuoteTitle,
   SectionKicker,
 } from "./components/NewQuoteScaffold";
-import { colors } from "../../shared-ui/theme";
+import { colors, fontStyles, typography } from "../../shared-ui/theme";
 import { useQuoteStore } from "../../state/quoteStore";
 import { useAuthStore } from "../../state/authStore";
 
@@ -442,11 +442,11 @@ const styles = StyleSheet.create({
     color: colors.green,
     flex: 1,
     fontSize: 12,
-    fontWeight: "700",
+    ...fontStyles.medium,
     lineHeight: 17,
   },
   lockedStrong: {
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   group: {
     gap: 8,
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
   kickerAction: {
     color: colors.ink3,
     fontSize: 10,
-    fontWeight: "700"
+    ...fontStyles.medium,
   },
   transcriptCard: {
     backgroundColor: colors.surface,
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   audioTime: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   audioSpacer: {
     flex: 1
@@ -492,19 +492,19 @@ const styles = StyleSheet.create({
   audioAction: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   transcriptText: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "700",
+    ...fontStyles.medium,
     lineHeight: 21,
   },
   transcriptInput: {
     color: colors.ink,
     flex: 1,
     fontSize: 13,
-    fontWeight: "700",
+    ...fontStyles.medium,
     lineHeight: 21,
     minHeight: 86,
     padding: 0,
@@ -512,13 +512,13 @@ const styles = StyleSheet.create({
   emptyTranscriptText: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "700",
+    ...fontStyles.regular,
     lineHeight: 20,
   },
   mark: {
     backgroundColor: colors.amberBg,
     color: colors.ink,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   extraWrap: {
     flexDirection: "row",
@@ -543,11 +543,11 @@ const styles = StyleSheet.create({
   extraChipText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   extraChipTextActive: {
     color: colors.amber,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   footer: {
     backgroundColor: colors.bg,
@@ -569,9 +569,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   primaryText: {
-    color: colors.onDark,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.primaryAction,
   },
   primaryTextDisabled: {
     color: colors.ink3
@@ -583,6 +581,6 @@ const styles = StyleSheet.create({
   backToNotesText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "800",
+    ...fontStyles.medium,
   },
 });

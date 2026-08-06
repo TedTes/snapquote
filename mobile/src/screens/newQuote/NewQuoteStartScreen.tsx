@@ -7,7 +7,7 @@ import type { Customer } from "@snapquote/shared";
 import { AnimatedScreenContent } from "../../shared-ui/AnimatedScreenContent";
 import { Screen } from "../../shared-ui/base";
 import { NewQuoteHeader, NewQuoteTitle, SectionKicker, StickyAction } from "./components/NewQuoteScaffold";
-import { colors } from "../../shared-ui/theme";
+import { colors, fontStyles } from "../../shared-ui/theme";
 import { useQuoteStore } from "../../state/quoteStore";
 
 const MIN_SEARCH_LENGTH = 2;
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "600",
+    ...fontStyles.regular,
     height: 43,
     paddingHorizontal: 13
   },
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flex: 1,
     fontSize: 15,
-    fontWeight: "600",
+    ...fontStyles.regular,
     paddingVertical: 0
   },
   inputDisabled: {
@@ -313,12 +313,12 @@ const styles = StyleSheet.create({
   linkedCustomerName: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   linkedCustomerHint: {
     color: colors.ink2,
     fontSize: 11,
-    fontWeight: "700"
+    ...fontStyles.regular,
   },
   linkedCustomerClear: {
     alignItems: "center",
@@ -350,17 +350,17 @@ const styles = StyleSheet.create({
   suggestionName: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   suggestionAddress: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   fieldError: {
     color: colors.red,
     fontSize: 12,
-    fontWeight: "700",
+    ...fontStyles.medium,
     lineHeight: 16
   }
 });

@@ -16,7 +16,7 @@ import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { AnimatedScreenContent } from "../../shared-ui/AnimatedScreenContent";
 import { Screen } from "../../shared-ui/base";
 import { NewQuoteHeader, NewQuoteTitle, SectionKicker } from "./components/NewQuoteScaffold";
-import { colors } from "../../shared-ui/theme";
+import { colors, fontStyles, typography } from "../../shared-ui/theme";
 import { useQuoteStore } from "../../state/quoteStore";
 
 const WAVE_BARS = [18, 28, 20, 31, 16, 24, 35, 22, 30, 17, 26, 21, 32, 19, 27, 15, 24];
@@ -451,16 +451,16 @@ const styles = StyleSheet.create({
   extraChipText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   extraChipTextActive: {
     color: colors.surface,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   notesInput: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 20,
     minHeight: 86,
     paddingHorizontal: 13,
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
   guardrailText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "700"
+    ...fontStyles.regular,
   },
   micButton: {
     alignItems: "center",
@@ -520,9 +520,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted
   },
   primaryText: {
-    color: colors.onDark,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.primaryAction,
   },
   primaryTextDisabled: {
     color: colors.ink3
@@ -530,6 +528,6 @@ const styles = StyleSheet.create({
   primaryArrow: {
     color: colors.onDark,
     fontSize: 18,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   }
 });

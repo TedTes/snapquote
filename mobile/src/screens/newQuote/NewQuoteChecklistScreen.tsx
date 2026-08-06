@@ -6,7 +6,7 @@ import { getTradeConfig, prepLevels } from "@snapquote/shared";
 import { AnimatedScreenContent } from "../../shared-ui/AnimatedScreenContent";
 import { Screen } from "../../shared-ui/base";
 import { NewQuoteHeader, NewQuoteTitle, SectionKicker, StickyAction } from "./components/NewQuoteScaffold";
-import { colors } from "../../shared-ui/theme";
+import { colors, fontStyles } from "../../shared-ui/theme";
 import { useQuoteStore } from "../../state/quoteStore";
 
 type PrepLevel = (typeof prepLevels)[number];
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   rowLabel: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "600"
+    ...fontStyles.semibold,
   },
   divider: {
     backgroundColor: colors.border,
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   stepperValue: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     minWidth: 22,
     textAlign: "center"
   },
@@ -319,10 +319,10 @@ const styles = StyleSheet.create({
   segmentText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   segmentTextActive: {
     color: colors.ink,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   }
 });

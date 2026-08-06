@@ -1,13 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { router, useFocusEffect } from "expo-router";
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { ChevronRight, Merge, Plus, Search, Trash2, Users, X } from "lucide-react-native";
 import { deriveCustomerCity, deriveJobLabel, type Customer } from "@snapquote/shared";
 import { AnimatedSheetContent, SheetModal } from "../../shared-ui/AnimatedSheet";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import { Screen } from "../../shared-ui/base";
-import { colors, radius, shadowLg } from "../../shared-ui/theme";
+import { AppText } from "../../shared-ui/text";
+import { colors, fontStyles, radius, shadowLg, typography } from "../../shared-ui/theme";
 import { useAuthStore } from "../../state/authStore";
 import { snapquoteApi, userFacingErrorMessage, type CreateCustomerInput } from "../../api/client";
 import {
@@ -290,8 +291,8 @@ export default function CustomersScreen() {
         >
           <View style={styles.header}>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>Customers</Text>
-              <Text style={styles.customerCount}>{customers.length} total</Text>
+              <AppText style={styles.title} variant="screenTitle">Customers</AppText>
+              <AppText style={styles.customerCount} variant="headerSummary">{customers.length} total</AppText>
             </View>
             <Pressable
               accessibilityLabel="Add customer"
@@ -414,8 +415,8 @@ function CustomerSection(props: { children: ReactNode; count: number; label: str
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionLabel}>{props.label}</Text>
-        <Text style={styles.sectionCount}>{props.count}</Text>
+        <AppText style={styles.sectionLabel} variant="sectionLabel">{props.label}</AppText>
+        <AppText style={styles.sectionCount} variant="meta">{props.count}</AppText>
       </View>
       <View style={styles.sectionCards}>{props.children}</View>
     </View>
@@ -436,22 +437,22 @@ function CustomerRow(props: {
       style={[styles.customerRow, props.withDivider ? styles.rowDivider : null]}
     >
       <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{initials(props.customer.name)}</Text>
+        <AppText style={styles.avatarText} variant="meta">{initials(props.customer.name)}</AppText>
       </View>
       <View style={styles.customerBody}>
         <View style={styles.customerNameRow}>
-          <Text numberOfLines={1} style={styles.customerName}>{props.customer.name}</Text>
-          {props.duplicate ? <Text style={styles.duplicatePill}>DUP</Text> : null}
+          <AppText numberOfLines={1} style={styles.customerName} variant="rowTitle">{props.customer.name}</AppText>
+          {props.duplicate ? <AppText style={styles.duplicatePill} variant="statusPill">DUP</AppText> : null}
         </View>
-        <Text numberOfLines={1} style={styles.customerAddress}>{customerLocation(props.customer)}</Text>
-        <Text numberOfLines={1} style={styles.customerMeta}>{customerContactSummary(props.customer)}</Text>
+        <AppText numberOfLines={1} style={styles.customerAddress} variant="rowSubtitle">{customerLocation(props.customer)}</AppText>
+        <AppText numberOfLines={1} style={styles.customerMeta} variant="meta">{customerContactSummary(props.customer)}</AppText>
       </View>
       <View style={styles.customerRight}>
-        <Text style={styles.quoteCount}>{quoteCountLabel(props.stats.quoteCount)}</Text>
+        <AppText style={styles.quoteCount} variant="meta">{quoteCountLabel(props.stats.quoteCount)}</AppText>
         {props.stats.latestQuote ? (
-          <Text numberOfLines={1} style={styles.latestQuote}>{deriveJobLabel(props.stats.latestQuote)}</Text>
+          <AppText numberOfLines={1} style={styles.latestQuote} variant="meta">{deriveJobLabel(props.stats.latestQuote)}</AppText>
         ) : (
-          <Text style={styles.latestQuote}>No quotes</Text>
+          <AppText style={styles.latestQuote} variant="meta">No quotes</AppText>
         )}
       </View>
       <ChevronRight color={colors.ink3} size={14} strokeWidth={2.2} />
@@ -480,12 +481,12 @@ function DuplicateGroupRow(props: {
         <Merge color={colors.amber} size={16} strokeWidth={2.3} />
       </View>
       <View style={styles.customerBody}>
-        <Text numberOfLines={1} style={styles.customerName}>{props.group[0]?.name ?? "Duplicate customers"}</Text>
-        <Text numberOfLines={1} style={styles.customerAddress}>
+        <AppText numberOfLines={1} style={styles.customerName} variant="rowTitle">{props.group[0]?.name ?? "Duplicate customers"}</AppText>
+        <AppText numberOfLines={1} style={styles.customerAddress} variant="rowSubtitle">
           {props.group.length} records - {quoteCountLabel(quoteCount)}
-        </Text>
+        </AppText>
       </View>
-      <Text style={styles.reviewText}>Review</Text>
+      <AppText style={styles.reviewText} variant="button">Review</AppText>
       <ChevronRight color={colors.ink3} size={14} strokeWidth={2.2} />
     </Pressable>
   );
@@ -497,11 +498,11 @@ function EmptyCustomersState(props: { onAdd: () => void }) {
       <View style={styles.emptyIconCard}>
         <Users color={colors.ink2} size={31} strokeWidth={2.1} />
       </View>
-      <Text style={styles.emptyHeadline}>No customers yet</Text>
-      <Text style={styles.emptyCopy}>Create one here, or pick/create a customer while starting a quote.</Text>
+      <AppText style={styles.emptyHeadline} variant="panelTitle">No customers yet</AppText>
+      <AppText style={styles.emptyCopy} variant="body">Create one here, or pick/create a customer while starting a quote.</AppText>
       <Pressable accessibilityRole="button" onPress={props.onAdd} style={styles.emptyPrimary}>
         <Plus color={colors.onDark} size={16} strokeWidth={2.5} />
-        <Text style={styles.emptyPrimaryText}>Add customer</Text>
+        <AppText style={styles.emptyPrimaryText} tone="onDark" variant="primaryAction">Add customer</AppText>
       </Pressable>
     </View>
   );
@@ -510,8 +511,8 @@ function EmptyCustomersState(props: { onAdd: () => void }) {
 function NoMatchesState() {
   return (
     <View style={styles.noMatches}>
-      <Text style={styles.noMatchesTitle}>Nothing matches</Text>
-      <Text style={styles.noMatchesText}>Try a different customer search.</Text>
+      <AppText style={styles.noMatchesTitle} variant="rowTitle">Nothing matches</AppText>
+      <AppText style={styles.noMatchesText} variant="body">Try a different customer search.</AppText>
     </View>
   );
 }
@@ -552,9 +553,9 @@ function CustomerFormSheet(props: {
     <AnimatedSheetContent style={styles.sheet}>
       <View style={styles.sheetHeader}>
         <View>
-          <Text style={styles.sheetTitle}>{props.title}</Text>
+          <AppText style={styles.sheetTitle} variant="panelTitle">{props.title}</AppText>
           {isEditing ? (
-            <Text style={styles.sheetSubtitle}>{quoteCountLabel(props.quoteCount ?? 0)}</Text>
+            <AppText style={styles.sheetSubtitle} variant="meta">{quoteCountLabel(props.quoteCount ?? 0)}</AppText>
           ) : null}
         </View>
         <Pressable accessibilityLabel="Close" accessibilityRole="button" onPress={props.onClose} style={styles.sheetClose}>
@@ -587,7 +588,7 @@ function CustomerFormSheet(props: {
           <TextInput onChangeText={setCity} placeholder="Toronto" placeholderTextColor={colors.ink3} style={styles.sheetInput} value={city} />
         </SheetField>
 
-        {error ? <Text style={styles.formError}>{error}</Text> : null}
+        {error ? <AppText style={styles.formError} tone="red" variant="meta">{error}</AppText> : null}
 
         <Pressable
           accessibilityRole="button"
@@ -595,18 +596,18 @@ function CustomerFormSheet(props: {
           onPress={submit}
           style={[styles.primaryAction, props.saving ? styles.actionDisabled : null]}
         >
-          <Text style={styles.primaryActionText}>{props.saving ? "Saving..." : isEditing ? "Save customer" : "Create customer"}</Text>
+          <AppText style={styles.primaryActionText} tone="onDark" variant="primaryAction">{props.saving ? "Saving..." : isEditing ? "Save customer" : "Create customer"}</AppText>
         </Pressable>
 
         {isEditing ? (
           <View style={styles.secondaryActions}>
             <Pressable accessibilityRole="button" onPress={props.onMerge} style={styles.secondaryAction}>
               <Merge color={colors.ink2} size={15} strokeWidth={2.3} />
-              <Text style={styles.secondaryActionText}>Merge</Text>
+              <AppText style={styles.secondaryActionText} variant="button">Merge</AppText>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={props.onDelete} style={styles.secondaryAction}>
               <Trash2 color={colors.red} size={15} strokeWidth={2.3} />
-              <Text style={[styles.secondaryActionText, styles.dangerText]}>{props.deleting ? "Deleting..." : "Delete"}</Text>
+              <AppText style={[styles.secondaryActionText, styles.dangerText]} tone="red" variant="button">{props.deleting ? "Deleting..." : "Delete"}</AppText>
             </Pressable>
           </View>
         ) : null}
@@ -633,8 +634,8 @@ function MergeCustomerSheet(props: {
     <AnimatedSheetContent style={styles.sheet}>
       <View style={styles.sheetHeader}>
         <View>
-          <Text style={styles.sheetTitle}>Merge customer</Text>
-          <Text numberOfLines={1} style={styles.sheetSubtitle}>{props.source.name}</Text>
+          <AppText style={styles.sheetTitle} variant="panelTitle">Merge customer</AppText>
+          <AppText numberOfLines={1} style={styles.sheetSubtitle} variant="meta">{props.source.name}</AppText>
         </View>
         <Pressable accessibilityLabel="Close" accessibilityRole="button" onPress={props.onClose} style={styles.sheetClose}>
           <X color={colors.ink2} size={17} strokeWidth={2.4} />
@@ -678,8 +679,8 @@ function DuplicateGroupSheet(props: {
     <AnimatedSheetContent style={styles.sheet}>
       <View style={styles.sheetHeader}>
         <View>
-          <Text style={styles.sheetTitle}>Possible duplicates</Text>
-          <Text style={styles.sheetSubtitle}>{props.group.length} customer records</Text>
+          <AppText style={styles.sheetTitle} variant="panelTitle">Possible duplicates</AppText>
+          <AppText style={styles.sheetSubtitle} variant="meta">{props.group.length} customer records</AppText>
         </View>
         <Pressable accessibilityLabel="Close" accessibilityRole="button" onPress={props.onClose} style={styles.sheetClose}>
           <X color={colors.ink2} size={17} strokeWidth={2.4} />
@@ -716,13 +717,13 @@ function MergeTargetRow(props: {
       style={[styles.mergeRow, props.withDivider ? styles.rowDivider : null]}
     >
       <View style={styles.avatarSmall}>
-        <Text style={styles.avatarSmallText}>{initials(props.customer.name)}</Text>
+        <AppText style={styles.avatarSmallText} variant="meta">{initials(props.customer.name)}</AppText>
       </View>
       <View style={styles.customerBody}>
-        <Text numberOfLines={1} style={styles.customerName}>{props.customer.name}</Text>
-        <Text numberOfLines={1} style={styles.customerAddress}>{customerLocation(props.customer)}</Text>
+        <AppText numberOfLines={1} style={styles.customerName} variant="rowTitle">{props.customer.name}</AppText>
+        <AppText numberOfLines={1} style={styles.customerAddress} variant="rowSubtitle">{customerLocation(props.customer)}</AppText>
       </View>
-      <Text style={styles.keepText}>{quoteCountLabel(props.stats.quoteCount)}</Text>
+      <AppText style={styles.keepText} variant="button">{quoteCountLabel(props.stats.quoteCount)}</AppText>
     </Pressable>
   );
 }
@@ -737,16 +738,16 @@ function DuplicateKeepRow(props: {
   return (
     <View style={[styles.mergeRow, props.withDivider ? styles.rowDivider : null]}>
       <View style={styles.avatarSmall}>
-        <Text style={styles.avatarSmallText}>{initials(props.customer.name)}</Text>
+        <AppText style={styles.avatarSmallText} variant="meta">{initials(props.customer.name)}</AppText>
       </View>
       <View style={styles.customerBody}>
-        <Text numberOfLines={1} style={styles.customerName}>{props.customer.name}</Text>
-        <Text numberOfLines={1} style={styles.customerAddress}>
+        <AppText numberOfLines={1} style={styles.customerName} variant="rowTitle">{props.customer.name}</AppText>
+        <AppText numberOfLines={1} style={styles.customerAddress} variant="rowSubtitle">
           {customerLocation(props.customer)} - {quoteCountLabel(props.stats.quoteCount)}
-        </Text>
+        </AppText>
       </View>
       <Pressable accessibilityRole="button" disabled={props.disabled} onPress={props.onPress} style={styles.keepButton}>
-        <Text style={styles.keepButtonText}>Keep</Text>
+        <AppText style={styles.keepButtonText} variant="button">Keep</AppText>
       </Pressable>
     </View>
   );
@@ -755,7 +756,7 @@ function DuplicateKeepRow(props: {
 function SheetField(props: { children: ReactNode; label: string }) {
   return (
     <View style={styles.sheetField}>
-      <Text style={styles.sheetFieldLabel}>{props.label}</Text>
+      <AppText style={styles.sheetFieldLabel} variant="sectionLabel">{props.label}</AppText>
       {props.children}
     </View>
   );
@@ -985,16 +986,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   title: {
-    color: colors.ink,
-    fontSize: 27,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 32,
+    ...typography.screenTitle,
   },
   customerCount: {
     color: colors.ink3,
     fontSize: 14,
-    fontWeight: "700",
+    ...fontStyles.medium,
   },
   iconButton: {
     alignItems: "center",
@@ -1021,7 +1018,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flex: 1,
     fontSize: 14,
-    fontWeight: "600",
+    ...fontStyles.regular,
     paddingVertical: 0,
   },
   section: {
@@ -1034,9 +1031,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "800",
     letterSpacing: 1.7,
     textTransform: "uppercase",
   },
@@ -1047,7 +1043,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "800",
+    ...fontStyles.medium,
     minWidth: 23,
     overflow: "hidden",
     paddingHorizontal: 8,
@@ -1096,7 +1092,7 @@ const styles = StyleSheet.create({
   avatarText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   avatarSmall: {
     alignItems: "center",
@@ -1111,7 +1107,7 @@ const styles = StyleSheet.create({
   avatarSmallText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   duplicateIcon: {
     alignItems: "center",
@@ -1138,7 +1134,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flexShrink: 1,
     fontSize: 15,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   duplicatePill: {
     backgroundColor: colors.amberBg,
@@ -1147,7 +1143,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.amber,
     fontSize: 8,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     overflow: "hidden",
     paddingHorizontal: 5,
     paddingVertical: 2,
@@ -1155,12 +1151,12 @@ const styles = StyleSheet.create({
   customerAddress: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "700",
+    ...fontStyles.regular,
   },
   customerMeta: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600",
+    ...fontStyles.regular,
   },
   customerRight: {
     alignItems: "flex-end",
@@ -1170,19 +1166,19 @@ const styles = StyleSheet.create({
   quoteCount: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   latestQuote: {
     color: colors.ink3,
     fontSize: 10.5,
-    fontWeight: "600",
+    ...fontStyles.regular,
     maxWidth: 82,
     textAlign: "right",
   },
   reviewText: {
     color: colors.amber,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   noMatches: {
     backgroundColor: colors.surface,
@@ -1195,12 +1191,12 @@ const styles = StyleSheet.create({
   noMatchesTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   noMatchesText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
   },
   emptyFull: {
     alignItems: "center",
@@ -1223,15 +1219,15 @@ const styles = StyleSheet.create({
   },
   emptyHeadline: {
     color: colors.ink,
-    fontSize: 21,
-    fontWeight: "900",
+    fontSize: 19,
+    ...fontStyles.semibold,
     marginBottom: 9,
     textAlign: "center",
   },
   emptyCopy: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 18,
     marginBottom: 26,
     maxWidth: 290,
@@ -1251,7 +1247,7 @@ const styles = StyleSheet.create({
   emptyPrimaryText: {
     color: colors.onDark,
     fontSize: 15,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   modalBackdrop: {
     backgroundColor: "rgba(32,31,27,0.18)",
@@ -1276,13 +1272,13 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     color: colors.ink,
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 19,
+    ...fontStyles.semibold,
   },
   sheetSubtitle: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "700",
+    ...fontStyles.regular,
     marginTop: 2,
   },
   sheetClose: {
@@ -1304,9 +1300,8 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   sheetFieldLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "900",
     letterSpacing: 1.5,
     textTransform: "uppercase",
   },
@@ -1317,14 +1312,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "700",
+    ...fontStyles.regular,
     height: 44,
     paddingHorizontal: 12,
   },
   formError: {
     color: colors.red,
     fontSize: 12,
-    fontWeight: "800",
+    ...fontStyles.medium,
     lineHeight: 16,
   },
   primaryAction: {
@@ -1341,7 +1336,7 @@ const styles = StyleSheet.create({
   primaryActionText: {
     color: colors.onDark,
     fontSize: 15,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   secondaryActions: {
     flexDirection: "row",
@@ -1362,7 +1357,7 @@ const styles = StyleSheet.create({
   secondaryActionText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   dangerText: {
     color: colors.red,
@@ -1395,7 +1390,7 @@ const styles = StyleSheet.create({
   keepText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   keepButton: {
     alignItems: "center",
@@ -1408,6 +1403,6 @@ const styles = StyleSheet.create({
   keepButtonText: {
     color: colors.onDark,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
 });

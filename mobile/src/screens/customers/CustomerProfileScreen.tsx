@@ -9,7 +9,6 @@ import {
   ScrollView,
   Share,
   StyleSheet,
-  Text,
   TextInput,
   View
 } from "react-native";
@@ -27,8 +26,9 @@ import {
 import { deriveCustomerCity, deriveJobLabel, type Customer, type QuoteStatus } from "@snapquote/shared";
 import { AnimatedSheetContent, SheetModal } from "../../shared-ui/AnimatedSheet";
 import { EmptyState, Screen } from "../../shared-ui/base";
+import { AppText } from "../../shared-ui/text";
 import { apiBaseUrl, snapquoteApi, userFacingErrorMessage, type CreateCustomerInput } from "../../api/client";
-import { colors, radius } from "../../shared-ui/theme";
+import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 import { useAuthStore } from "../../state/authStore";
 import {
   getQuoteBlockers,
@@ -413,7 +413,7 @@ export default function CustomerProfileScreen() {
               <ChevronLeft color={colors.ink} size={18} strokeWidth={2.5} />
             </Pressable>
             <View style={styles.navTitleWrap}>
-              <Text style={styles.navEyebrow}>Customer</Text>
+              <AppText style={styles.navEyebrow} variant="sectionLabel">Customer</AppText>
             </View>
             <Pressable accessibilityRole="button" onPress={() => setEditing(true)} style={styles.navButton}>
               <Edit3 color={colors.ink} size={17} strokeWidth={2.4} />
@@ -422,11 +422,11 @@ export default function CustomerProfileScreen() {
 
           <View style={styles.profileHero}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials(currentCustomer.name)}</Text>
+              <AppText style={styles.avatarText} tone="onDark" variant="statValue">{initials(currentCustomer.name)}</AppText>
             </View>
             <View style={styles.profileCopy}>
-              <Text numberOfLines={2} style={styles.customerName}>{currentCustomer.name}</Text>
-              <Text numberOfLines={1} style={styles.customerLocation}>{customerSubtitle(currentCustomer)}</Text>
+              <AppText numberOfLines={2} style={styles.customerName} variant="panelTitle">{currentCustomer.name}</AppText>
+              <AppText numberOfLines={1} style={styles.customerLocation} variant="headerSummary">{customerSubtitle(currentCustomer)}</AppText>
             </View>
           </View>
 
@@ -443,17 +443,17 @@ export default function CustomerProfileScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>Quotes</Text>
-              <Text style={styles.sectionCount}>{quoteRows.length}</Text>
+              <AppText style={styles.sectionLabel} variant="sectionLabel">Quotes</AppText>
+              <AppText style={styles.sectionCount} variant="meta">{quoteRows.length}</AppText>
             </View>
             <Pressable accessibilityRole="button" onPress={startQuoteForCustomer} style={styles.newQuoteButton}>
               <Plus color={colors.ink2} size={15} strokeWidth={2.5} />
-              <Text numberOfLines={1} style={styles.newQuoteText}>New quote for {currentCustomer.name}</Text>
+              <AppText numberOfLines={1} style={styles.newQuoteText} variant="button">New quote for {currentCustomer.name}</AppText>
             </Pressable>
             {quoteRows.length === 0 ? (
               <View style={styles.emptyHistory}>
-                <Text style={styles.emptyHistoryTitle}>No quotes yet</Text>
-                <Text style={styles.emptyHistoryText}>Start a quote and pick this customer to build their history.</Text>
+                <AppText style={styles.emptyHistoryTitle} variant="rowTitle">No quotes yet</AppText>
+                <AppText style={styles.emptyHistoryText} variant="body">Start a quote and pick this customer to build their history.</AppText>
               </View>
             ) : (
               <View style={styles.historyList}>
@@ -488,8 +488,8 @@ export default function CustomerProfileScreen() {
 function ProfileStat(props: { label: string; last?: boolean | undefined; tone?: "green" | undefined; value: string }) {
   return (
     <View style={[styles.profileStat, props.last ? styles.profileStatLast : null]}>
-      <Text style={[styles.profileStatValue, props.tone === "green" ? styles.profileStatValueGreen : null]}>{props.value}</Text>
-      <Text style={styles.profileStatLabel}>{props.label}</Text>
+      <AppText style={[styles.profileStatValue, props.tone === "green" ? styles.profileStatValueGreen : null]} variant="statValue">{props.value}</AppText>
+      <AppText style={styles.profileStatLabel} variant="sectionLabel">{props.label}</AppText>
     </View>
   );
 }
@@ -498,7 +498,7 @@ function ContactButton(props: { icon: ReactNode; label: string; onPress: () => v
   return (
     <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.contactButton}>
       {props.icon}
-      <Text style={styles.contactButtonText}>{props.label}</Text>
+      <AppText style={styles.contactButtonText} variant="button">{props.label}</AppText>
     </Pressable>
   );
 }
@@ -525,21 +525,21 @@ function QuoteHistoryCard(props: {
         <View style={styles.quoteBody}>
           <View style={styles.quoteTop}>
             <View style={styles.quoteTitleBlock}>
-              <Text numberOfLines={1} style={styles.quoteTitle}>{deriveJobLabel(quote)}</Text>
-              <Text numberOfLines={1} style={styles.quoteMeta}>{quoteMeta(quote, status, stale)}</Text>
+              <AppText numberOfLines={1} style={styles.quoteTitle} variant="rowTitle">{deriveJobLabel(quote)}</AppText>
+              <AppText numberOfLines={1} style={styles.quoteMeta} variant="rowSubtitle">{quoteMeta(quote, status, stale)}</AppText>
             </View>
             <View style={styles.quoteRight}>
-              <Text style={styles.quoteAmount}>{formatMoney(totals?.totalCents ?? null)}</Text>
+              <AppText style={styles.quoteAmount} variant="amount">{formatMoney(totals?.totalCents ?? null)}</AppText>
               <View style={[styles.statusPill, statusPillStyle(status)]}>
-                <Text style={[styles.statusText, statusTextStyle(status)]}>{quoteStatusLabel(status)}</Text>
+                <AppText style={[styles.statusText, statusTextStyle(status)]} variant="statusPill">{quoteStatusLabel(status)}</AppText>
               </View>
             </View>
           </View>
           {isDraft && blockers.reasons.length > 0 ? (
-            <Text numberOfLines={1} style={styles.blockerText}>{blockers.reasons[0]}</Text>
+            <AppText numberOfLines={1} style={styles.blockerText} tone="red" variant="button">{blockers.reasons[0]}</AppText>
           ) : null}
           {awaitingResponse && !stale ? (
-            <Text numberOfLines={1} style={styles.reminderText}>{followUpAvailability(quote)}</Text>
+            <AppText numberOfLines={1} style={styles.reminderText} variant="meta">{followUpAvailability(quote)}</AppText>
           ) : null}
         </View>
       </Pressable>
@@ -586,7 +586,7 @@ function QuoteFooterAction(props: {
       ]}
     >
       {props.icon}
-      <Text style={[styles.quoteFooterActionText, props.disabled ? styles.quoteFooterActionTextDisabled : null]}>{props.label}</Text>
+      <AppText style={[styles.quoteFooterActionText, props.disabled ? styles.quoteFooterActionTextDisabled : null]} variant="button">{props.label}</AppText>
     </Pressable>
   );
 }
@@ -621,8 +621,8 @@ function CustomerEditSheet(props: {
     <AnimatedSheetContent style={styles.sheet}>
       <View style={styles.sheetHeader}>
         <View>
-          <Text style={styles.sheetTitle}>Edit customer</Text>
-          <Text numberOfLines={1} style={styles.sheetSubtitle}>{props.customer.name}</Text>
+          <AppText style={styles.sheetTitle} variant="panelTitle">Edit customer</AppText>
+          <AppText numberOfLines={1} style={styles.sheetSubtitle} variant="meta">{props.customer.name}</AppText>
         </View>
         <Pressable accessibilityLabel="Close" accessibilityRole="button" onPress={props.onClose} style={styles.sheetClose}>
           <X color={colors.ink2} size={17} strokeWidth={2.4} />
@@ -652,14 +652,14 @@ function CustomerEditSheet(props: {
         <SheetField label="City">
           <TextInput onChangeText={setCity} placeholder="Toronto" placeholderTextColor={colors.ink3} style={styles.sheetInput} value={city} />
         </SheetField>
-        {error ? <Text style={styles.formError}>{error}</Text> : null}
+        {error ? <AppText style={styles.formError} tone="red" variant="meta">{error}</AppText> : null}
         <Pressable
           accessibilityRole="button"
           disabled={props.saving}
           onPress={submit}
           style={[styles.primaryAction, props.saving ? styles.actionDisabled : null]}
         >
-          <Text style={styles.primaryActionText}>{props.saving ? "Saving..." : "Save customer"}</Text>
+          <AppText style={styles.primaryActionText} tone="onDark" variant="primaryAction">{props.saving ? "Saving..." : "Save customer"}</AppText>
         </Pressable>
       </ScrollView>
     </AnimatedSheetContent>
@@ -669,7 +669,7 @@ function CustomerEditSheet(props: {
 function SheetField(props: { children: ReactNode; label: string }) {
   return (
     <View style={styles.sheetField}>
-      <Text style={styles.sheetFieldLabel}>{props.label}</Text>
+      <AppText style={styles.sheetFieldLabel} variant="sectionLabel">{props.label}</AppText>
       {props.children}
     </View>
   );
@@ -922,11 +922,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   navEyebrow: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.8,
-    textTransform: "uppercase",
   },
   profileHero: {
     alignItems: "center",
@@ -946,7 +944,7 @@ const styles = StyleSheet.create({
   avatarText: {
     color: colors.onDark,
     fontSize: 20,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   profileCopy: {
     flex: 1,
@@ -955,14 +953,14 @@ const styles = StyleSheet.create({
   },
   customerName: {
     color: colors.ink,
-    fontSize: 23,
-    fontWeight: "900",
+    fontSize: 22,
+    ...fontStyles.semibold,
     lineHeight: 27,
   },
   customerLocation: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 13,
-    fontWeight: "700",
+    ...fontStyles.regular,
   },
   profileStats: {
     backgroundColor: colors.surface,
@@ -986,17 +984,15 @@ const styles = StyleSheet.create({
   profileStatValue: {
     color: colors.ink,
     fontSize: 17,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   profileStatValueGreen: {
     color: colors.green,
   },
   profileStatLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.2,
-    textTransform: "uppercase",
   },
   contactActions: {
     flexDirection: "row",
@@ -1017,7 +1013,7 @@ const styles = StyleSheet.create({
   contactButtonText: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   section: {
     gap: 8,
@@ -1029,11 +1025,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 1,
   },
   sectionLabel: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "900",
+    ...typography.sectionLabel,
     letterSpacing: 1.7,
-    textTransform: "uppercase",
   },
   sectionCount: {
     backgroundColor: colors.surface,
@@ -1042,7 +1035,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "900",
+    ...fontStyles.medium,
     minWidth: 22,
     overflow: "hidden",
     paddingHorizontal: 8,
@@ -1066,7 +1059,7 @@ const styles = StyleSheet.create({
     color: colors.ink2,
     flexShrink: 1,
     fontSize: 13,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   historyList: {
     gap: 10,
@@ -1118,23 +1111,19 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   quoteTitle: {
-    color: colors.ink,
+    ...typography.rowTitle,
     fontSize: 15,
-    fontWeight: "900",
   },
   quoteMeta: {
-    color: colors.ink3,
+    ...typography.rowSubtitle,
     fontSize: 11.5,
-    fontWeight: "700",
   },
   quoteRight: {
     alignItems: "flex-end",
     gap: 7,
   },
   quoteAmount: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "900",
+    ...typography.amount,
   },
   statusPill: {
     borderRadius: 7,
@@ -1159,10 +1148,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   statusText: {
+    ...typography.statusPill,
     fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
   },
   statusTextGreen: {
     color: colors.green,
@@ -1179,12 +1166,12 @@ const styles = StyleSheet.create({
   blockerText: {
     color: colors.red,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   reminderText: {
     color: colors.amber,
     fontSize: 12,
-    fontWeight: "800",
+    ...fontStyles.semibold,
   },
   quoteFooter: {
     borderTopColor: colors.border,
@@ -1210,7 +1197,7 @@ const styles = StyleSheet.create({
   quoteFooterActionText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   quoteFooterActionTextDisabled: {
     color: colors.ink3,
@@ -1226,12 +1213,12 @@ const styles = StyleSheet.create({
   emptyHistoryTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
   emptyHistoryText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 18,
   },
   modalBackdrop: {
@@ -1257,13 +1244,13 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     color: colors.ink,
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 19,
+    ...fontStyles.semibold,
   },
   sheetSubtitle: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "700",
+    ...fontStyles.regular,
     marginTop: 2,
   },
   sheetClose: {
@@ -1285,11 +1272,9 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   sheetFieldLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "900",
     letterSpacing: 1.5,
-    textTransform: "uppercase",
   },
   sheetInput: {
     backgroundColor: colors.surface,
@@ -1298,14 +1283,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "700",
+    ...fontStyles.regular,
     height: 44,
     paddingHorizontal: 12,
   },
   formError: {
     color: colors.red,
     fontSize: 12,
-    fontWeight: "800",
+    ...fontStyles.medium,
     lineHeight: 16,
   },
   primaryAction: {
@@ -1322,6 +1307,6 @@ const styles = StyleSheet.create({
   primaryActionText: {
     color: colors.onDark,
     fontSize: 15,
-    fontWeight: "900",
+    ...fontStyles.semibold,
   },
 });

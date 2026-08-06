@@ -5,7 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import { Screen } from "../../shared-ui/base";
-import { colors, radius } from "../../shared-ui/theme";
+import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 
 export default function ContactSettingsScreen() {
   const authStatus = useAuthStore((state) => state.status);
@@ -155,9 +155,8 @@ const styles = StyleSheet.create({
     width: 36
   },
   navTitle: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.8,
     textTransform: "uppercase"
   },
@@ -165,15 +164,13 @@ const styles = StyleSheet.create({
     gap: 7
   },
   title: {
-    color: colors.ink,
-    fontSize: 28,
-    fontWeight: "900",
-    lineHeight: 32
+    ...typography.screenTitle,
+    lineHeight: 31
   },
   subtitle: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 14,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 20
   },
   card: {
@@ -188,9 +185,8 @@ const styles = StyleSheet.create({
     gap: 8
   },
   label: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.5,
     textTransform: "uppercase"
   },
@@ -209,7 +205,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flex: 1,
     fontSize: 16,
-    fontWeight: "700",
+    ...fontStyles.regular,
     paddingVertical: 13
   },
   saveButton: {
@@ -223,8 +219,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderStrong
   },
   saveText: {
-    color: colors.surface,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.primaryAction,
   }
 });

@@ -17,7 +17,7 @@ import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-nativ
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../shared-ui/base";
 import { QuoteMark } from "../../shared-ui/QuoteMark";
-import { colors } from "../../shared-ui/theme";
+import { colors, fontStyles, typography } from "../../shared-ui/theme";
 import { legalUrls } from "../../config/legal";
 import { useAuthStore } from "../../state/authStore";
 
@@ -427,24 +427,22 @@ const styles = StyleSheet.create({
     width: 64
   },
   brandName: {
-    color: colors.ink2,
+    color: typography.sectionLabel.color,
     fontSize: 13,
-    fontWeight: "800",
+    ...fontStyles.medium,
     letterSpacing: 1.4,
     marginTop: 12,
     textTransform: "uppercase"
   },
   title: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "700",
+    ...typography.panelTitle,
     marginTop: 14,
     textAlign: "center"
   },
   subtitle: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 19,
     marginTop: 8,
     maxWidth: 300,
@@ -477,7 +475,7 @@ const styles = StyleSheet.create({
   },
   socialText: {
     fontSize: 15,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   socialTextDark: {
     color: colors.onDark
@@ -488,7 +486,7 @@ const styles = StyleSheet.create({
   appleMark: {
     color: colors.onDark,
     fontSize: 19,
-    fontWeight: "800",
+    ...fontStyles.bold,
     lineHeight: 20
   },
   errorRow: {
@@ -501,19 +499,19 @@ const styles = StyleSheet.create({
     color: colors.red,
     flex: 1,
     fontSize: 12,
-    fontWeight: "700",
+    ...fontStyles.medium,
     lineHeight: 17
   },
   legal: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 17,
     marginTop: 18,
     textAlign: "center"
   },
   legalLink: {
     color: colors.ink2,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   }
 });

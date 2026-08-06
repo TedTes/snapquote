@@ -14,12 +14,14 @@ import {
   User
 } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { deriveCustomerCity, deriveJobLabel } from "@snapquote/shared";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import { ClipboardQuoteMark } from "./components/ClipboardQuoteMark";
 import { Screen } from "../../shared-ui/base";
-import { colors, radius } from "../../shared-ui/theme";
+import { SectionHeader } from "../../shared-ui/layout";
+import { AppText } from "../../shared-ui/text";
+import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 import { formatMoney, formatShortDate } from "../../utils/format";
 import { matchesQuoteSearch, useQuoteRows, type QuoteRow } from "../../state/useQuoteRows";
 import type { QuoteRecord } from "../../state/quoteStore";
@@ -71,8 +73,7 @@ export default function QuotesScreen() {
 
     return groups;
   }, [rows]);
-  const showListTools = visibleRows.length > searchThreshold;
-  const showSearch = showListTools;
+  const showSearch = visibleRows.length > searchThreshold;
 
   const activeRows = useMemo(
     () => visibleRows.filter((row) => row.status === "draft" || row.status === "sent" || row.status === "viewed"),
@@ -92,8 +93,7 @@ export default function QuotesScreen() {
   );
 
   const filtered = useMemo(() => {
-    const term = showSearch ? query : "";
-    const bySearch = visibleRows.filter((row) => matchesQuoteSearch(row, term));
+    const bySearch = visibleRows.filter((row) => matchesQuoteSearch(row, showSearch ? query : ""));
 
     if (filter === "all") {
       return bySearch;
@@ -119,11 +119,6 @@ export default function QuotesScreen() {
     };
   }, [filtered]);
 
-  const simpleRows = useMemo(
-    () => [...visibleRows].sort((a, b) => b.quote.updatedAt.localeCompare(a.quote.updatedAt)),
-    [visibleRows]
-  );
-
   function openQuote(quote: QuoteRecord) {
     router.push({ pathname: "/quote/[id]", params: { id: quote.id } });
   }
@@ -131,12 +126,11 @@ export default function QuotesScreen() {
   if (visibleRows.length === 0) {
     return (
       <Screen edges={["top"]}>
-        <View style={styles.emptyScreen}>
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title}>Quotes</Text>
-              <Text style={styles.activeCount}>0 active</Text>
-            </View>
+          <View style={styles.emptyScreen}>
+            <View style={styles.header}>
+            <AppText style={styles.headerSummary} variant="headerSummary">
+              0 quotes active
+            </AppText>
           </View>
 
           <EmptyQuotesState />
@@ -151,89 +145,80 @@ export default function QuotesScreen() {
       <View style={styles.screen}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title}>Quotes</Text>
-              <Text style={styles.activeCount}>{activeRows.length} active</Text>
-            </View>
-            {showListTools ? (
-              <Pressable accessibilityRole="button" style={styles.filterButton}>
-                <ListFilter color={colors.ink} size={18} strokeWidth={2.4} />
-              </Pressable>
-            ) : null}
+            <AppText style={styles.headerSummary} variant="headerSummary">
+              {activeQuoteSummary(activeRows.length)}
+            </AppText>
+            <Pressable accessibilityRole="button" style={styles.filterButton}>
+              <ListFilter color={colors.ink} size={18} strokeWidth={2.4} />
+            </Pressable>
           </View>
 
-          {showListTools ? (
-            <>
-              {showSearch ? (
-                <View style={styles.searchBox}>
-                  <Search color={colors.ink3} size={15} />
-                  <TextInput
-                    accessibilityLabel="Search customers or addresses"
-                    onChangeText={setQuery}
-                    placeholder="Search customers or addresses"
-                    placeholderTextColor={colors.ink3}
-                    style={styles.searchInput}
-                    value={query}
-                  />
-                </View>
-              ) : null}
+          {showSearch ? (
+            <View style={styles.searchBox}>
+              <Search color={colors.ink3} size={15} />
+              <TextInput
+                accessibilityLabel="Search customers or addresses"
+                onChangeText={setQuery}
+                placeholder="Search customers or addresses"
+                placeholderTextColor={colors.ink3}
+                style={styles.searchInput}
+                value={query}
+              />
+            </View>
+          ) : null}
 
-              <ScrollView contentContainerStyle={styles.filterRow} horizontal showsHorizontalScrollIndicator={false}>
-                {filterOptions.map((option) => {
-                  const active = option.key === filter;
+          <ScrollView contentContainerStyle={styles.filterRow} horizontal showsHorizontalScrollIndicator={false}>
+            {filterOptions.map((option) => {
+              const active = option.key === filter;
 
-                  return (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={option.key}
-                      onPress={() => setFilter(option.key)}
-                      style={[styles.filterChip, active ? styles.filterChipActive : null]}
-                    >
-                      {option.key === "stale" ? <View style={styles.staleDot} /> : null}
-                      <Text style={[styles.filterChipText, active ? styles.filterChipTextActive : null]}>
-                        {option.label}
-                      </Text>
-                      <Text style={[styles.filterCountText, active ? styles.filterCountTextActive : null]}>
-                        {filterCounts[option.key]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  key={option.key}
+                  onPress={() => setFilter(option.key)}
+                  style={[styles.filterChip, active ? styles.filterChipActive : null]}
+                >
+                  {option.key === "stale" ? <View style={styles.staleDot} /> : null}
+                  <AppText style={[styles.filterChipText, active ? styles.filterChipTextActive : null]} variant="button">
+                    {option.label}
+                  </AppText>
+                  <AppText style={[styles.filterCountText, active ? styles.filterCountTextActive : null]} variant="meta">
+                    {filterCounts[option.key]}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
-              {filtered.length === 0 ? <NoMatchesState /> : null}
+          {filtered.length === 0 ? <NoMatchesState /> : null}
 
-              {grouped.needsAttention.length > 0 ? (
-                <QuoteSection label="Needs attention">
-                  {grouped.needsAttention.map((row) => (
-                    <CompactQuoteCard
-                      key={row.quote.id}
-                      onOpenRevision={openQuote}
-                      onPress={() => openQuote(row.quote)}
-                      revisions={revisionsByQuoteId.get(row.quote.id) ?? []}
-                      row={row}
-                    />
-                  ))}
-                </QuoteSection>
-              ) : null}
+          {grouped.needsAttention.length > 0 ? (
+            <QuoteSection label="Needs attention">
+              {grouped.needsAttention.map((row) => (
+                <CompactQuoteCard
+                  key={row.quote.id}
+                  onOpenRevision={openQuote}
+                  onPress={() => openQuote(row.quote)}
+                  revisions={revisionsByQuoteId.get(row.quote.id) ?? []}
+                  row={row}
+                />
+              ))}
+            </QuoteSection>
+          ) : null}
 
-              {grouped.thisWeek.length > 0 ? (
-                <QuoteSection label={grouped.needsAttention.length > 0 ? "This week" : "All quotes"}>
-                  {grouped.thisWeek.map((row) => (
-                    <CompactQuoteCard
-                      key={row.quote.id}
-                      onOpenRevision={openQuote}
-                      onPress={() => openQuote(row.quote)}
-                      revisions={revisionsByQuoteId.get(row.quote.id) ?? []}
-                      row={row}
-                    />
-                  ))}
-                </QuoteSection>
-              ) : null}
-            </>
-          ) : (
-            <SimpleQuoteList onOpenQuote={openQuote} revisionsByQuoteId={revisionsByQuoteId} rows={simpleRows} />
-          )}
+          {grouped.thisWeek.length > 0 ? (
+            <QuoteSection label={grouped.needsAttention.length > 0 ? "This week" : "All quotes"}>
+              {grouped.thisWeek.map((row) => (
+                <CompactQuoteCard
+                  key={row.quote.id}
+                  onOpenRevision={openQuote}
+                  onPress={() => openQuote(row.quote)}
+                  revisions={revisionsByQuoteId.get(row.quote.id) ?? []}
+                  row={row}
+                />
+              ))}
+            </QuoteSection>
+          ) : null}
         </ScrollView>
       </View>
       <BottomTabBar />
@@ -248,24 +233,24 @@ function EmptyQuotesState() {
         <ClipboardQuoteMark />
       </View>
 
-      <Text style={styles.emptyHeadline}>Your first quote starts here</Text>
-      <Text style={styles.emptyCopy}>
+      <AppText style={styles.emptyHeadline} variant="rowTitle">Your first quote starts here</AppText>
+      <AppText style={styles.emptyCopy} variant="body">
         Walk the job, talk it through, and QuoteVan drafts the scope — priced only from your book.
-      </Text>
+      </AppText>
 
-      <Text style={styles.emptyHint}>Tap the + button below to start.</Text>
+      <AppText style={styles.emptyHint} variant="meta">Tap the + button below to start.</AppText>
 
       <View style={styles.emptySteps}>
         <EmptyStep icon="checklist" index="01" label="Checklist" />
-        <Text style={styles.stepArrow}>›</Text>
+        <AppText style={styles.stepArrow} variant="meta">›</AppText>
         <EmptyStep icon="mic" index="02" label="Talk it" />
-        <Text style={styles.stepArrow}>›</Text>
+        <AppText style={styles.stepArrow} variant="meta">›</AppText>
         <EmptyStep icon="send" index="03" label="Send it" />
       </View>
 
       <View style={styles.emptyLock}>
         <Lock color={colors.ink3} size={11} />
-        <Text style={styles.emptyLockText}>No guessed prices — ever</Text>
+        <AppText style={styles.emptyLockText} variant="meta">No guessed prices — ever</AppText>
       </View>
     </View>
   );
@@ -274,7 +259,7 @@ function EmptyQuotesState() {
 function EmptyStep(props: { icon: "checklist" | "mic" | "send"; index: string; label: string }) {
   return (
     <View style={styles.emptyStep}>
-      <Text style={styles.stepIndex}>{props.index}</Text>
+      <AppText style={styles.stepIndex} variant="meta">{props.index}</AppText>
       {props.icon === "checklist" ? (
         <ClipboardList color={colors.ink2} size={18} strokeWidth={2.2} />
       ) : props.icon === "mic" ? (
@@ -282,7 +267,7 @@ function EmptyStep(props: { icon: "checklist" | "mic" | "send"; index: string; l
       ) : (
         <Check color={colors.ink2} size={18} strokeWidth={2.5} />
       )}
-      <Text style={styles.stepLabel}>{props.label}</Text>
+      <AppText style={styles.stepLabel} variant="meta">{props.label}</AppText>
     </View>
   );
 }
@@ -290,8 +275,8 @@ function EmptyStep(props: { icon: "checklist" | "mic" | "send"; index: string; l
 function NoMatchesState() {
   return (
     <View style={styles.noMatches}>
-      <Text style={styles.noMatchesTitle}>Nothing matches</Text>
-      <Text style={styles.noMatchesText}>Try a different filter or search term.</Text>
+      <AppText style={styles.noMatchesTitle} variant="rowTitle">Nothing matches</AppText>
+      <AppText style={styles.noMatchesText} variant="body">Try a different filter or search term.</AppText>
     </View>
   );
 }
@@ -299,56 +284,17 @@ function NoMatchesState() {
 function QuoteSection(props: { label: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{props.label}</Text>
+      <SectionHeader label={props.label} />
       <View style={styles.sectionCards}>{props.children}</View>
     </View>
   );
 }
 
-function SimpleQuoteList(props: {
-  onOpenQuote: (quote: QuoteRecord) => void;
-  revisionsByQuoteId: Map<string, QuoteRow[]>;
-  rows: QuoteRow[];
-}) {
-  const cardStyle = simpleCardStyle(props.rows.length);
-
-  return (
-    <View style={styles.simpleList}>
-      {props.rows.map((row) => (
-        <CompactQuoteCard
-          cardStyle={cardStyle}
-          key={row.quote.id}
-          onOpenRevision={props.onOpenQuote}
-          onPress={() => props.onOpenQuote(row.quote)}
-          revisions={props.revisionsByQuoteId.get(row.quote.id) ?? []}
-          row={row}
-        />
-      ))}
-      <View style={styles.simpleHintRow}>
-        <Text style={styles.simpleHintText}>Tap + to add another quote</Text>
-      </View>
-    </View>
-  );
-}
-
-function simpleCardStyle(count: number): StyleProp<ViewStyle> {
-  if (count <= 1) {
-    return styles.simpleCardOne;
-  }
-
-  if (count === 2) {
-    return styles.simpleCardTwo;
-  }
-
-  if (count === 3) {
-    return styles.simpleCardThree;
-  }
-
-  return styles.simpleCardMany;
+function activeQuoteSummary(count: number) {
+  return `${count} ${count === 1 ? "quote" : "quotes"} active`;
 }
 
 function CompactQuoteCard(props: {
-  cardStyle?: StyleProp<ViewStyle> | undefined;
   onOpenRevision: (quote: QuoteRecord) => void;
   row: QuoteRow;
   revisions: QuoteRow[];
@@ -359,26 +305,30 @@ function CompactQuoteCard(props: {
   const latestRevision = props.revisions[0];
 
   return (
-    <View style={[styles.quoteCard, props.cardStyle]}>
+    <View style={styles.quoteCard}>
       <View style={[styles.quoteRail, { backgroundColor: alert.color }]} />
       <View style={styles.quoteCardStack}>
         <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.quoteBody}>
           <View style={styles.quoteTop}>
             <View style={styles.quoteIdentity}>
-              <Text style={styles.quoteTitle} numberOfLines={1}>
+              <AppText style={styles.quoteTitle} numberOfLines={1} variant="rowTitle">
                 {deriveJobLabel(props.row.quote)}
-              </Text>
+              </AppText>
               <View style={styles.quoteCustomerRow}>
                 <User color={colors.ink3} size={11} strokeWidth={2.2} />
-                <Text style={styles.quoteCustomerSubtitle} numberOfLines={1}>
+                <AppText style={styles.quoteCustomerSubtitle} numberOfLines={1} variant="rowSubtitle">
                   {customerSubtitle(props.row.customer)}
-                </Text>
+                </AppText>
               </View>
             </View>
             <View style={styles.amountBlock}>
-              <Text style={styles.quoteAmount}>{props.row.totals ? formatMoney(props.row.totals.totalCents) : "$--"}</Text>
+              <AppText style={styles.quoteAmount} variant="amount">
+                {props.row.totals ? formatMoney(props.row.totals.totalCents) : "$--"}
+              </AppText>
               <View style={[styles.statusPill, { backgroundColor: alert.bg, borderColor: alert.border }]}>
-                <Text style={[styles.statusPillText, { color: alert.color }]}>{alert.pill}</Text>
+                <AppText style={[styles.statusPillText, { color: alert.color }]} variant="statusPill">
+                  {alert.pill}
+                </AppText>
               </View>
             </View>
           </View>
@@ -392,9 +342,9 @@ function CompactQuoteCard(props: {
             ) : (
               <CircleAlert color={alert.color} size={12} strokeWidth={2.4} />
             )}
-            <Text style={[styles.quoteAlertText, { color: alert.color }]} numberOfLines={1}>
+            <AppText style={[styles.quoteAlertText, { color: alert.color }]} numberOfLines={1} variant="button">
               {alert.label}
-            </Text>
+            </AppText>
           </View>
         </Pressable>
         {revisionCount > 0 && latestRevision ? (
@@ -405,9 +355,9 @@ function CompactQuoteCard(props: {
           >
             <View style={styles.revisionTextRow}>
               <RotateCcw color={colors.ink3} size={11} strokeWidth={2.2} />
-              <Text style={styles.revisionText}>
+              <AppText style={styles.revisionText} variant="meta">
                 {revisionCount} earlier {revisionCount === 1 ? "revision" : "revisions"}
-              </Text>
+              </AppText>
             </View>
             <ChevronRight color={colors.ink3} size={14} strokeWidth={2.2} />
           </Pressable>
@@ -545,15 +495,15 @@ const styles = StyleSheet.create({
   },
   emptyHeadline: {
     color: colors.ink,
-    fontSize: 21,
-    fontWeight: "900",
+    fontSize: 18,
+    ...fontStyles.semibold,
     marginTop: 7,
     textAlign: "center"
   },
   emptyCopy: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 19,
     maxWidth: 275,
     textAlign: "center"
@@ -561,7 +511,7 @@ const styles = StyleSheet.create({
   emptyHint: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "800",
+    ...fontStyles.medium,
     marginTop: 5,
     textAlign: "center"
   },
@@ -587,17 +537,17 @@ const styles = StyleSheet.create({
   stepIndex: {
     color: colors.ink3,
     fontSize: 9,
-    fontWeight: "900"
+    ...fontStyles.medium,
   },
   stepLabel: {
     color: colors.ink2,
     fontSize: 11,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   stepArrow: {
     color: colors.ink3,
     fontSize: 14,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   emptyLock: {
     alignItems: "center",
@@ -608,7 +558,7 @@ const styles = StyleSheet.create({
   emptyLockText: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "600"
+    ...fontStyles.medium,
   },
   noMatches: {
     backgroundColor: colors.surface,
@@ -621,33 +571,20 @@ const styles = StyleSheet.create({
   noMatchesTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   noMatchesText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   header: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between"
   },
-  titleRow: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    gap: 10
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 25,
-    fontWeight: "900",
-    letterSpacing: 0
-  },
-  activeCount: {
-    color: colors.ink3,
-    fontSize: 14,
-    fontWeight: "800"
+  headerSummary: {
+    ...typography.headerSummary
   },
   filterButton: {
     alignItems: "center",
@@ -698,15 +635,16 @@ const styles = StyleSheet.create({
   filterChipText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   filterChipTextActive: {
-    color: colors.onDark
+    color: colors.onDark,
+    ...fontStyles.semibold,
   },
   filterCountText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "900"
+    ...fontStyles.medium,
   },
   filterCountTextActive: {
     color: "rgba(255,255,255,0.7)"
@@ -722,42 +660,11 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   sectionLabel: {
-    color: colors.ink3,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-    textTransform: "uppercase"
+    ...typography.sectionLabel,
+    fontSize: 10
   },
   sectionCards: {
     gap: 8
-  },
-  simpleList: {
-    gap: 12,
-    paddingTop: 18
-  },
-  simpleHintRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 18,
-    paddingTop: 8
-  },
-  simpleHintText: {
-    color: colors.ink3,
-    fontSize: 13,
-    fontWeight: "700"
-  },
-  simpleCardOne: {
-    minHeight: 116
-  },
-  simpleCardTwo: {
-    minHeight: 104
-  },
-  simpleCardThree: {
-    minHeight: 94
-  },
-  simpleCardMany: {
-    minHeight: 82
   },
   quoteCard: {
     backgroundColor: colors.surface,
@@ -791,9 +698,7 @@ const styles = StyleSheet.create({
     minWidth: 0
   },
   quoteTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.rowTitle
   },
   quoteCustomerRow: {
     alignItems: "center",
@@ -801,18 +706,15 @@ const styles = StyleSheet.create({
     gap: 4
   },
   quoteCustomerSubtitle: {
-    color: colors.ink3,
-    fontSize: 11.5,
-    fontWeight: "600"
+    ...typography.rowSubtitle,
+    fontSize: 11.5
   },
   amountBlock: {
     alignItems: "flex-end",
     gap: 6
   },
   quoteAmount: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.amount
   },
   statusPill: {
     borderRadius: 7,
@@ -821,9 +723,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3
   },
   statusPillText: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.7
+    ...typography.statusPill,
+    fontSize: 9
   },
   quoteAlertRow: {
     alignItems: "center",
@@ -833,7 +734,7 @@ const styles = StyleSheet.create({
   quoteAlertText: {
     flex: 1,
     fontSize: 11,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   revisionRow: {
     alignItems: "center",
@@ -852,6 +753,6 @@ const styles = StyleSheet.create({
   revisionText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "700"
+    ...fontStyles.medium,
   }
 });

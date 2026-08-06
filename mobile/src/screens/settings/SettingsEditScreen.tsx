@@ -18,7 +18,7 @@ import {
   Shield,
   User
 } from "lucide-react-native";
-import { Alert, Image, NativeModules, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, NativeModules, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { formatMonthlyPlanPrice, getTradeConfig, quoteVanPlan } from "@snapquote/shared";
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
@@ -26,7 +26,8 @@ import { getQuoteStatus, useQuoteStore } from "../../state/quoteStore";
 import { displayBusinessName } from "../../utils/format";
 import { QuoteMark } from "../../shared-ui/QuoteMark";
 import { Screen } from "../../shared-ui/base";
-import { colors, radius } from "../../shared-ui/theme";
+import { AppText } from "../../shared-ui/text";
+import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 import { contactEmails, mailtoUrl } from "../../config/contact";
 
 type ImagePickerModule = typeof import("expo-image-picker");
@@ -208,7 +209,6 @@ export default function ProfileScreen() {
           <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.back()} style={styles.navButton}>
             <ChevronLeft color={colors.ink} size={20} strokeWidth={2.4} />
           </Pressable>
-          <Text style={styles.navTitle}>Profile</Text>
           <Pressable
             accessibilityRole="button"
             hitSlop={8}
@@ -236,9 +236,9 @@ export default function ProfileScreen() {
               <Camera color={colors.ink2} size={14} strokeWidth={2.2} />
             </Pressable>
           </View>
-          <Text style={styles.businessName}>{displayBusinessName(businessName, "Add business name")}</Text>
+          <AppText style={styles.businessName} variant="panelTitle">{displayBusinessName(businessName, "Add business name")}</AppText>
           <View style={styles.metaRow}>
-            <Text style={styles.businessMeta}>{tradeConfig.businessCategory} · {tradeConfig.label}</Text>
+            <AppText style={styles.businessMeta} variant="rowSubtitle">{tradeConfig.businessCategory} · {tradeConfig.label}</AppText>
             <Pressable
               accessibilityLabel="Edit business info"
               accessibilityRole="button"
@@ -292,7 +292,7 @@ export default function ProfileScreen() {
 
         <ProfileSection label="Personal & security">
           <ProfileRow
-            customValue={<Text style={styles.rowValue}>{userName}</Text>}
+            customValue={<AppText style={styles.rowValue} variant="meta">{userName}</AppText>}
             icon={<User color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Your name"
             onPress={() => Alert.alert("Your name", "Profile editing is coming next.")}
@@ -347,7 +347,7 @@ export default function ProfileScreen() {
           )}
         </ProfileSection>
 
-        <Text style={styles.version}>QuoteVan · v0.4.1</Text>
+        <AppText style={styles.version} variant="meta">QuoteVan · v0.4.1</AppText>
       </ScrollView>
     </Screen>
   );
@@ -356,10 +356,10 @@ export default function ProfileScreen() {
 function StatCard(props: { label: string; value: number | string; tone?: "green" | undefined }) {
   return (
     <View style={styles.statCard}>
-      <Text style={[styles.statValue, props.tone === "green" ? styles.statValueGreen : null]}>
+      <AppText style={[styles.statValue, props.tone === "green" ? styles.statValueGreen : null]} variant="statValue">
         {props.value}
-      </Text>
-      <Text style={styles.statLabel}>{props.label}</Text>
+      </AppText>
+      <AppText style={styles.statLabel} variant="sectionLabel">{props.label}</AppText>
     </View>
   );
 }
@@ -367,7 +367,7 @@ function StatCard(props: { label: string; value: number | string; tone?: "green"
 function ProfileSection(props: { label: string; children: ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{props.label}</Text>
+      <AppText style={styles.sectionLabel} variant="sectionLabel">{props.label}</AppText>
       <View style={styles.sectionCard}>{props.children}</View>
     </View>
   );
@@ -386,11 +386,11 @@ function ProfileRow(props: {
     <Pressable accessibilityRole="button" onPress={props.onPress} style={[styles.row, props.last ? styles.rowLast : null]}>
       <View style={styles.rowIcon}>{props.icon}</View>
       <View style={styles.rowText}>
-        <Text style={styles.rowLabel}>{props.label}</Text>
+        <AppText style={styles.rowLabel} variant="rowTitle">{props.label}</AppText>
         {props.detail ? (
-          <Text numberOfLines={1} style={styles.rowDetail}>
+          <AppText numberOfLines={1} style={styles.rowDetail} variant="rowSubtitle">
             {props.detail}
-          </Text>
+          </AppText>
         ) : null}
       </View>
       {props.customValue}
@@ -404,7 +404,7 @@ function ProfileRow(props: {
 function PlanBadge(props: { label: string }) {
   return (
     <View style={styles.planBadge}>
-      <Text style={styles.planBadgeText}>{props.label}</Text>
+      <AppText style={styles.planBadgeText} variant="statusPill">{props.label}</AppText>
     </View>
   );
 }
@@ -412,7 +412,7 @@ function PlanBadge(props: { label: string }) {
 function VerifiedBadge() {
   return (
     <View style={styles.verifiedBadge}>
-      <Text style={styles.verifiedText}>Verified</Text>
+      <AppText style={styles.verifiedText} variant="statusPill">Verified</AppText>
     </View>
   );
 }
@@ -469,9 +469,9 @@ function hasNativeExpoModule(moduleName: string) {
 
 const styles = StyleSheet.create({
   content: {
-    gap: 23,
+    gap: 16,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 12,
     paddingBottom: 18
   },
   nav: {
@@ -488,13 +488,6 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: "center",
     width: 36
-  },
-  navTitle: {
-    color: colors.ink3,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.8,
-    textTransform: "uppercase"
   },
   hero: {
     alignItems: "center",
@@ -526,15 +519,15 @@ const styles = StyleSheet.create({
   },
   businessName: {
     color: colors.ink,
-    fontSize: 21,
-    fontWeight: "900",
+    fontSize: 20,
+    ...fontStyles.semibold,
     lineHeight: 25,
     textAlign: "center"
   },
   businessMeta: {
     color: colors.ink3,
     fontSize: 12,
-    fontWeight: "700"
+    ...fontStyles.regular,
   },
   metaRow: {
     alignItems: "center",
@@ -568,17 +561,16 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: colors.ink,
-    fontSize: 19,
-    fontWeight: "900",
+    fontSize: 18,
+    ...fontStyles.semibold,
     lineHeight: 23
   },
   statValueGreen: {
     color: colors.green
   },
   statLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 9,
-    fontWeight: "900",
     letterSpacing: 0.8,
     marginTop: 3,
     textTransform: "uppercase"
@@ -587,9 +579,8 @@ const styles = StyleSheet.create({
     gap: 9
   },
   sectionLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.6,
     paddingHorizontal: 3,
     textTransform: "uppercase"
@@ -631,17 +622,17 @@ const styles = StyleSheet.create({
   rowLabel: {
     color: colors.ink,
     fontSize: 14.5,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   rowDetail: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   rowValue: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "800"
+    ...fontStyles.medium,
   },
   planBadge: {
     backgroundColor: colors.surfaceMuted,
@@ -654,7 +645,7 @@ const styles = StyleSheet.create({
   planBadgeText: {
     color: colors.ink3,
     fontSize: 9,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     textTransform: "uppercase"
   },
   verifiedBadge: {
@@ -668,13 +659,13 @@ const styles = StyleSheet.create({
   verifiedText: {
     color: colors.green,
     fontSize: 9,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     textTransform: "uppercase"
   },
   version: {
     color: colors.ink3,
     fontSize: 10.5,
-    fontWeight: "600",
+    ...fontStyles.regular,
     paddingBottom: 2,
     textAlign: "center"
   }

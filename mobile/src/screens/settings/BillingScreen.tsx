@@ -8,7 +8,7 @@ import { formatMonthlyPlanPrice, quoteVanPlan, quoteVanPricing } from "@snapquot
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import { Screen } from "../../shared-ui/base";
-import { colors, radius, shadowLg } from "../../shared-ui/theme";
+import { colors, fontStyles, radius, shadowLg, typography } from "../../shared-ui/theme";
 
 export default function BillingSettingsScreen() {
   const authStatus = useAuthStore((state) => state.status);
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
   navTitle: {
     color: colors.ink,
     fontSize: 19,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   currentPlanRow: {
     alignItems: "flex-start",
@@ -307,9 +307,8 @@ const styles = StyleSheet.create({
     paddingVertical: 9
   },
   currentPlanLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 11,
-    fontWeight: "900",
     letterSpacing: 1,
     lineHeight: 17,
     textTransform: "uppercase"
@@ -318,7 +317,7 @@ const styles = StyleSheet.create({
     color: colors.ink2,
     flex: 1,
     fontSize: 12.5,
-    fontWeight: "700",
+    ...fontStyles.regular,
     lineHeight: 17
   },
   soloCard: {
@@ -357,7 +356,7 @@ const styles = StyleSheet.create({
   recommendedBadgeText: {
     color: colors.accent,
     fontSize: 10.5,
-    fontWeight: "800",
+    ...fontStyles.semibold,
     letterSpacing: 0.6,
     textTransform: "uppercase"
   },
@@ -386,21 +385,21 @@ const styles = StyleSheet.create({
   futureBadgeText: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "800",
+    ...fontStyles.semibold,
     letterSpacing: 0.6,
     textTransform: "uppercase"
   },
   price: {
     color: colors.ink,
     fontSize: 25,
-    fontWeight: "900",
+    ...fontStyles.bold,
     lineHeight: 30,
     textAlign: "right"
   },
   planDetail: {
     color: colors.ink2,
     fontSize: 15,
-    fontWeight: "700",
+    ...fontStyles.regular,
     lineHeight: 21
   },
   featureRow: {
@@ -427,18 +426,18 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flex: 1,
     fontSize: 14.5,
-    fontWeight: "700",
+    ...fontStyles.semibold,
     lineHeight: 19
   },
   futureTitle: {
     color: colors.ink2,
     fontSize: 18,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   futureDetail: {
     color: colors.ink3,
     fontSize: 13.5,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 18
   },
   floatingFooter: {
@@ -462,8 +461,8 @@ const styles = StyleSheet.create({
   },
   floatingButtonText: {
     color: colors.onDark,
-    fontSize: 18,
-    fontWeight: "900"
+    fontSize: 16,
+    ...fontStyles.semibold,
   },
   floatingButtonTextDisabled: {
     color: colors.ink2

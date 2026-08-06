@@ -28,7 +28,7 @@ import {
   Screen,
   SegmentedControl,
 } from "../../shared-ui/base";
-import { colors, radius, spacing } from "../../shared-ui/theme";
+import { colors, fontStyles, radius, spacing, typography } from "../../shared-ui/theme";
 import { describeQuantity, formatLongDate, formatMoney, initials } from "../../utils/format";
 import { isUpgradeRequiredError, snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   backText: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   navCenter: {
     alignItems: "center",
@@ -556,16 +556,15 @@ const styles = StyleSheet.create({
     right: 0
   },
   navEyebrow: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.7,
     textTransform: "uppercase"
   },
   navTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   navSpacer: {
     width: 54
@@ -579,7 +578,7 @@ const styles = StyleSheet.create({
   editText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   content: {
     padding: 14,
@@ -613,7 +612,7 @@ const styles = StyleSheet.create({
   logoText: {
     color: colors.onDark,
     fontSize: 14,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   logoImage: {
     borderRadius: 7,
@@ -628,12 +627,12 @@ const styles = StyleSheet.create({
   brandName: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   brandSub: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   metaGrid: {
     flexDirection: "row",
@@ -646,16 +645,15 @@ const styles = StyleSheet.create({
     gap: 3
   },
   metaLabel: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 9,
-    fontWeight: "900",
     letterSpacing: 1.3,
     textTransform: "uppercase"
   },
   metaValue: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   heavyDivider: {
     backgroundColor: colors.dark,
@@ -670,26 +668,25 @@ const styles = StyleSheet.create({
     padding: 16
   },
   sectionKicker: {
-    color: colors.ink3,
+    ...typography.sectionLabel,
     fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 1.7,
     textTransform: "uppercase"
   },
   customerName: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   customerAddress: {
-    color: colors.ink2,
+    color: colors.ink3,
     fontSize: 12,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   scopeText: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 18
   },
   lineList: {
@@ -713,12 +710,12 @@ const styles = StyleSheet.create({
   proposalLineTitle: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   proposalLineAmount: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    ...fontStyles.bold,
   },
   totalBlock: {
     backgroundColor: colors.surfaceMuted,
@@ -734,22 +731,22 @@ const styles = StyleSheet.create({
   totalLabel: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "600"
+    ...fontStyles.regular,
   },
   totalValue: {
     color: colors.ink2,
     fontSize: 12,
-    fontWeight: "700"
+    ...fontStyles.medium,
   },
   totalLabelStrong: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   totalValueStrong: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "900"
+    ...fontStyles.bold,
   },
   totalDivider: {
     backgroundColor: colors.dark,
@@ -762,12 +759,12 @@ const styles = StyleSheet.create({
   termsText: {
     color: colors.ink2,
     fontSize: 11,
-    fontWeight: "600",
+    ...fontStyles.regular,
     lineHeight: 17
   },
   termsStrong: {
     color: colors.ink,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   customerActions: {
     borderTopColor: colors.border,
@@ -788,7 +785,7 @@ const styles = StyleSheet.create({
   acceptPreviewText: {
     color: colors.onDark,
     fontSize: 13,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   declinePreviewButton: {
     alignItems: "center",
@@ -803,12 +800,12 @@ const styles = StyleSheet.create({
   declinePreviewText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   customerFootnote: {
     color: colors.ink3,
     fontSize: 10,
-    fontWeight: "700",
+    ...fontStyles.medium,
     paddingBottom: 14,
     textAlign: "center"
   },
@@ -822,7 +819,7 @@ const styles = StyleSheet.create({
   previewOnlyText: {
     color: colors.ink3,
     fontSize: 10,
-    fontWeight: "700"
+    ...fontStyles.medium,
   },
   footer: {
     backgroundColor: "rgba(255,254,250,0.97)",
@@ -844,14 +841,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#CCC9BF"
   },
   sendButtonText: {
-    color: colors.onDark,
-    fontSize: 15,
-    fontWeight: "900"
+    ...typography.primaryAction,
   },
   sendButtonTextDisabled: {
     color: colors.ink2,
     fontSize: 14,
-    fontWeight: "900"
+    ...fontStyles.semibold,
   },
   modalBackdrop: {
     backgroundColor: "rgba(18,22,28,0.35)",
@@ -874,9 +869,7 @@ const styles = StyleSheet.create({
     width: 38
   },
   sheetTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "800"
+    ...typography.sheetTitle,
   },
   sheetSubtitle: {
     color: colors.ink2,
@@ -896,9 +889,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.sm,
     borderWidth: 1,
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "800",
+    ...typography.inputText,
     minHeight: 52,
     paddingHorizontal: 14
   },
@@ -917,12 +908,12 @@ const styles = StyleSheet.create({
   channelTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   channelTitleMuted: {
     color: colors.ink2,
     fontSize: 14,
-    fontWeight: "700"
+    ...fontStyles.medium,
   },
   channelSub: {
     color: colors.ink3,
@@ -935,6 +926,6 @@ const styles = StyleSheet.create({
   cancelLinkText: {
     color: colors.ink3,
     fontSize: 13,
-    fontWeight: "600"
+    ...fontStyles.medium,
   },
 });

@@ -1,8 +1,9 @@
 import { Check, CircleAlert, Clock3 } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { AnimatedCard } from "../../../shared-ui/AnimatedCard";
 import { GhostButton } from "../../../shared-ui/base";
-import { colors, radius, spacing } from "../../../shared-ui/theme";
+import { AppText } from "../../../shared-ui/text";
+import { colors, fontStyles, radius, spacing, typography } from "../../../shared-ui/theme";
 import { formatMoney, formatRelativeToNow } from "../../../utils/format";
 import type { QuoteRow } from "../../../state/useQuoteRows";
 import type { StoredLineItem } from "../../../state/quoteStore";
@@ -21,19 +22,21 @@ export function QuoteCard(props: { row: QuoteRow; onPress: () => void; onFollowU
         <View style={styles.body}>
           <View style={styles.top}>
             <View style={styles.titleBlock}>
-              <Text style={styles.customer} numberOfLines={1}>
+              <AppText style={styles.customer} numberOfLines={1} variant="rowTitle">
                 {deriveJobLabel(row.quote)}
-              </Text>
-              <Text style={styles.address} numberOfLines={1}>
+              </AppText>
+              <AppText style={styles.address} numberOfLines={1} variant="rowSubtitle">
                 {customerSubtitle(row)}
-              </Text>
+              </AppText>
             </View>
             <View style={styles.amountBlock}>
-              <Text style={styles.amount}>
+              <AppText style={styles.amount} variant="amount">
                 {formatMoney(amountCents)}
                 {partial ? "+" : ""}
-              </Text>
-              <Text style={styles.status}>{cardStatusLabel(row)}</Text>
+              </AppText>
+              <AppText style={styles.status} variant="statusPill">
+                {cardStatusLabel(row)}
+              </AppText>
             </View>
           </View>
 
@@ -47,9 +50,9 @@ export function QuoteCard(props: { row: QuoteRow; onPress: () => void; onFollowU
                 <CircleAlert color={alert.color} size={13} strokeWidth={2.5} />
               )}
             </View>
-            <Text style={[styles.alertText, { color: alert.color }]} numberOfLines={1}>
+            <AppText style={[styles.alertText, { color: alert.color }]} numberOfLines={1} variant="button">
               {alert.label}
-            </Text>
+            </AppText>
           </View>
         </View>
       </Pressable>
@@ -212,29 +215,23 @@ const styles = StyleSheet.create({
     gap: 2
   },
   customer: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "900"
+    ...typography.rowTitle,
+    lineHeight: 19
   },
   address: {
-    color: colors.ink2,
-    fontSize: 13,
-    fontWeight: "600"
+    ...typography.rowSubtitle
   },
   amountBlock: {
     alignItems: "flex-end",
     gap: 2
   },
   amount: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "900"
+    ...typography.amount
   },
   status: {
+    ...typography.statusPill,
     color: colors.ink3,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.8
+    fontSize: 9
   },
   alertRow: {
     alignItems: "center",
@@ -250,8 +247,8 @@ const styles = StyleSheet.create({
   },
   alertText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: "800"
+    fontSize: 12,
+    ...fontStyles.semibold,
   },
   followUp: {
     borderTopColor: colors.border,
