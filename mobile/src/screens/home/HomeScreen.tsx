@@ -2,11 +2,13 @@ import { useMemo } from "react";
 import { ArrowRight, Check, CircleAlert, ClipboardCheck, Clock3, Lock } from "lucide-react-native";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { BusinessAvatar } from "../../shared-ui/BusinessAvatar";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import { QuoteCard } from "../quotes/components/QuoteCard";
 import { Screen } from "../../shared-ui/base";
 import { colors, radius } from "../../shared-ui/theme";
-import { businessInitials, displayBusinessName, formatMoney } from "../../utils/format";
+import { displayBusinessName, formatMoney } from "../../utils/format";
+import { useAuthStore } from "../../state/authStore";
 import { useQuoteRows } from "../../state/useQuoteRows";
 import { useQuoteStore, type QuoteRecord } from "../../state/quoteStore";
 import { useRemoteQuoteRefresh } from "../../sync/useRemoteQuoteRefresh";
@@ -15,6 +17,7 @@ type QuotesFilter = "draft" | "sent" | "viewed" | "stale" | "accepted";
 
 export default function DashboardScreen() {
   const businessName = useQuoteStore((state) => state.businessName);
+  const logoUrl = useAuthStore((state) => state.me?.org.logoUrl ?? null);
   const rows = useQuoteRows();
   useRemoteQuoteRefresh({ pollMs: 30000 });
   const businessDisplayName = displayBusinessName(businessName, "Add business name");
@@ -75,7 +78,7 @@ export default function DashboardScreen() {
             onPress={() => router.push("/settings/edit")}
             style={styles.avatar}
           >
-            <Text style={styles.avatarText}>{businessInitials(businessName)}</Text>
+            <BusinessAvatar businessName={businessName} logoUrl={logoUrl} size={48} />
           </Pressable>
         </View>
 
@@ -319,16 +322,10 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
-    backgroundColor: colors.dark,
     borderRadius: 24,
     height: 48,
     justifyContent: "center",
     width: 48
-  },
-  avatarText: {
-    color: colors.onDark,
-    fontSize: 16,
-    fontWeight: "900"
   },
   pipelineCard: {
     backgroundColor: colors.surface,

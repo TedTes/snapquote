@@ -16,11 +16,11 @@ import {
 } from "lucide-react-native";
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { getTradeConfig } from "@snapquote/shared";
+import { BusinessAvatar } from "../../shared-ui/BusinessAvatar";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import { Screen } from "../../shared-ui/base";
 import { InlineProgressPanel } from "../../shared-ui/ProgressExperience";
 import { colors, radius } from "../../shared-ui/theme";
-import { businessInitials } from "../../utils/format";
 import { useQuoteStore } from "../../state/quoteStore";
 import { useAuthStore } from "../../state/authStore";
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
@@ -45,6 +45,7 @@ export default function SettingsScreen() {
   const customers = useQuoteStore((state) => state.customers);
   const activeTrade = useQuoteStore((state) => state.activeTrade);
   const me = useAuthStore((state) => state.me);
+  const logoUrl = me?.org.logoUrl ?? null;
   const authStatus = useAuthStore((state) => state.status);
   const setMe = useAuthStore((state) => state.setMe);
   const [paymentRefreshing, setPaymentRefreshing] = useState(false);
@@ -164,7 +165,7 @@ export default function SettingsScreen() {
             onPress={() => router.push("/settings/edit")}
             style={styles.headerAvatar}
           >
-            <Text style={styles.headerAvatarText}>{businessInitials(businessName)}</Text>
+            <BusinessAvatar businessName={businessName} logoUrl={logoUrl} size={48} />
           </Pressable>
         </View>
 
@@ -423,16 +424,10 @@ const styles = StyleSheet.create({
   },
   headerAvatar: {
     alignItems: "center",
-    backgroundColor: colors.dark,
     borderRadius: 24,
     height: 48,
     justifyContent: "center",
     width: 48
-  },
-  headerAvatarText: {
-    color: colors.onDark,
-    fontSize: 16,
-    fontWeight: "900"
   },
   section: {
     gap: 9
