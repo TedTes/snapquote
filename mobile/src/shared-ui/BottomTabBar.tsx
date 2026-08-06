@@ -1,8 +1,9 @@
 import { Book, ClipboardList, Home, Plus, Settings as SettingsIcon } from "lucide-react-native";
 import { router, usePathname } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, shadowSm, spacing } from "./theme";
+import { colors, fontStyles, shadowSm, spacing } from "./theme";
+import { AppText } from "./text";
 import { useQuoteStore } from "../state/quoteStore";
 
 const tabs = [
@@ -56,7 +57,9 @@ function TabItem(props: { active: boolean; tab: (typeof tabs)[number] }) {
       <View style={[styles.iconWrap, props.active ? styles.iconWrapActive : null]}>
         <Icon color={props.active ? colors.ink : colors.ink3} size={23} strokeWidth={props.active ? 2.45 : 2} />
       </View>
-      <Text style={[styles.label, props.active ? styles.labelActive : null]}>{props.tab.label}</Text>
+      <AppText style={[styles.label, props.active ? styles.labelActive : null]} variant="meta">
+        {props.tab.label}
+      </AppText>
     </Pressable>
   );
 }
@@ -112,10 +115,10 @@ const styles = StyleSheet.create({
   label: {
     color: colors.ink3,
     fontSize: 11,
-    fontWeight: "600"
+    ...fontStyles.medium,
   },
   labelActive: {
     color: colors.ink,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   }
 });

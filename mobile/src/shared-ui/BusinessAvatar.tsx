@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Image, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { businessInitials } from "../utils/format";
+import { AppText } from "./text";
 import { colors } from "./theme";
 
 type BusinessAvatarProps = {
@@ -39,7 +40,9 @@ export function BusinessAvatar(props: BusinessAvatarProps) {
           style={[styles.image, dynamicFrame]}
         />
       ) : (
-        <Text style={[styles.text, { fontSize: textSize }]}>{businessInitials(props.businessName)}</Text>
+        <AppText style={[styles.text, { fontSize: textSize }]} tone="onDark" variant="button">
+          {businessInitials(props.businessName)}
+        </AppText>
       )}
     </View>
   );
@@ -56,8 +59,6 @@ const styles = StyleSheet.create({
     resizeMode: "cover"
   },
   text: {
-    color: colors.onDark,
-    fontWeight: "900",
     letterSpacing: 0
   }
 });

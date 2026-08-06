@@ -4,14 +4,13 @@ import {
   Easing,
   Modal,
   StyleSheet,
-  Text,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { colors, radius, shadowLg } from "./theme";
-
-const quoteVanIcon = require("../../assets/icon.png");
+import quoteVanIcon from "../../assets/icon.png";
+import { AppText } from "./text";
+import { colors, fontStyles, radius, shadowLg } from "./theme";
 
 export function AppLoadingScreen(props: {
   label?: string | undefined;
@@ -30,12 +29,22 @@ export function AppLoadingScreen(props: {
       <View style={styles.loadingCenter}>
         <QuietPulseMark />
         <View style={styles.loadingCopy}>
-          {props.branded === true ? <Text style={styles.brandLabel}>QuoteVan</Text> : null}
-          {props.helper ? <Text style={styles.loadingHelper}>{props.helper}</Text> : null}
+          {props.branded === true ? (
+            <AppText style={styles.brandLabel} variant="sectionLabel">
+              QuoteVan
+            </AppText>
+          ) : null}
+          {props.helper ? (
+            <AppText style={styles.loadingHelper} variant="meta">
+              {props.helper}
+            </AppText>
+          ) : null}
           <ProgressDots />
         </View>
       </View>
-      <Text style={styles.loadingFootnote}>{props.label ?? "Getting things ready..."}</Text>
+      <AppText style={styles.loadingFootnote} variant="meta">
+        {props.label ?? "Getting things ready..."}
+      </AppText>
     </View>
   );
 }
@@ -53,8 +62,14 @@ export function ProgressModal(props: {
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           <QuietPulseMark small />
-          <Text style={styles.modalTitle}>{props.title}</Text>
-          {props.helper ? <Text style={styles.modalHelper}>{props.helper}</Text> : null}
+          <AppText style={styles.modalTitle} variant="rowTitle">
+            {props.title}
+          </AppText>
+          {props.helper ? (
+            <AppText style={styles.modalHelper} variant="meta">
+              {props.helper}
+            </AppText>
+          ) : null}
           <ProgressDots />
         </View>
       </View>
@@ -79,8 +94,14 @@ export function InlineProgressPanel(props: {
       <View style={styles.inlineHeader}>
         <QuietPulseMark tiny />
         <View style={styles.inlineCopy}>
-          <Text style={styles.inlineTitle}>{props.title}</Text>
-          {props.helper ? <Text style={styles.inlineHelper}>{props.helper}</Text> : null}
+          <AppText style={styles.inlineTitle} variant="rowTitle">
+            {props.title}
+          </AppText>
+          {props.helper ? (
+            <AppText style={styles.inlineHelper} variant="meta">
+              {props.helper}
+            </AppText>
+          ) : null}
         </View>
         <ProgressDots compact />
       </View>
@@ -206,7 +227,6 @@ const styles = StyleSheet.create({
   brandLabel: {
     color: colors.ink3,
     fontSize: 16,
-    fontWeight: "900",
     letterSpacing: 3,
     lineHeight: 19,
     textAlign: "center",
@@ -214,9 +234,7 @@ const styles = StyleSheet.create({
   },
   loadingFootnote: {
     bottom: 52,
-    color: colors.ink3,
     fontSize: 13,
-    fontWeight: "700",
     left: 24,
     lineHeight: 18,
     position: "absolute",
@@ -224,9 +242,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   loadingHelper: {
-    color: colors.ink3,
     fontSize: 12,
-    fontWeight: "700",
     lineHeight: 17,
     marginTop: -8,
     textAlign: "center",
@@ -250,17 +266,14 @@ const styles = StyleSheet.create({
     ...shadowLg,
   },
   modalTitle: {
-    color: colors.ink,
     fontSize: 20,
-    fontWeight: "900",
+    ...fontStyles.semibold,
     lineHeight: 24,
     marginTop: 3,
     textAlign: "center",
   },
   modalHelper: {
-    color: colors.ink3,
     fontSize: 12,
-    fontWeight: "700",
     lineHeight: 17,
     marginTop: -6,
     textAlign: "center",
@@ -282,15 +295,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   inlineTitle: {
-    color: colors.ink,
     fontSize: 13.5,
-    fontWeight: "900",
     lineHeight: 17,
   },
   inlineHelper: {
-    color: colors.ink3,
     fontSize: 11,
-    fontWeight: "700",
     lineHeight: 15,
   },
   markShellBase: {

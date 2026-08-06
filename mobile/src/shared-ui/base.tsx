@@ -4,13 +4,22 @@ import {
   Pressable,
   StyleSheet,
   Switch,
-  Text,
   TextInput,
   View,
   type KeyboardTypeOptions
 } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
-import { colors, radius, spacing, toneColors, type BannerTone, type MatchTone } from "./theme";
+import {
+  colors,
+  fontStyles,
+  radius,
+  spacing,
+  toneColors,
+  typography,
+  type BannerTone,
+  type MatchTone
+} from "./theme";
+import { AppText } from "./text";
 
 export function Screen(props: { children: ReactNode; edges?: Edge[] | undefined }) {
   return (
@@ -33,15 +42,17 @@ export function TopBar(props: {
         {props.onBack ? (
           <Pressable accessibilityRole="button" hitSlop={10} onPress={props.onBack} style={styles.backButton}>
             <ChevronLeft color={colors.ink2} size={20} />
-            <Text style={styles.backLabel}>{props.backLabel ?? "Back"}</Text>
+            <AppText style={styles.backLabel} tone="secondary" variant="button">
+              {props.backLabel ?? "Back"}
+            </AppText>
           </Pressable>
         ) : null}
       </View>
       <View style={styles.topBarCenter}>
-        {props.eyebrow ? <Text style={styles.eyebrow}>{props.eyebrow}</Text> : null}
-        <Text style={styles.topBarTitle} numberOfLines={1}>
+        {props.eyebrow ? <AppText style={styles.eyebrow} variant="sectionLabel">{props.eyebrow}</AppText> : null}
+        <AppText style={styles.topBarTitle} numberOfLines={1} variant="rowTitle">
           {props.title}
-        </Text>
+        </AppText>
       </View>
       <View style={[styles.topBarSide, styles.topBarSideRight]}>{props.right}</View>
     </View>
@@ -67,7 +78,7 @@ export function StepBar(props: { step: number; total: number }) {
 }
 
 export function SectionLabel(props: { children: string }) {
-  return <Text style={styles.sectionLabel}>{props.children}</Text>;
+  return <AppText style={styles.sectionLabel} variant="sectionLabel">{props.children}</AppText>;
 }
 
 export function Field(props: {
@@ -81,7 +92,7 @@ export function Field(props: {
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{props.label}</Text>
+      <AppText style={styles.fieldLabel} variant="body">{props.label}</AppText>
       <TextInput
         autoCapitalize={props.autoCapitalize ?? "sentences"}
         keyboardType={props.keyboardType ?? "default"}
@@ -108,7 +119,7 @@ export function Stepper(props: {
 
   return (
     <View style={styles.stepperRow}>
-      <Text style={styles.stepperLabel}>{props.label}</Text>
+      <AppText style={styles.stepperLabel} variant="rowTitle">{props.label}</AppText>
       <View style={styles.stepperControl}>
         <Pressable
           accessibilityRole="button"
@@ -119,7 +130,7 @@ export function Stepper(props: {
         >
           <Minus color={props.value <= min ? colors.ink3 : colors.ink} size={16} />
         </Pressable>
-        <Text style={styles.stepperValue}>{props.value}</Text>
+        <AppText style={styles.stepperValue} variant="amount">{props.value}</AppText>
         <Pressable
           accessibilityRole="button"
           disabled={props.value >= max}
@@ -151,7 +162,9 @@ export function SegmentedControl<T extends string>(props: {
             onPress={() => props.onChange(option.value)}
             style={[styles.segmentItem, active ? styles.segmentItemActive : null]}
           >
-            <Text style={[styles.segmentText, active ? styles.segmentTextActive : null]}>{option.label}</Text>
+            <AppText style={[styles.segmentText, active ? styles.segmentTextActive : null]} variant="button">
+              {option.label}
+            </AppText>
           </Pressable>
         );
       })}
@@ -168,8 +181,8 @@ export function ToggleRow(props: {
   return (
     <View style={styles.toggleRow}>
       <View style={styles.toggleTextWrap}>
-        <Text style={styles.toggleLabel}>{props.label}</Text>
-        {props.helper ? <Text style={styles.toggleHelper}>{props.helper}</Text> : null}
+        <AppText style={styles.toggleLabel} variant="rowTitle">{props.label}</AppText>
+        {props.helper ? <AppText style={styles.toggleHelper} variant="meta">{props.helper}</AppText> : null}
       </View>
       <Switch
         onValueChange={props.onChange}
@@ -193,9 +206,13 @@ export function PrimaryButton(props: {
       onPress={props.onPress}
       style={[styles.primaryButton, props.disabled ? styles.primaryButtonDisabled : null]}
     >
-      <Text style={[styles.primaryButtonText, props.disabled ? styles.primaryButtonTextDisabled : null]}>
+      <AppText
+        style={[styles.primaryButtonText, props.disabled ? styles.primaryButtonTextDisabled : null]}
+        tone={props.disabled ? "muted" : "onDark"}
+        variant="primaryAction"
+      >
         {props.label}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
@@ -212,9 +229,13 @@ export function GhostButton(props: {
       onPress={props.onPress}
       style={[styles.ghostButton, props.small ? styles.ghostButtonSmall : null]}
     >
-      <Text style={[styles.ghostButtonText, props.tone === "danger" ? styles.ghostButtonTextDanger : null]}>
+      <AppText
+        style={[styles.ghostButtonText, props.tone === "danger" ? styles.ghostButtonTextDanger : null]}
+        tone={props.tone === "danger" ? "red" : "primary"}
+        variant="button"
+      >
         {props.label}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
@@ -227,7 +248,9 @@ export function Chip(props: { tone: MatchTone | "neutral"; label: string }) {
   if (props.tone === "neutral") {
     return (
       <View style={[styles.chip, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
-        <Text style={[styles.chipText, { color: colors.ink2 }]}>{props.label}</Text>
+        <AppText style={[styles.chipText, { color: colors.ink2 }]} variant="statusPill">
+          {props.label}
+        </AppText>
       </View>
     );
   }
@@ -236,7 +259,9 @@ export function Chip(props: { tone: MatchTone | "neutral"; label: string }) {
 
   return (
     <View style={[styles.chip, { backgroundColor: tone.bg, borderColor: tone.border }]}>
-      <Text style={[styles.chipText, { color: tone.fg }]}>{props.label}</Text>
+      <AppText style={[styles.chipText, { color: tone.fg }]} variant="statusPill">
+        {props.label}
+      </AppText>
     </View>
   );
 }
@@ -253,7 +278,9 @@ export function Banner(props: { tone: BannerTone; children: string }) {
 
   return (
     <View style={[styles.banner, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-      <Text style={[styles.bannerText, { color: palette.fg }]}>{props.children}</Text>
+      <AppText style={[styles.bannerText, { color: palette.fg }]} variant="body">
+        {props.children}
+      </AppText>
     </View>
   );
 }
@@ -261,8 +288,8 @@ export function Banner(props: { tone: BannerTone; children: string }) {
 export function EmptyState(props: { title: string; text: string }) {
   return (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyTitle}>{props.title}</Text>
-      <Text style={styles.emptyText}>{props.text}</Text>
+      <AppText style={styles.emptyTitle} variant="rowTitle">{props.title}</AppText>
+      <AppText style={styles.emptyText} variant="body">{props.text}</AppText>
     </View>
   );
 }
@@ -270,8 +297,10 @@ export function EmptyState(props: { title: string; text: string }) {
 export function KeyValueRow(props: { label: string; value: string; strong?: boolean | undefined }) {
   return (
     <View style={styles.kvRow}>
-      <Text style={styles.kvLabel}>{props.label}</Text>
-      <Text style={[styles.kvValue, props.strong ? styles.kvValueStrong : null]}>{props.value}</Text>
+      <AppText style={styles.kvLabel} variant="body">{props.label}</AppText>
+      <AppText style={[styles.kvValue, props.strong ? styles.kvValueStrong : null]} variant={props.strong ? "amount" : "body"}>
+        {props.value}
+      </AppText>
     </View>
   );
 }
@@ -328,7 +357,7 @@ const styles = StyleSheet.create({
   backLabel: {
     color: colors.ink2,
     fontSize: 15,
-    fontWeight: "600"
+    ...fontStyles.medium,
   },
   closeButton: {
     alignItems: "center",
@@ -339,16 +368,13 @@ const styles = StyleSheet.create({
     width: 32
   },
   eyebrow: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase"
+    ...typography.sectionLabel,
+    letterSpacing: 0.8
   },
   topBarTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   stepTrack: {
     backgroundColor: colors.border,
@@ -362,11 +388,8 @@ const styles = StyleSheet.create({
     height: "100%"
   },
   sectionLabel: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase"
+    ...typography.sectionLabel,
+    letterSpacing: 0.8
   },
   field: {
     gap: 6
@@ -374,7 +397,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600"
+    ...fontStyles.medium,
   },
   input: {
     backgroundColor: colors.surface,
@@ -399,7 +422,7 @@ const styles = StyleSheet.create({
   stepperLabel: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "600"
+    ...fontStyles.semibold,
   },
   stepperControl: {
     alignItems: "center",
@@ -420,7 +443,7 @@ const styles = StyleSheet.create({
   stepperValue: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "700",
+    ...fontStyles.semibold,
     minWidth: 26,
     textAlign: "center"
   },
@@ -449,11 +472,11 @@ const styles = StyleSheet.create({
   segmentText: {
     color: colors.ink2,
     fontSize: 13,
-    fontWeight: "600"
+    ...fontStyles.medium,
   },
   segmentTextActive: {
     color: colors.ink,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   toggleRow: {
     alignItems: "center",
@@ -468,7 +491,7 @@ const styles = StyleSheet.create({
   toggleLabel: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "600"
+    ...fontStyles.semibold,
   },
   toggleHelper: {
     color: colors.ink3,
@@ -491,7 +514,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: colors.onDark,
     fontSize: 16,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   primaryButtonTextDisabled: {
     color: colors.ink3
@@ -513,7 +536,7 @@ const styles = StyleSheet.create({
   ghostButtonText: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   ghostButtonTextDanger: {
     color: colors.red
@@ -534,7 +557,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 11,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   banner: {
     borderRadius: radius.sm,
@@ -543,7 +566,7 @@ const styles = StyleSheet.create({
   },
   bannerText: {
     fontSize: 13,
-    fontWeight: "600",
+    ...fontStyles.medium,
     lineHeight: 18
   },
   emptyState: {
@@ -557,7 +580,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "700"
+    ...fontStyles.semibold,
   },
   emptyText: {
     color: colors.ink2,
@@ -578,11 +601,11 @@ const styles = StyleSheet.create({
   kvValue: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "600"
+    ...fontStyles.medium,
   },
   kvValueStrong: {
     fontSize: 17,
-    fontWeight: "800"
+    ...fontStyles.semibold,
   },
   divider: {
     backgroundColor: colors.border,
