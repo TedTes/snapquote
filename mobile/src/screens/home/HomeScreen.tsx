@@ -41,11 +41,13 @@ export default function DashboardScreen() {
     const viewedRows = pipelineRows.filter((row) => row.status === "viewed");
     const totalValue = pipelineRows.reduce((sum, row) => sum + (row.totals?.totalCents ?? 0), 0);
     const readyValue = readyRows.reduce((sum, row) => sum + (row.totals?.totalCents ?? 0), 0);
-    const pipelineSegments = [
-      { color: colors.borderStrong, key: "draft", value: draftRows.length },
-      { color: colors.dark, key: "sent", value: sentRows.length + viewedRows.length },
-      { color: colors.green, key: "accepted", value: acceptedRows.length }
-    ].filter((segment) => segment.value > 0);
+    const sentLikeCount = sentRows.length + viewedRows.length;
+    const pipelineStatusItems = [
+      { color: colors.borderStrong, count: draftRows.length, key: "draft", label: "Draft" },
+      { color: colors.dark, count: sentLikeCount, key: "sent", label: "Sent" },
+      { color: colors.green, count: acceptedRows.length, key: "accepted", label: "Accepted" }
+    ];
+    const pipelineSegments = pipelineStatusItems.filter((segment) => segment.count > 0);
 
     return {
       acceptedRows,
@@ -53,6 +55,7 @@ export default function DashboardScreen() {
       draftRows,
       pipelineRows,
       pipelineSegments,
+      pipelineStatusItems,
       readyRows,
       readyValue,
       sentRows,
@@ -117,11 +120,7 @@ export default function DashboardScreen() {
               <View style={styles.pipelineTrack}>
                 {metrics.pipelineSegments.length > 0 ? (
                   metrics.pipelineSegments.map((segment) => (
-                    <PipelineSegment
-                      color={segment.color}
-                      flexValue={segment.value}
-                      key={segment.key}
-                    />
+                    <PipelineSegment color={segment.color} flexValue={segment.count} key={segment.key} />
                   ))
                 ) : (
                   <PipelineSegment color={colors.border} flexValue={1} />
@@ -129,9 +128,15 @@ export default function DashboardScreen() {
               </View>
 
               <View style={styles.legend}>
-                <Legend color={colors.borderStrong} label="Draft" />
-                <Legend color={colors.dark} label="Sent" />
-                <Legend color={colors.green} label="Accepted" />
+                {metrics.pipelineStatusItems.map((item) => (
+                  <Legend
+                    active={item.count > 0}
+                    color={item.color}
+                    count={item.count}
+                    key={item.key}
+                    label={item.label}
+                  />
+                ))}
               </View>
             </View>
 
@@ -146,7 +151,9 @@ export default function DashboardScreen() {
                 title={
                   metrics.draftBlockedRows.length === 0
                     ? "No drafts need a price"
-                    : `${metrics.draftBlockedRows.length} ${plural(metrics.draftBlockedRows.length, "draft")} need a price`
+                    : `${metrics.draftBlockedRows.length} ${plural(metrics.draftBlockedRows.length, "draft")} ${
+                        metrics.draftBlockedRows.length === 1 ? "needs" : "need"
+                      } a price`
                 }
                 tone="red"
               />
@@ -264,12 +271,15 @@ function AttentionRow(props: {
   );
 }
 
-function Legend(props: { color: string; label: string }) {
+function Legend(props: { active: boolean; color: string; count: number; label: string }) {
   return (
     <View style={styles.legendItem}>
-      <View style={[styles.legendDot, { backgroundColor: props.color }]} />
-      <AppText style={styles.legendText} variant="rowSubtitle">
+      <View style={[styles.legendDot, { backgroundColor: props.active ? props.color : colors.border }]} />
+      <AppText style={[styles.legendLabel, !props.active ? styles.legendMuted : null]} variant="rowSubtitle">
         {props.label}
+      </AppText>
+      <AppText style={[styles.legendCount, !props.active ? styles.legendMuted : null]} variant="rowSubtitle">
+        {props.count}
       </AppText>
     </View>
   );
@@ -369,10 +379,13 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   pipelineTrack: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
     flexDirection: "row",
-    gap: 3,
+    gap: 4,
     height: 7,
-    marginTop: 10
+    marginTop: 10,
+    overflow: "hidden"
   },
   pipelineSegment: {
     borderRadius: radius.pill
@@ -380,22 +393,30 @@ const styles = StyleSheet.create({
   legend: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 9,
+    gap: 10,
     marginTop: 8
   },
   legendItem: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 5
+    gap: 4
   },
   legendDot: {
     borderRadius: 3,
     height: 8,
     width: 8
   },
-  legendText: {
+  legendLabel: {
     ...typography.rowSubtitle,
     fontSize: 11
+  },
+  legendCount: {
+    color: colors.ink2,
+    fontSize: 11,
+    ...fontStyles.medium
+  },
+  legendMuted: {
+    color: colors.inkMuted
   },
   sectionLabel: {
     ...typography.sectionLabel,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { router, useFocusEffect } from "expo-router";
 import {
   Book,
@@ -14,13 +14,12 @@ import {
   Type,
   Users
 } from "lucide-react-native";
-import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Animated, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { getTradeConfig } from "@snapquote/shared";
 import { BusinessAvatar } from "../../shared-ui/BusinessAvatar";
 import { BottomTabBar } from "../../shared-ui/BottomTabBar";
 import { Screen } from "../../shared-ui/base";
 import { SectionHeader } from "../../shared-ui/layout";
-import { InlineProgressPanel } from "../../shared-ui/ProgressExperience";
 import { AppText } from "../../shared-ui/text";
 import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 import { useQuoteStore } from "../../state/quoteStore";
@@ -69,6 +68,10 @@ export default function SettingsScreen() {
   const confirmedCount = priceBookItems.filter((item) => item.confirmedAt !== null).length;
   const totalCount = priceBookItems.length;
   const senderEmail = contactEmails.quotes;
+  const displayBusinessName = businessName.trim().length > 0 ? businessName.trim() : "Add business name";
+  const depositBadgeLabel =
+    paymentStatus === "connected" ? "Deposits on" : paymentStatus === "pending" ? "Deposits pending" : "Set up deposits";
+  const priceReadinessLabel = totalCount > 0 ? `${confirmedCount}/${totalCount} prices ready` : "Add prices";
 
   const refreshPaymentStatus = useCallback(async () => {
     if (authStatus !== "signed_in") return;
@@ -159,17 +162,32 @@ export default function SettingsScreen() {
   return (
     <Screen edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <AppText style={styles.title} variant="screenTitle">Settings</AppText>
-          <Pressable
-            accessibilityLabel="Open profile"
-            accessibilityRole="button"
-            onPress={() => router.push("/settings/edit")}
-            style={styles.headerAvatar}
-          >
-            <BusinessAvatar businessName={businessName} logoUrl={logoUrl} size={48} />
-          </Pressable>
-        </View>
+        <Pressable
+          accessibilityLabel="Open profile"
+          accessibilityRole="button"
+          onPress={() => router.push("/settings/edit")}
+          style={styles.businessHeader}
+        >
+          <View style={styles.businessAvatar}>
+            <BusinessAvatar businessName={businessName} logoUrl={logoUrl} size={56} />
+          </View>
+          <View style={styles.businessHeaderText}>
+            <View style={styles.businessHeaderTopLine}>
+              <AppText style={styles.businessKicker} variant="sectionLabel">Business setup</AppText>
+              <ChevronRight color={colors.ink3} size={15} strokeWidth={2.2} />
+            </View>
+            <AppText style={styles.businessName} numberOfLines={1} variant="rowTitle">
+              {displayBusinessName}
+            </AppText>
+            <AppText style={styles.businessMeta} numberOfLines={1} variant="rowSubtitle">
+              {tradeConfig.label} · {customers.length} {customers.length === 1 ? "customer" : "customers"}
+            </AppText>
+            <View style={styles.businessBadges}>
+              <HeaderBadge label={depositBadgeLabel} tone={paymentStatus === "connected" ? "green" : "amber"} />
+              <HeaderBadge label={priceReadinessLabel} tone="neutral" />
+            </View>
+          </View>
+        </Pressable>
 
         <SettingsSection label="Quote defaults">
           <SettingsRow
@@ -241,13 +259,11 @@ export default function SettingsScreen() {
           <SettingsRow
             customValue={<ConnectionBadge loading={isCheckingPaymentStatus || isOpeningPaymentSetup} status={paymentStatus} />}
             detail={
-              isOpeningPaymentSetup
-                ? "Preparing secure Stripe setup..."
-                : isCheckingPaymentStatus
+              isCheckingPaymentStatus
                 ? "Checking Stripe status..."
                 : paymentStatus === "connected"
                   ? "Customers can pay quote deposits"
-                  : paymentStatus === "pending"
+                  : paymentStatus === "pending" || isOpeningPaymentSetup
                     ? "Stripe is finishing verification"
                   : "Connect Stripe to collect deposits"
             }
@@ -255,14 +271,6 @@ export default function SettingsScreen() {
             label="Online deposits"
             onPress={() => void openPaymentSetup()}
           />
-          {isOpeningPaymentSetup ? (
-            <View style={styles.paymentProgressWrap}>
-              <InlineProgressPanel
-                helper="You will finish account verification on Stripe."
-                title="Preparing online deposits"
-              />
-            </View>
-          ) : null}
           <SettingsRow
             customValue={<VerifiedBadge />}
             detail={senderEmail}
@@ -388,14 +396,51 @@ function VerifiedBadge() {
 
 function ConnectionBadge(props: { status: "setup" | "pending" | "connected"; loading?: boolean | undefined }) {
   const connected = props.status === "connected";
-  const pending = props.status === "pending";
-  const label = props.loading ? "Sync" : connected ? "On" : pending ? "Pending" : "Setup";
+  const pending = props.status === "pending" || props.loading;
+
+  if (pending) {
+    return (
+      <View style={[styles.verifiedBadge, styles.pendingBadge, styles.pendingDotsBadge]}>
+        <PendingDots />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.verifiedBadge, connected ? null : styles.pendingBadge]}>
       <AppText style={[styles.verifiedText, connected ? null : styles.pendingText]} variant="statusPill">
-        {label}
+        {connected ? "On" : "Setup"}
       </AppText>
+    </View>
+  );
+}
+
+function PendingDots() {
+  const first = useRef(new Animated.Value(0.35)).current;
+  const second = useRef(new Animated.Value(0.35)).current;
+  const third = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    const createPulse = (value: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(value, { duration: 260, toValue: 1, useNativeDriver: true }),
+          Animated.timing(value, { duration: 260, toValue: 0.35, useNativeDriver: true }),
+          Animated.delay(520 - delay)
+        ])
+      );
+
+    const pulses = [createPulse(first, 0), createPulse(second, 160), createPulse(third, 320)];
+    pulses.forEach((pulse) => pulse.start());
+    return () => pulses.forEach((pulse) => pulse.stop());
+  }, [first, second, third]);
+
+  return (
+    <View style={styles.pendingDots}>
+      <Animated.View style={[styles.pendingDot, { opacity: first }]} />
+      <Animated.View style={[styles.pendingDot, { opacity: second }]} />
+      <Animated.View style={[styles.pendingDot, { opacity: third }]} />
     </View>
   );
 }
@@ -409,27 +454,114 @@ function TradeValue(props: { label: string }) {
   );
 }
 
+function HeaderBadge(props: { label: string; tone: "green" | "amber" | "neutral" }) {
+  return (
+    <View
+      style={[
+        styles.headerBadge,
+        props.tone === "green" ? styles.headerBadgeGreen : null,
+        props.tone === "amber" ? styles.headerBadgeAmber : null
+      ]}
+    >
+      <AppText
+        style={[
+          styles.headerBadgeText,
+          props.tone === "green" ? styles.headerBadgeTextGreen : null,
+          props.tone === "amber" ? styles.headerBadgeTextAmber : null
+        ]}
+        variant="statusPill"
+      >
+        {props.label}
+      </AppText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   content: {
-    gap: 22,
+    gap: 20,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 18,
     paddingBottom: 42
   },
-  header: {
+  businessHeader: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 13,
+    minHeight: 98,
+    padding: 13
+  },
+  businessAvatar: {
+    alignItems: "center",
+    borderRadius: 28,
+    height: 56,
+    justifyContent: "center",
+    width: 56
+  },
+  businessHeaderText: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0
+  },
+  businessHeaderTopLine: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between"
   },
-  title: {
-    ...typography.screenTitle,
+  businessKicker: {
+    color: colors.ink3,
+    fontSize: 9.5,
+    letterSpacing: 1.35,
+    ...fontStyles.medium
   },
-  headerAvatar: {
-    alignItems: "center",
-    borderRadius: 24,
-    height: 48,
-    justifyContent: "center",
-    width: 48
+  businessName: {
+    color: colors.ink,
+    fontSize: 18,
+    lineHeight: 22,
+    ...fontStyles.semibold
+  },
+  businessMeta: {
+    color: colors.ink3,
+    fontSize: 11.5,
+    ...fontStyles.regular
+  },
+  businessBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingTop: 7
+  },
+  headerBadge: {
+    backgroundColor: colors.surfaceRaised,
+    borderColor: colors.border,
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  headerBadgeGreen: {
+    backgroundColor: colors.greenBg,
+    borderColor: colors.greenBorder
+  },
+  headerBadgeAmber: {
+    backgroundColor: colors.amberBg,
+    borderColor: colors.amberBorder
+  },
+  headerBadgeText: {
+    color: colors.ink3,
+    fontSize: 8.5,
+    ...fontStyles.semibold,
+    textTransform: "uppercase"
+  },
+  headerBadgeTextGreen: {
+    color: colors.green
+  },
+  headerBadgeTextAmber: {
+    color: colors.amber
   },
   section: {
     gap: 9
@@ -459,12 +591,6 @@ const styles = StyleSheet.create({
   },
   rowLast: {
     borderBottomWidth: 0
-  },
-  paymentProgressWrap: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
-    padding: 12,
-    paddingTop: 0
   },
   rowIcon: {
     alignItems: "center",
@@ -537,6 +663,22 @@ const styles = StyleSheet.create({
   pendingBadge: {
     backgroundColor: colors.amberBg,
     borderColor: colors.amberBorder
+  },
+  pendingDotsBadge: {
+    minWidth: 50
+  },
+  pendingDots: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    justifyContent: "center",
+    minWidth: 22
+  },
+  pendingDot: {
+    backgroundColor: colors.amber,
+    borderRadius: radius.pill,
+    height: 5,
+    width: 5
   },
   pendingText: {
     color: colors.amber
