@@ -5,9 +5,10 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
+  useAudioPlayer,
   useAudioRecorderState
 } from "expo-audio";
-import { Mic } from "lucide-react-native";
+import { Lock, Mic, Play, Plus, RotateCcw } from "lucide-react-native";
 import { router } from "expo-router";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,17 +32,17 @@ export default function NewQuoteVoiceScreen() {
   const recorderState = useAudioRecorderState(recorder, 250);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [audioTranscript, setAudioTranscript] = useState("");
   const [audioUri, setAudioUri] = useState<string | null>(wizard.audioUri);
   const [audioDurationSeconds, setAudioDurationSeconds] = useState(wizard.audioDurationSeconds ?? 0);
+  const player = useAudioPlayer(audioUri ? { uri: audioUri } : null);
   const extraHints = tradeConfig.notes.chips;
   const [selectedExtras, setSelectedExtras] = useState<string[]>(
     extraHints.filter((hint) => wizard.transcript.toLowerCase().includes(hint.phrase)).map((hint) => hint.phrase)
   );
   const [notes, setNotes] = useState(notesFromTranscript(wizard.transcript, selectedExtras));
   const transcript = useMemo(
-    () => buildTranscript({ audioTranscript, extras: selectedExtras, notes }),
-    [audioTranscript, notes, selectedExtras]
+    () => buildTranscript({ extras: selectedExtras, notes }),
+    [notes, selectedExtras]
   );
   const elapsedSeconds = recording
     ? Math.max(0, Math.floor(recorderState.durationMillis / 1000))
@@ -75,7 +76,6 @@ export default function NewQuoteVoiceScreen() {
         return;
       }
 
-      setAudioTranscript("");
       setAudioUri(null);
       setAudioDurationSeconds(0);
       updateWizard({
@@ -152,7 +152,8 @@ export default function NewQuoteVoiceScreen() {
         durationSeconds
       });
       const cleanedTranscript = response.transcript.trim();
-      setAudioTranscript(cleanedTranscript);
+      const mergedNotes = mergeNotesWithVoice(notes, cleanedTranscript);
+      setNotes(mergedNotes);
       updateWizard({
         audioUri: uri,
         audioStoragePath: response.audio.storagePath,
@@ -160,9 +161,8 @@ export default function NewQuoteVoiceScreen() {
         audioDurationSeconds: response.audio.durationSeconds,
         transcriptionSource: response.source,
         transcript: buildTranscript({
-          audioTranscript: cleanedTranscript,
           extras: selectedExtras,
-          notes
+          notes: mergedNotes
         })
       });
     } catch (error) {
@@ -183,6 +183,19 @@ export default function NewQuoteVoiceScreen() {
     }
   }
 
+  async function playRecording() {
+    if (!audioUri) {
+      return;
+    }
+
+    try {
+      await player.seekTo(0);
+      player.play();
+    } catch (error) {
+      Alert.alert("Could not play recording", userFacingErrorMessage(error));
+    }
+  }
+
   return (
     <Screen edges={["top"]}>
       <NewQuoteHeader onBack={() => router.back()} step={3} />
@@ -195,8 +208,20 @@ export default function NewQuoteVoiceScreen() {
         <View style={styles.group}>
           <SectionKicker>Notes</SectionKicker>
           <View style={[styles.captureCard, recording ? styles.captureCardRecording : null]}>
+            <View style={styles.voiceBadgeRow}>
+              <View style={[styles.voiceBadge, recording ? styles.voiceBadgeRecording : null]}>
+                <Mic color={recording ? colors.green : colors.ink2} size={9} strokeWidth={2.2} />
+                <Text style={[styles.voiceBadgeText, recording ? styles.voiceBadgeTextRecording : null]}>
+                  {recording
+                    ? `Listening · ${formatElapsed(elapsedSeconds)}`
+                    : audioUri
+                      ? "From voice · tap to edit"
+                      : "Type or record"}
+                </Text>
+              </View>
+            </View>
             <TextInput
-              editable={!recording}
+              editable={!recording && !transcribing}
               multiline
               onChangeText={setNotes}
               placeholder={recording ? "Listening..." : tradeConfig.notes.placeholder}
@@ -205,10 +230,34 @@ export default function NewQuoteVoiceScreen() {
               textAlignVertical="top"
               value={notes}
             />
+            {audioUri || transcribing ? (
+              <View style={styles.audioActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!audioUri || recording || transcribing}
+                  hitSlop={8}
+                  onPress={() => void playRecording()}
+                  style={styles.audioActionButton}
+                >
+                  <Play color={colors.ink2} size={12} strokeWidth={2.2} />
+                  <Text style={styles.audioActionText}>Re-listen</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={recording || transcribing}
+                  hitSlop={8}
+                  onPress={() => void startRecording()}
+                  style={styles.audioActionButton}
+                >
+                  <RotateCcw color={colors.ink2} size={12} strokeWidth={2.2} />
+                  <Text style={styles.audioActionText}>Re-record</Text>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={styles.captureDivider} />
             <View style={styles.captureFooter}>
               <View style={styles.guardrail}>
-                <View style={styles.guardrailMark} />
+                <Lock color={colors.green} size={11} strokeWidth={2.2} />
                 <Text style={styles.guardrailText}>
                   {recording
                     ? `${formatElapsed(elapsedSeconds)} · tap mic to stop`
@@ -217,6 +266,13 @@ export default function NewQuoteVoiceScreen() {
                       : "Adds scope, never prices"}
                 </Text>
               </View>
+              {recording ? (
+                <View style={styles.inlineWave}>
+                  {WAVE_BARS.slice(0, 11).map((height, index) => (
+                    <View key={index} style={[styles.waveBar, { height: Math.max(8, height - 8) }]} />
+                  ))}
+                </View>
+              ) : null}
               <Pressable
                 accessibilityLabel={recording ? "Stop recording" : "Start voice note"}
                 accessibilityRole="button"
@@ -226,13 +282,6 @@ export default function NewQuoteVoiceScreen() {
                 {recording ? <View style={styles.stopGlyph} /> : <Mic color={colors.surface} size={18} strokeWidth={2.3} />}
               </Pressable>
             </View>
-            {recording ? (
-              <View style={styles.inlineWave}>
-                {WAVE_BARS.slice(0, 13).map((height, index) => (
-                  <View key={index} style={[styles.waveBar, { height: Math.max(8, height - 8) }]} />
-                ))}
-              </View>
-            ) : null}
           </View>
         </View>
 
@@ -280,7 +329,11 @@ function ExtraChip(props: { active: boolean; label: string; onPress: () => void 
       onPress={props.onPress}
       style={[styles.extraChip, props.active ? styles.extraChipActive : null]}
     >
-      <View style={[styles.extraChipMark, props.active ? styles.extraChipMarkActive : null]} />
+      <Plus
+        color={props.active ? colors.surface : colors.ink2}
+        size={11}
+        strokeWidth={2.2}
+      />
       <Text style={[styles.extraChipText, props.active ? styles.extraChipTextActive : null]}>
         {props.label}
       </Text>
@@ -288,9 +341,8 @@ function ExtraChip(props: { active: boolean; label: string; onPress: () => void 
   );
 }
 
-function buildTranscript(input: { audioTranscript: string; extras: string[]; notes: string }) {
+function buildTranscript(input: { extras: string[]; notes: string }) {
   const parts = [
-    input.audioTranscript.trim(),
     ...input.extras.map((extra) => `${extra}.`),
     input.notes.trim()
   ].filter((part) => part.trim().length > 0);
@@ -306,6 +358,25 @@ function notesFromTranscript(transcript: string, extras: string[]) {
   }
 
   return notes.replace(/\s+/g, " ").trim();
+}
+
+function mergeNotesWithVoice(currentNotes: string, voiceText: string) {
+  const current = currentNotes.trim();
+  const voice = voiceText.trim();
+
+  if (voice.length === 0) {
+    return current;
+  }
+
+  if (current.length === 0) {
+    return voice;
+  }
+
+  if (current.toLowerCase().includes(voice.toLowerCase())) {
+    return current;
+  }
+
+  return `${current}\n\n${voice}`;
 }
 
 function escapeRegExp(value: string) {
@@ -388,33 +459,63 @@ const styles = StyleSheet.create({
     overflow: "hidden"
   },
   captureCardRecording: {
-    borderColor: colors.red
+    borderColor: colors.greenBorder
   },
   captureDivider: {
     backgroundColor: colors.border,
     height: 1
   },
+  voiceBadgeRow: {
+    flexDirection: "row",
+    paddingHorizontal: 13,
+    paddingTop: 12
+  },
+  voiceBadge: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.surfaceRaised,
+    borderColor: colors.border,
+    borderRadius: 5,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  voiceBadgeRecording: {
+    backgroundColor: colors.greenBg,
+    borderColor: colors.greenBorder
+  },
+  voiceBadgeText: {
+    color: colors.ink2,
+    fontSize: 9,
+    ...fontStyles.semibold,
+    letterSpacing: 0.45,
+    textTransform: "uppercase"
+  },
+  voiceBadgeTextRecording: {
+    color: colors.green
+  },
   captureFooter: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     justifyContent: "space-between",
-    minHeight: 48,
+    minHeight: 50,
     paddingLeft: 13,
     paddingRight: 10
   },
   inlineWave: {
     alignItems: "center",
-    bottom: 14,
     flexDirection: "row",
     gap: 3,
-    height: 18,
-    left: 124,
+    height: 20,
+    justifyContent: "center",
     pointerEvents: "none",
-    position: "absolute"
+    width: 72
   },
   waveBar: {
-    backgroundColor: colors.redBorder,
+    backgroundColor: colors.greenBorder,
     borderRadius: 2,
     width: 3
   },
@@ -438,16 +539,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dark,
     borderColor: colors.dark
   },
-  extraChipMark: {
-    borderColor: colors.ink3,
-    borderRadius: 1,
-    borderWidth: 1.3,
-    height: 7,
-    width: 7
-  },
-  extraChipMarkActive: {
-    borderColor: colors.surface
-  },
   extraChipText: {
     color: colors.ink,
     fontSize: 12,
@@ -459,29 +550,42 @@ const styles = StyleSheet.create({
   },
   notesInput: {
     color: colors.ink,
-    fontSize: 14,
+    fontSize: 13,
     ...fontStyles.regular,
-    lineHeight: 20,
-    minHeight: 86,
+    lineHeight: 19,
+    minHeight: 74,
     paddingHorizontal: 13,
-    paddingTop: 13
+    paddingTop: 11
   },
-  guardrail: {
+  audioActions: {
+    flexDirection: "row",
+    gap: 15,
+    paddingHorizontal: 13,
+    paddingBottom: 11,
+    paddingTop: 2
+  },
+  audioActionButton: {
     alignItems: "center",
     flexDirection: "row",
     gap: 5
   },
-  guardrailMark: {
-    borderColor: colors.ink3,
-    borderRadius: 1,
-    borderWidth: 1.2,
-    height: 7,
-    width: 7
+  audioActionText: {
+    color: colors.ink2,
+    fontSize: 11,
+    ...fontStyles.semibold,
+  },
+  guardrail: {
+    alignItems: "center",
+    flexDirection: "row",
+    flex: 1,
+    gap: 5,
+    minWidth: 0
   },
   guardrailText: {
-    color: colors.ink3,
+    color: colors.green,
+    flexShrink: 1,
     fontSize: 11,
-    ...fontStyles.regular,
+    ...fontStyles.semibold,
   },
   micButton: {
     alignItems: "center",
@@ -492,7 +596,7 @@ const styles = StyleSheet.create({
     width: 38
   },
   micButtonRecording: {
-    backgroundColor: colors.red
+    backgroundColor: colors.green
   },
   stopGlyph: {
     backgroundColor: colors.surface,
