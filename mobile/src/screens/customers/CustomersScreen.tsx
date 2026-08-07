@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { router, useFocusEffect } from "expo-router";
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
 import { ChevronRight, Merge, Plus, Search, Trash2, Users, X } from "lucide-react-native";
 import { deriveCustomerCity, deriveJobLabel, type Customer } from "@snapquote/shared";
 import { AnimatedSheetContent, SheetModal } from "../../shared-ui/AnimatedSheet";
@@ -31,7 +31,12 @@ const emptyStats: CustomerStats = {
   latestQuote: null,
 };
 
+const CUSTOMER_ROW_HEIGHT_ESTIMATE = 76;
+const DUPLICATE_ROW_HEIGHT_ESTIMATE = 62;
+const CUSTOMER_SCREEN_FIXED_HEIGHT_ESTIMATE = 284;
+
 export default function CustomersScreen() {
+  const { height: screenHeight } = useWindowDimensions();
   const customers = useQuoteStore((state) => state.customers);
   const quotes = useQuoteStore((state) => state.quotes);
   const events = useQuoteStore((state) => state.events);
@@ -55,11 +60,22 @@ export default function CustomersScreen() {
 
   const statsByCustomerId = useMemo(() => customerStats(customers, quotes, events), [customers, quotes, events]);
   const sortedCustomers = useMemo(() => sortCustomers(customers, statsByCustomerId), [customers, statsByCustomerId]);
+  const trimmedQuery = query.trim();
+  const hasSearchQuery = trimmedQuery.length > 0;
   const filteredCustomers = useMemo(
     () => sortedCustomers.filter((customer) => matchesCustomerSearch(customer, query)),
     [query, sortedCustomers],
   );
   const duplicateGroups = useMemo(() => possibleDuplicateGroups(sortedCustomers), [sortedCustomers]);
+  const visibleListHeightEstimate =
+    sortedCustomers.length * CUSTOMER_ROW_HEIGHT_ESTIMATE +
+    (!hasSearchQuery ? duplicateGroups.length * DUPLICATE_ROW_HEIGHT_ESTIMATE : 0);
+  const availableListHeightEstimate = Math.max(
+    CUSTOMER_ROW_HEIGHT_ESTIMATE * 3,
+    screenHeight - CUSTOMER_SCREEN_FIXED_HEIGHT_ESTIMATE,
+  );
+  const shouldShowCustomerSearch =
+    customers.length > 0 && (hasSearchQuery || visibleListHeightEstimate > availableListHeightEstimate);
   const editingCustomer = editingCustomerId !== null
     ? customers.find((customer) => customer.id === editingCustomerId) ?? null
     : null;
@@ -290,10 +306,7 @@ export default function CustomersScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <AppText style={styles.title} variant="screenTitle">Customers</AppText>
-              <AppText style={styles.customerCount} variant="headerSummary">{customers.length} total</AppText>
-            </View>
+            <AppText style={styles.customerCount} variant="headerSummary">{customers.length} total</AppText>
             <Pressable
               accessibilityLabel="Add customer"
               accessibilityRole="button"
@@ -304,7 +317,7 @@ export default function CustomersScreen() {
             </Pressable>
           </View>
 
-          {customers.length > 0 ? (
+          {shouldShowCustomerSearch ? (
             <View style={styles.searchBox}>
               <Search color={colors.ink3} size={15} />
               <TextInput
@@ -319,7 +332,7 @@ export default function CustomersScreen() {
             </View>
           ) : null}
 
-          {duplicateGroups.length > 0 && query.trim().length === 0 ? (
+          {duplicateGroups.length > 0 && !hasSearchQuery ? (
             <CustomerSection count={duplicateGroups.length} label="Possible duplicates">
               {duplicateGroups.map((group, index) => (
                 <DuplicateGroupRow
@@ -338,7 +351,7 @@ export default function CustomersScreen() {
           ) : filteredCustomers.length === 0 ? (
             <NoMatchesState />
           ) : (
-            <CustomerSection count={filteredCustomers.length} label={query.trim().length > 0 ? "Matches" : "All customers"}>
+            <CustomerSection count={filteredCustomers.length} label={hasSearchQuery ? "Matches" : "All customers"}>
               {filteredCustomers.map((customer, index) => (
                 <CustomerRow
                   duplicate={duplicateGroups.some((group) => group.some((candidate) => candidate.id === customer.id))}
@@ -979,14 +992,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-  },
-  titleRow: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    gap: 10,
-  },
-  title: {
-    ...typography.screenTitle,
   },
   customerCount: {
     color: colors.ink3,

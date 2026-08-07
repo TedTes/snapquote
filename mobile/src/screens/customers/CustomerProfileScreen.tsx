@@ -413,7 +413,9 @@ export default function CustomerProfileScreen() {
               <ChevronLeft color={colors.ink} size={18} strokeWidth={2.5} />
             </Pressable>
             <View style={styles.navTitleWrap}>
-              <AppText style={styles.navEyebrow} variant="sectionLabel">Customer</AppText>
+              <View style={styles.avatar}>
+                <AppText style={styles.avatarText} tone="onDark" variant="statValue">{initials(currentCustomer.name)}</AppText>
+              </View>
             </View>
             <Pressable accessibilityRole="button" onPress={() => setEditing(true)} style={styles.navButton}>
               <Edit3 color={colors.ink} size={17} strokeWidth={2.4} />
@@ -421,13 +423,12 @@ export default function CustomerProfileScreen() {
           </View>
 
           <View style={styles.profileHero}>
-            <View style={styles.avatar}>
-              <AppText style={styles.avatarText} tone="onDark" variant="statValue">{initials(currentCustomer.name)}</AppText>
-            </View>
-            <View style={styles.profileCopy}>
-              <AppText numberOfLines={2} style={styles.customerName} variant="panelTitle">{currentCustomer.name}</AppText>
-              <AppText numberOfLines={1} style={styles.customerLocation} variant="headerSummary">{customerSubtitle(currentCustomer)}</AppText>
-            </View>
+            <AppText numberOfLines={1} style={styles.customerHeroName} variant="panelTitle">
+              {currentCustomer.name}
+            </AppText>
+            <AppText numberOfLines={1} style={styles.customerLocation} variant="headerSummary">
+              {customerSubtitle(currentCustomer)}
+            </AppText>
           </View>
 
           <View style={styles.contactActions}>
@@ -895,9 +896,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   content: {
-    gap: 14,
+    gap: 10,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 6,
   },
   nav: {
     alignItems: "center",
@@ -921,46 +922,38 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingHorizontal: 12,
   },
-  navEyebrow: {
-    ...typography.sectionLabel,
-    fontSize: 10,
-    letterSpacing: 1.8,
-  },
   profileHero: {
     alignItems: "center",
-    flexDirection: "row",
-    gap: 14,
-    paddingHorizontal: 4,
-    paddingTop: 7,
+    gap: 2,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingTop: 0,
   },
   avatar: {
     alignItems: "center",
     backgroundColor: colors.dark,
-    borderRadius: 18,
-    height: 64,
+    borderRadius: 13,
+    height: 46,
     justifyContent: "center",
-    width: 64,
+    width: 46,
   },
   avatarText: {
     color: colors.onDark,
+    fontSize: 16,
+    ...fontStyles.semibold,
+  },
+  customerHeroName: {
+    color: colors.ink,
     fontSize: 20,
     ...fontStyles.semibold,
-  },
-  profileCopy: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  customerName: {
-    color: colors.ink,
-    fontSize: 22,
-    ...fontStyles.semibold,
-    lineHeight: 27,
+    lineHeight: 24,
+    textAlign: "center",
   },
   customerLocation: {
     color: colors.ink3,
     fontSize: 13,
     ...fontStyles.regular,
+    textAlign: "center",
   },
   profileStats: {
     backgroundColor: colors.surface,
