@@ -63,13 +63,13 @@ export function DemoPreviewScreen({ playback }: DemoPreviewScreenProps) {
       {showSendSheet ? (
         <DemoSheet className="qv-flow-send-sheet" title="Send quote" body="$2,018 to John Doe">
           <div className="qv-flow-send-option is-ready">
-            <span aria-hidden="true">✉</span>
-            <b>Email link<small>tedtfu@gmail.com</small></b>
+            <span className="qv-flow-send-icon" aria-hidden="true">✉</span>
+            <b><span className="qv-flow-send-label">Email link</span><small>tedtfu@gmail.com</small></b>
             <strong>Ready</strong>
           </div>
           <div className="qv-flow-send-option is-disabled">
-            <span aria-hidden="true">◌</span>
-            <b>Text link<small>Coming soon</small></b>
+            <span className="qv-flow-send-icon" aria-hidden="true">◌</span>
+            <b><span className="qv-flow-send-label">Text link</span><small>Coming soon</small></b>
           </div>
           <div className="qv-flow-send-safe">All lines priced — safe to send.</div>
           <DemoButton className={sendingNow ? "is-pressed" : undefined}>Send email now</DemoButton>

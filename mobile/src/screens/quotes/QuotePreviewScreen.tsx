@@ -397,15 +397,17 @@ export default function QuotePreviewScreen() {
               <Mail color={colors.ink} size={18} />
             </View>
             <View style={styles.channelText}>
-              <Text style={styles.channelTitle}>Email link</Text>
-              <Text style={styles.channelSub}>
+              <Text numberOfLines={1} style={styles.channelTitle}>Email link</Text>
+              <Text ellipsizeMode="middle" numberOfLines={1} style={styles.channelSub}>
                 {customer?.email ?? "No email on file"}
               </Text>
             </View>
-            <Chip
-              label={customer?.email ? "Ready" : "Missing"}
-              tone={customer?.email ? "green" : "red"}
-            />
+            <View style={styles.channelStatus}>
+              <Chip
+                label={customer?.email ? "Ready" : "Missing"}
+                tone={customer?.email ? "green" : "red"}
+              />
+            </View>
           </Card>
 
           <Card style={[styles.channelRow, styles.channelRowDisabled]}>
@@ -413,8 +415,8 @@ export default function QuotePreviewScreen() {
               <MessageCircle color={colors.ink3} size={18} />
             </View>
             <View style={styles.channelText}>
-              <Text style={styles.channelTitleMuted}>Text link</Text>
-              <Text style={styles.channelSub}>Coming soon</Text>
+              <Text numberOfLines={1} style={styles.channelTitleMuted}>Text link</Text>
+              <Text numberOfLines={1} style={styles.channelSub}>Coming soon</Text>
             </View>
           </Card>
 
@@ -879,7 +881,8 @@ const styles = StyleSheet.create({
   channelRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm
+    gap: spacing.sm,
+    minHeight: 66
   },
   channelRowDisabled: {
     opacity: 0.55
@@ -897,27 +900,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.sm,
+    flexShrink: 0,
     height: 34,
     justifyContent: "center",
     width: 34
   },
   channelText: {
     flex: 1,
-    gap: 2
+    flexShrink: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  channelStatus: {
+    flexShrink: 0,
+    marginLeft: spacing.xs
   },
   channelTitle: {
     color: colors.ink,
     fontSize: 14,
+    lineHeight: 18,
     ...fontStyles.semibold,
   },
   channelTitleMuted: {
     color: colors.ink2,
     fontSize: 14,
+    lineHeight: 18,
     ...fontStyles.medium,
   },
   channelSub: {
     color: colors.ink3,
-    fontSize: 12
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 16
   },
   cancelLink: {
     alignItems: "center",

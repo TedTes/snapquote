@@ -1,13 +1,27 @@
 import { DemoButton, PhoneFrame, StepBar, WizardHeader } from "../primitives";
-import { isActiveTarget } from "../engine/playback";
+import { hasPassedEvent, isActiveTarget } from "../engine/playback";
 import type { DemoPlaybackState } from "../engine/types";
 
 interface DemoNotesScreenProps {
   playback: DemoPlaybackState;
 }
 
+const recordedNoteText =
+  "Paint the living room, hallway, and two bedrooms. Patch small nail holes, sand rough areas, apply primer where needed, then two coats on the walls.";
+
 export function DemoNotesScreen({ playback }: DemoNotesScreenProps) {
-  const isRecording = playback.activeEvent?.type === "record";
+  const isRecording = isActiveTarget(playback, "mic", "record");
+  const hasRecorded = isRecording || hasPassedEvent(playback, "mic", "record");
+  const visibleNoteText = hasRecorded
+    ? recordedNoteText.slice(0, Math.ceil(recordedNoteText.length * (isRecording ? playback.eventProgress : 1)))
+    : "";
+  const noteClassName = [
+    "qv-flow-unified-note",
+    isRecording ? "is-recording" : "",
+    hasRecorded ? "has-transcript" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <PhoneFrame time="9:14">
@@ -18,18 +32,21 @@ export function DemoNotesScreen({ playback }: DemoNotesScreenProps) {
         <h3>Anything else on this job?</h3>
         <p>Talk it through or type it — whatever's faster on site.</p>
 
-        <div className={isRecording ? "qv-flow-unified-note is-recording" : "qv-flow-unified-note"}>
+        <div className={noteClassName}>
           <div className="qv-flow-note-placeholder">
-            {isRecording ? (
-              <span>Listening...</span>
+            {hasRecorded ? (
+              <span className="qv-flow-note-transcript">
+                {visibleNoteText}
+                {isRecording ? <i aria-hidden="true" /> : null}
+              </span>
             ) : (
               <span>Type anything the checklist didn't cover...</span>
             )}
           </div>
           <div className="qv-flow-note-footer">
-            <small>{isRecording ? "0:07 · tap mic to stop" : "Adds scope, never prices"}</small>
-            <button aria-label="Record note" data-demo-target="mic" type="button">
-              {isRecording ? <i aria-hidden="true" /> : <span className="qv-flow-mic-glyph" aria-hidden="true" />}
+            <small>{isRecording ? "Capturing scope" : hasRecorded ? "Voice note added" : "Adds scope, never prices"}</small>
+            <button aria-label="Record note" aria-pressed={isRecording} data-demo-target="mic" type="button">
+              <span className="qv-flow-mic-glyph" aria-hidden="true" />
             </button>
           </div>
           {isRecording ? (
