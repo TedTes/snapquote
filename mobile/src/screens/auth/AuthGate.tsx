@@ -13,6 +13,8 @@ export function AuthGate(props: { children: ReactNode }) {
   const isAuthRoute = pathname === "/auth";
   const isOnboardingRoute = pathname === "/onboarding";
   const isCallbackRoute = pathname === "/auth/callback";
+  const isPublicQuoteRoute = pathname.startsWith("/public-quote/");
+  const canRenderSignedOutRoute = isAuthRoute || isPublicQuoteRoute;
 
   // This listener must live here, mounted once at the app root, rather than in the
   // callback screen itself. The OAuth redirect's "url" event fires the moment the
@@ -48,7 +50,7 @@ export function AuthGate(props: { children: ReactNode }) {
   }, [completeOAuthRedirect, initialize]);
 
   useEffect(() => {
-    if (status === "signed_out" && isCallbackRoute) {
+    if (status === "signed_out" && !canRenderSignedOutRoute) {
       router.replace("/auth");
       return;
     }
@@ -65,9 +67,13 @@ export function AuthGate(props: { children: ReactNode }) {
     if (isAuthRoute || isCallbackRoute) {
       router.replace("/");
     }
-  }, [isAuthRoute, isCallbackRoute, isOnboardingRoute, me?.org.setupCompletedAt, status]);
+  }, [canRenderSignedOutRoute, isAuthRoute, isCallbackRoute, isOnboardingRoute, me?.org.setupCompletedAt, status]);
 
   if (status === "loading") {
+    return <AppLoadingScreen />;
+  }
+
+  if (status === "signed_out" && !canRenderSignedOutRoute) {
     return <AppLoadingScreen />;
   }
 

@@ -23,7 +23,8 @@
           "photosPermission": "Allow QuoteVan to choose a business logo from your photo library."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

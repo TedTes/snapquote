@@ -1,5 +1,6 @@
 import { File, Paths } from "expo-file-system";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { deriveCustomerCity } from "@snapquote/shared";
 import type {
   Customer,
@@ -53,7 +54,7 @@ let initializePromise: Promise<void> | null = null;
 let authSessionRefreshPromise: Promise<AuthSession | null> | null = null;
 let pendingOAuthInput: { businessName?: string | undefined; name?: string | undefined } = {};
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   status: "loading",
   session: null,
   me: null,
@@ -160,7 +161,19 @@ export const useAuthStore = create<AuthState>((set) => ({
       const redirectTo = Linking.createURL("auth/callback");
       authDiag("redirectTo:", redirectTo);
       const response = await snapquoteApi.startOAuth({ provider, redirectTo });
-      await Linking.openURL(response.url);
+      const result = await WebBrowser.openAuthSessionAsync(response.url, redirectTo);
+
+      if (result.type === "success") {
+        const handled = await get().completeOAuthRedirect(result.url);
+
+        if (!handled) {
+          throw new Error("The sign-in callback was not recognized.");
+        }
+
+        return;
+      }
+
+      pendingOAuthInput = {};
       set({ status: "signed_out", session: null, me: null, error: null });
     } catch (error) {
       pendingOAuthInput = {};
