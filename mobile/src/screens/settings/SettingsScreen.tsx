@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Percent,
   RotateCcw,
+  Trash2,
   Type,
   Users
 } from "lucide-react-native";
@@ -49,7 +50,9 @@ export default function SettingsScreen() {
   const logoUrl = me?.org.logoUrl ?? null;
   const authStatus = useAuthStore((state) => state.status);
   const setMe = useAuthStore((state) => state.setMe);
+  const signOut = useAuthStore((state) => state.signOut);
   const [paymentRefreshing, setPaymentRefreshing] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [paymentSetupPhase, setPaymentSetupPhase] = useState<PaymentSetupPhase>("idle");
   const [paymentStatusKnown, setPaymentStatusKnown] = useState(false);
   const [paymentConnection, setPaymentConnection] = useState<PaymentConnectionState | null>(null);
@@ -112,6 +115,49 @@ export default function SettingsScreen() {
 
     return () => subscription.remove();
   }, [authStatus, refreshPaymentStatus]);
+
+  function confirmDeleteAccount() {
+    if (authStatus !== "signed_in") {
+      Alert.alert("Sign in required", "Sign in before deleting your QuoteVan account.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign in", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) }
+      ]);
+      return;
+    }
+
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your QuoteVan account, business profile, price book, customers, and quotes.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void deleteAccount();
+          }
+        }
+      ]
+    );
+  }
+
+  async function deleteAccount() {
+    if (deletingAccount) {
+      return;
+    }
+
+    setDeletingAccount(true);
+
+    try {
+      await snapquoteApi.deleteAccount();
+      signOut();
+      Alert.alert("Account deleted", "Your QuoteVan account has been deleted.");
+    } catch (error) {
+      Alert.alert("Could not delete account", userFacingErrorMessage(error));
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
 
   async function openPaymentSetup() {
     if (paymentStatus === "connected" || paymentsConnected) {
@@ -295,10 +341,11 @@ export default function SettingsScreen() {
             onPress={() => void Linking.openURL(legalUrls.terms)}
           />
           <SettingsRow
-            detail="Request deletion of your account and associated app data"
-            icon={<Users color={colors.ink2} size={16} strokeWidth={2.1} />}
-            label="Account deletion"
-            onPress={() => void Linking.openURL(legalUrls.accountDeletion)}
+            detail={deletingAccount ? "Deleting your account..." : "Permanently delete your account and app data"}
+            icon={<Trash2 color={colors.red} size={16} strokeWidth={2.1} />}
+            label={deletingAccount ? "Deleting account..." : "Delete account"}
+            onPress={confirmDeleteAccount}
+            showChevron={false}
           />
           <SettingsRow
             detail="Get help with quotes, payments, privacy, or store review"

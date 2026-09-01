@@ -732,10 +732,11 @@ async function authResponseForSupabaseUser(
   }
 
   const userMetadata = user.user_metadata ?? {};
-  const providedName =
+  const providedName = (
     input.name ||
-    String(userMetadata.full_name ?? userMetadata.name ?? userMetadata.display_name ?? "").trim();
-  const memberName = providedName || "Owner";
+    String(userMetadata.full_name ?? userMetadata.name ?? userMetadata.display_name ?? "")
+  ).trim();
+  const memberName = providedName && !looksLikeEmail(providedName) ? providedName : "Owner";
   const businessName =
     input.businessName ||
     String(userMetadata.business_name ?? "").trim() ||
@@ -5196,6 +5197,10 @@ function authFailureMessage(...errors: unknown[]) {
   }
 
   return message;
+}
+
+function looksLikeEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function nativeAppleAuthFailureMessage(error: unknown) {

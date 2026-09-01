@@ -16,6 +16,7 @@ import {
   Phone,
   Pencil,
   Shield,
+  Trash2,
   User
 } from "lucide-react-native";
 import { Alert, Image, NativeModules, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -57,7 +58,8 @@ export default function ProfileScreen() {
   const sentCount = statuses.filter((status) => status === "sent" || status === "viewed" || status === "accepted").length;
   const acceptedCount = statuses.filter((status) => status === "accepted").length;
   const winRate = sentCount > 0 ? Math.round((acceptedCount / sentCount) * 100) : 0;
-  const userName = me?.user.name ?? "Guest";
+  const rawUserName = me?.user.name?.trim() ?? "";
+  const userName = rawUserName && !looksLikeEmail(rawUserName) ? rawUserName : "Not set";
   const email = me?.user.email ?? "Not signed in";
   const logoUrl = me?.org.logoUrl ?? null;
   const contactDetail = contactSummary(me?.org.contactPhone ?? null, me?.org.website ?? null);
@@ -177,7 +179,7 @@ export default function ProfileScreen() {
     try {
       await snapquoteApi.deleteAccount();
       signOut();
-      router.replace("/");
+      Alert.alert("Account deleted", "Your QuoteVan account has been deleted.");
     } catch (error) {
       Alert.alert("Could not delete account", userFacingErrorMessage(error));
     } finally {
@@ -292,7 +294,7 @@ export default function ProfileScreen() {
 
         <ProfileSection label="Personal & security">
           <ProfileRow
-            customValue={<AppText style={styles.rowValue} variant="meta">{userName}</AppText>}
+            customValue={<AppText ellipsizeMode="tail" numberOfLines={1} style={styles.rowValue} variant="meta">{userName}</AppText>}
             icon={<User color={colors.ink2} size={15} strokeWidth={2.1} />}
             label="Your name"
             onPress={() => Alert.alert("Your name", "Profile editing is coming next.")}
@@ -318,11 +320,19 @@ export default function ProfileScreen() {
             onPress={() => void openFeedback()}
           />
           {authStatus === "signed_in" ? (
-            <ProfileRow
-              icon={<LogOut color={colors.ink2} size={15} strokeWidth={2.1} />}
-              label="Sign out"
-              last
-              onPress={() => {
+            <>
+              <ProfileRow
+                detail={deletingAccount ? "Deleting your account..." : "Permanently delete your account and app data"}
+                icon={<Trash2 color={colors.red} size={15} strokeWidth={2.1} />}
+                label={deletingAccount ? "Deleting account..." : "Delete account"}
+                onPress={confirmDeleteAccount}
+                showChevron={false}
+              />
+              <ProfileRow
+                icon={<LogOut color={colors.ink2} size={15} strokeWidth={2.1} />}
+                label="Sign out"
+                last
+                onPress={() => {
                 Alert.alert("Sign out", "You will need to sign in again on this phone.", [
                   { text: "Cancel", style: "cancel" },
                   {
@@ -330,13 +340,13 @@ export default function ProfileScreen() {
                     style: "destructive",
                     onPress: () => {
                       signOut();
-                      router.replace("/");
                     }
                   }
                 ]);
-              }}
-              showChevron={false}
-            />
+                }}
+                showChevron={false}
+              />
+            </>
           ) : (
             <ProfileRow
               icon={<LogIn color={colors.ink2} size={15} strokeWidth={2.1} />}
@@ -386,14 +396,14 @@ function ProfileRow(props: {
     <Pressable accessibilityRole="button" onPress={props.onPress} style={[styles.row, props.last ? styles.rowLast : null]}>
       <View style={styles.rowIcon}>{props.icon}</View>
       <View style={styles.rowText}>
-        <AppText style={styles.rowLabel} variant="rowTitle">{props.label}</AppText>
+        <AppText ellipsizeMode="tail" numberOfLines={1} style={styles.rowLabel} variant="rowTitle">{props.label}</AppText>
         {props.detail ? (
           <AppText numberOfLines={1} style={styles.rowDetail} variant="rowSubtitle">
             {props.detail}
           </AppText>
         ) : null}
       </View>
-      {props.customValue}
+      {props.customValue ? <View style={styles.rowAccessory}>{props.customValue}</View> : null}
       {props.showChevron === false ? null : (
         <ChevronRight color={colors.ink3} size={15} strokeWidth={2.2} />
       )}
@@ -420,6 +430,10 @@ function VerifiedBadge() {
 function contactSummary(phone: string | null, website: string | null) {
   const parts = [phone, website].map((value) => value?.trim()).filter((value): value is string => Boolean(value));
   return parts.length > 0 ? parts.join(" · ") : "Add phone and website";
+}
+
+function looksLikeEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function normalizeImageContentType(contentType: string | null | undefined): "image/jpeg" | "image/png" | "image/webp" {
@@ -631,8 +645,16 @@ const styles = StyleSheet.create({
   },
   rowValue: {
     color: colors.ink2,
+    flexShrink: 1,
     fontSize: 13,
     ...fontStyles.medium,
+    textAlign: "right"
+  },
+  rowAccessory: {
+    alignItems: "flex-end",
+    flexShrink: 1,
+    maxWidth: "42%",
+    minWidth: 0
   },
   planBadge: {
     backgroundColor: colors.surfaceMuted,

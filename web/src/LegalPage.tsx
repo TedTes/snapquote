@@ -136,7 +136,7 @@ const legalPages: Record<LegalPageKind, LegalPageContent> = {
         title: "Retention and deletion",
         paragraphs: [
           "We keep account, customer, quote, price book, payment metadata, and operational records for as long as needed to provide QuoteVan, support the account, resolve disputes, comply with legal obligations, and protect against fraud or abuse.",
-          `To request account deletion, visit /account-deletion or email ${supportEmail} from the email address used for your QuoteVan account. We may retain limited records where required for legal, tax, payment, dispute, security, backup, or fraud-prevention purposes.`
+          `Signed-in users can delete their account directly in the QuoteVan app from Settings > Delete account. If you no longer have app access, visit /account-deletion or email ${supportEmail} from the email address used for your QuoteVan account. We may retain limited records where required for legal, tax, payment, dispute, security, backup, or fraud-prevention purposes.`
         ]
       },
       {
@@ -269,7 +269,7 @@ const legalPages: Record<LegalPageKind, LegalPageContent> = {
       {
         title: "Privacy or deletion requests",
         paragraphs: [
-          "Use the account deletion page or email support from the email address used for your account."
+          "Signed-in users can delete their account directly in the QuoteVan app from Settings > Delete account. If you no longer have access to the app, email support from the email address used for your account."
         ]
       }
     ]
@@ -278,10 +278,16 @@ const legalPages: Record<LegalPageKind, LegalPageContent> = {
     title: "Account Deletion",
     kicker: "QuoteVan data request",
     intro:
-      "You can request deletion of your QuoteVan account and associated app data even if you no longer have the app installed.",
+      "Signed-in users can delete their QuoteVan account and associated app data directly in the app. This page explains the fallback path if you no longer have the app installed or cannot sign in.",
     sections: [
       {
-        title: "How to request deletion",
+        title: "Delete in the app",
+        paragraphs: [
+          "Open QuoteVan, go to Settings > Delete account, confirm the deletion prompt, and the app will delete your account without requiring email or customer support."
+        ]
+      },
+      {
+        title: "If you cannot access the app",
         paragraphs: [
           `Email ${supportEmail} with the subject "Delete my QuoteVan account" from the email address used for your QuoteVan account. If you cannot access that email address, include enough information for us to verify account ownership.`
         ]
