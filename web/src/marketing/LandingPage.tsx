@@ -559,17 +559,23 @@ function QuotePreviewLine(props: { title: string; detail: string; price: string 
 function StoreBadges() {
   return (
     <div aria-label="QuoteVan mobile app availability" className="store-badges">
-      <span aria-label="QuoteVan iOS app status" className="store-badge">
+      <a
+        href="https://apps.apple.com/us/app/quotevan/id6796754211"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Download QuoteVan on the App Store"
+        className="store-badge"
+      >
         <span aria-hidden="true" className="store-badge-icon store-badge-icon-apple">
           <svg viewBox="0 0 18 22">
             <path d="M14.8 11.6c0-2.4 2-3.6 2.1-3.7-1.1-1.6-2.8-1.9-3.4-1.9-1.4-.1-2.7.8-3.5.8-.7 0-1.9-.8-3.1-.8-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.8 2.5 3.1 2.4 1.2 0 1.7-.8 3.1-.8s1.8.8 3.1.8c1.3 0 2.1-1.2 2.9-2.3.9-1.3 1.2-2.6 1.3-2.7 0 0-2.9-1.1-2.9-3.8ZM12.6 4.5c.7-.8 1.1-1.9 1-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2-.5 2.7-1.3Z" />
           </svg>
         </span>
         <span>
-          <small>App Store</small>
-          <strong>Coming soon</strong>
+          <small>Download on the</small>
+          <strong>App Store</strong>
         </span>
-      </span>
+      </a>
       <span aria-label="QuoteVan Android app status" className="store-badge">
         <span aria-hidden="true" className="store-badge-icon store-badge-icon-play">
           <svg viewBox="0 0 22 24">
