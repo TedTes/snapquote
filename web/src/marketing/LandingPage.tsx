@@ -7,8 +7,42 @@ import "./landing.css";
 const helloMailto = mailtoUrl(contactEmails.hello, { subject: "QuoteVan early access" });
 
 export function LandingPage() {
+  const landingRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = landingRef.current;
+    if (!root) return;
+
+    const sections = Array.from(root.querySelectorAll<HTMLElement>("[data-animate-section]"));
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    root.classList.add("motion-ready");
+
+    if (prefersReducedMotion || !("IntersectionObserver" in window)) {
+      sections.forEach((section) => section.classList.add("is-active"));
+      return () => root.classList.remove("motion-ready");
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => entry.target.classList.toggle("is-active", entry.isIntersecting));
+      },
+      { rootMargin: "-12% 0px -16%", threshold: 0.12 },
+    );
+
+    const frame = window.requestAnimationFrame(() => {
+      sections.forEach((section) => observer.observe(section));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      root.classList.remove("motion-ready");
+    };
+  }, []);
+
   return (
-    <div className="landing">
+    <div className="landing" ref={landingRef}>
       <header className="landing-nav">
         <div className="landing-nav-inner">
           <a aria-label="QuoteVan home" className="landing-brand" href="/">
@@ -16,148 +50,208 @@ export function LandingPage() {
             <span>QuoteVan</span>
           </a>
           <nav aria-label="Landing page" className="landing-nav-links">
-            <a href="#flow">App demo</a>
             <a href="#how">How it works</a>
-            <a href="#customer">Customer view</a>
             <a href="#book">Price book</a>
+            <a href="#customer">Customer view</a>
+            <a href="#trades">Trades</a>
+            <a href="#demo">App demo</a>
           </nav>
-          <a className="btn btn-primary btn-small" href={helloMailto}>Get started</a>
+          <a className="btn btn-primary btn-small" href={helloMailto}>Request early access</a>
         </div>
       </header>
 
       <main>
-        <section className="hero" id="flow">
-          <div className="hero-copy">
-            <p className="landing-eyebrow">QuoteVan for home-service providers</p>
-            <h1>Quote the job before you leave it.</h1>
-            <p className="landing-lede">
-              Walk the job, capture the scope, send a professional quote, and keep the customer history in one place.
-            </p>
-            <StoreBadges />
+        <section className="hero" id="flow" aria-label="QuoteVan hero" data-animate-section>
+          <div className="copy">
+            <p className="eyebrow">QuoteVan for painters and fencers</p>
+            <h1>They request.<br />You quote before<br /><span>they call someone else.</span></h1>
+            <p className="sub">Share one link. The request opens as a draft in the app — with photos.</p>
+            <div className="cta-row">
+              <a className="btn btn-dark" href={helloMailto}>Request early access</a>
+              <a className="btn btn-store" href="https://apps.apple.com/us/app/quotevan/id6796754211">
+                <span className="apple" aria-hidden="true">
+                  <svg width="16" height="18" viewBox="0 0 16 18" fill="currentColor">
+                    <path d="M13.2 9.4c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.8-3.5.8-.7 0-1.9-.8-3.1-.8-1.6 0-3.1 1-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.1 1.8 2.4 3 2.4 1.2 0 1.6-.8 3.1-.8s1.8.8 3.1.8c1.3 0 2.1-1.2 2.9-2.3.9-1.3 1.3-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.8zM11.1 2.8c.6-.8 1.1-1.9.9-3-.9 0-2 .6-2.6 1.4-.6.7-1.1 1.8-.9 2.9 1 .1 2-.5 2.6-1.3z" />
+                  </svg>
+                </span>
+                <span><small>Download on the</small><b>App Store</b></span>
+              </a>
+            </div>
+            <p className="fine">They use a browser. You use the app.</p>
           </div>
 
-          <div className="hero-demo" aria-label="QuoteVan provider quote creation flow">
-            <ProductFlowDemo />
-          </div>
-        </section>
+          <div className="stage">
+            <article className="browser">
+              <div className="chrome">
+                <div className="dots" aria-hidden="true"><span /><span /><span /></div>
+                <div className="url">
+                  <svg className="lock" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+                    <rect x="2.5" y="5.5" width="7" height="5" rx="1.2" />
+                    <path d="M4 5.5V3.8a2 2 0 0 1 4 0v1.7" />
+                  </svg>
+                  quotevan.com/p/brightcoat
+                </div>
+              </div>
+              <div className="browser-body">
+                <h2>Bright Coat Painting /<br />Request a quote.</h2>
+                <div className="meta">
+                  <div className="meta-row">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z" />
+                      <circle cx="12" cy="10" r="2.3" />
+                    </svg>
+                    <span><small>Address</small><strong>18 Victor Ave</strong></span>
+                  </div>
+                  <div className="meta-row">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M4 20l7.5-7.5M14 6l4 4M8.5 15.5L6 18M15 5l4 4-9 9H6v-4l9-9z" />
+                    </svg>
+                    <span><small>Project</small><strong>Interior paint</strong></span>
+                  </div>
+                  <div className="meta-row">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <path d="M3 9h18M9 4v16" />
+                    </svg>
+                    <span><small>Scope</small><strong>2 rooms + hallway</strong></span>
+                  </div>
+                </div>
+                <div className="photos-label">Photos</div>
+                <div className="photos">
+                  <img
+                    src="/marketing/room-1.jpg"
+                    alt="Empty room with hardwood floor"
+                  />
+                  <img
+                    src="/marketing/room-2.jpg"
+                    alt="Bright empty room with window"
+                  />
+                </div>
+                <div className="submit" aria-hidden="true">Submit request</div>
+              </div>
+            </article>
 
-        <section className="live-section" id="live">
-          <div className="section-copy">
-            <p className="landing-eyebrow">Now in the app</p>
-            <h2>The demo follows the real workflow.</h2>
-          </div>
-          <div className="live-grid" aria-label="QuoteVan features shown in the app demo">
-            <LiveFeature title="Job-first quote cards" text="Cards lead with the work, then show customer and city underneath." />
-            <LiveFeature title="Customer profiles" text="Call, email, quote history, new quote, resend link, copy link, follow-up, and archive stay together." />
-            <LiveFeature title="Price book review" text="Green prices come from the provider's book; unresolved lines stay blocked before send." />
-            <LiveFeature title="Quote links and deposits" text="Customers can view, accept, decline, and pay a deposit from the private quote page." />
-          </div>
-        </section>
+            <aside className="phone" aria-label="iPhone lock screen">
+              <div className="island" />
+              <div className="status"><span>9:41</span><span>5G</span></div>
+              <div className="lock-icon" aria-hidden="true">
+                <svg width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="#1d1c19" strokeWidth="1.5">
+                  <rect x="2" y="7" width="10" height="8" rx="1.6" />
+                  <path d="M4.2 7V4.6a2.8 2.8 0 0 1 5.6 0V7" />
+                </svg>
+              </div>
+              <div className="clock">9:41</div>
+              <div className="date">Tuesday, May 13</div>
+              <div className="notif">
+                <div className="notif-top">
+                  <span className="qmark">Q</span>
+                  <span>QuoteVan</span>
+                  <em>now</em>
+                </div>
+                <strong>New quote request</strong>
+                <p>18 Victor Ave · 2 rooms · 2 photos</p>
+              </div>
+            </aside>
 
-        <section className="email-dashboard-section" id="trust">
-          <div className="landing-story-wire" aria-hidden="true">
-            <svg viewBox="0 0 1120 260" preserveAspectRatio="none">
-              <path
-                d="M890 8 C 796 38 835 82 752 105 C 648 134 673 184 548 210 C 492 222 438 218 386 236"
-              />
-              <path
-                className="wire-echo"
-                d="M932 34 C 824 65 835 115 747 136 C 642 162 642 205 520 228 C 466 238 417 236 362 250"
-              />
-              <circle className="wire-dot wire-dot-1" cx="826" cy="43" r="3.2" />
-              <circle className="wire-dot wire-dot-2" cx="728" cy="116" r="2.4" />
-              <circle className="wire-dot wire-dot-3" cx="620" cy="187" r="2.8" />
-              <circle className="wire-dot wire-dot-4" cx="464" cy="228" r="2.3" />
-            </svg>
-          </div>
-          <div className="email-dashboard-layout">
-            <EmailDashboardPreview />
-            <div className="section-copy email-section-copy">
-              <h2>The quote lands where customers already are.</h2>
-              <p>
-                Send a private quote link by email. Customers open the proposal in a browser, accept or decline, and
-                reply with questions.
-              </p>
-              <p className="email-no-install">
-                <span aria-hidden="true">✓</span> Nothing to install — it opens in any browser
-              </p>
+            <div className="flow" aria-hidden="true">
+              <svg className="flow-svg" viewBox="0 0 228 78" fill="none">
+                <path className="flow-curve" d="M4 12 C58 72, 146 74, 222 20" />
+                <path className="flow-head" d="M208 18 L223 20 L216 34" />
+              </svg>
+              <p className="flow-label">lands in the app</p>
             </div>
           </div>
         </section>
 
-        <section className="how-section" id="how">
-          <div className="section-copy is-centered">
-            <p className="landing-eyebrow">How it works</p>
-            <h2>Checklist. Talk it through. Send.</h2>
+        <RequestLinkSection />
+
+        <section className="book-section" id="book" data-animate-section>
+          <PriceBookScreen />
+          <div className="section-copy">
+            <p className="landing-eyebrow">Your prices, not an estimate</p>
+            <h2>Nothing reaches the customer until you approve it.</h2>
+            <p>
+              Requests open as drafts. QuoteVan matches confirmed items from your price book and blocks unknown work
+              until you set the price.
+            </p>
           </div>
-          <ol className="how-rail" aria-label="Three steps from job walkthrough to sent quote">
-            <HowStep index="01" title="Pick the customer" text="Reuse the customer record, then name the job." />
-            <HowStep index="02" title="Review the quote" text="Lines match your price book before send." />
-            <HowStep index="03" title="Send and follow up" text="Track views, acceptance, deposits, and reminders." />
-          </ol>
         </section>
 
-        <section className="customer-section" id="customer">
+        <section className="email-delivery-section" data-animate-section>
+          <div className="email-delivery-copy section-copy">
+            <p className="landing-eyebrow">After you tap send</p>
+            <h2>The finished quote arrives in their inbox.</h2>
+            <p>
+              QuoteVan emails the homeowner a private quote link. They open it in any browser to review the scope,
+              accept or decline, and pay a deposit when enabled.
+            </p>
+            <p className="email-delivery-note"><span aria-hidden="true">✓</span> Drafts are never sent automatically</p>
+          </div>
+          <EmailDashboardPreview />
+        </section>
+
+        <section className="customer-section" id="customer" data-animate-section>
           <div className="section-copy">
             <p className="landing-eyebrow">Customer experience</p>
-            <h2>A clean quote page your customer can act on.</h2>
+            <h2>Price the draft. Then send the private quote.</h2>
             <p>
-              They open the private link, review the scope, accept or decline, and pay a deposit when payments are
-              enabled.
+              Customers review the scope, accept or decline, and pay a deposit in their browser after you choose to send.
             </p>
             <ul className="customer-proof-list">
               <li><span aria-hidden="true">✓</span> No customer account required</li>
-              <li><span aria-hidden="true">✓</span> Accept / decline in browser</li>
+              <li><span aria-hidden="true">✓</span> Accept or decline in browser</li>
               <li><span aria-hidden="true">✓</span> Deposit-ready when payments are enabled</li>
             </ul>
           </div>
           <CustomerQuoteCard />
         </section>
 
-        <section className="book-section" id="book">
-          <PriceBookScreen />
-          <div className="section-copy">
-            <p className="landing-eyebrow">Price book flywheel</p>
-            <h2>Confirm a price once. Reuse it every quote.</h2>
-            <p>
-              The first few quotes train your personal price book. After that, common work matches automatically and
-              every quote gets faster without letting AI invent prices.
-            </p>
-          </div>
-        </section>
-
-        <section className="audience-section">
+        <section className="audience-section" id="trades" data-animate-section>
           <div className="audience-inner">
             <div className="section-copy is-centered">
-              <p className="landing-eyebrow">Built for small service teams</p>
-              <h2>Purpose-built for quoting, not another CRM to manage.</h2>
-              <p>For field-service pros who need to quote before the customer moves on.</p>
+              <p className="landing-eyebrow">Separate trade kits</p>
+              <h2>One quote engine. The right scope for each trade.</h2>
+              <p>Painting keeps rooms, coats, and surfaces. Fencing keeps runs, posts, gates, and linear feet.</p>
             </div>
-
-            <ul className="audience-points" aria-label="QuoteVan is lighter than a CRM">
-              <li>No pipelines to maintain</li>
-              <li>No contacts to import</li>
-              <li>No setup weekend</li>
-            </ul>
 
             <AudienceExamples />
           </div>
         </section>
 
-        <section className="final-cta">
-          <div className="final-cta-card">
-            <p className="landing-eyebrow">Ready to quote faster</p>
-            <h2>Finish the quote before you get back in the van.</h2>
+        <section className="app-demo-section" id="demo" data-animate-section>
+          <div className="app-demo-copy">
+            <p className="landing-eyebrow">On the job</p>
+            <h2>Walk the job. Review the draft. Send before you leave.</h2>
             <p>
-              Build clean, customer-ready quotes with prices you control — right there on site.
+              Follow the real provider workflow from customer and scope capture through price-book review, preview,
+              and send.
+            </p>
+            <ol className="app-demo-steps" aria-label="QuoteVan app workflow">
+              <li><span>01</span><strong>Capture the job</strong></li>
+              <li><span>02</span><strong>Confirm your prices</strong></li>
+              <li><span>03</span><strong>Send the quote</strong></li>
+            </ol>
+          </div>
+          <div className="app-demo-visual" aria-label="Animated QuoteVan app demo">
+            <span className="app-demo-live" aria-hidden="true"><i /> Live app flow</span>
+            <ProductFlowDemo />
+          </div>
+        </section>
+
+        <section className="final-cta" data-animate-section>
+          <div className="final-cta-card">
+            <p className="landing-eyebrow">quotevan.com/p/yourname</p>
+            <h2>Give customers one place to start the quote.</h2>
+            <p>
+              Request early access and we’ll help set up your link, trade kit, and first price-book items.
             </p>
             <a className="final-cta-button" href={helloMailto}>
               <span className="final-cta-button-icon" aria-hidden="true" />
-              <span className="final-cta-button-label">Start your first quote free</span>
+              <span className="final-cta-button-label">Request early access</span>
             </a>
             <div className="final-cta-trust">
-              <span>No card to start</span>
-              <span>Works on your phone</span>
+              <span>quotevan.com/p/yourname</span>
+              <span>Homeowner uses a browser</span>
             </div>
             <p className="final-cta-support">
               Questions? <a href={helloMailto}>Talk to a real person</a>
@@ -170,7 +264,7 @@ export function LandingPage() {
         <div className="landing-footer-inner">
           <div className="landing-footer-copy">
             <span className="landing-footer-brand">QuoteVan</span>
-            <p className="landing-footer-note">Customer quote links are private by URL.</p>
+            <p className="landing-footer-note">Quote links are available only to people who receive the URL.</p>
           </div>
           <nav className="landing-footer-links">
             <a href="/privacy">Privacy</a>
@@ -184,36 +278,117 @@ export function LandingPage() {
   );
 }
 
-function HowStep(props: { index: string; title: string; text: string }) {
+function RequestLinkSection() {
   return (
-    <li>
-      <span className="how-rail-index">{props.index}</span>
-      <div>
-        <strong>{props.title}</strong>
-        <p>{props.text}</p>
+    <section className="request-link-section" id="how" data-animate-section>
+      <div className="section-copy is-centered request-link-heading">
+        <p className="landing-eyebrow">How it works</p>
+        <h2>One link in. One draft ready to price.</h2>
+        <p>Share the link anywhere. The homeowner sends the details, and the same job opens in QuoteVan.</p>
       </div>
-    </li>
-  );
-}
+      <div className="request-link-grid">
+        <article className="public-page-card" aria-label="QuoteVan public request page">
+          <div className="public-page-browser">
+            <div className="public-page-bar" aria-hidden="true">
+              <span /><span /><span />
+              <b>quotevan.com/p/brightcoat</b>
+            </div>
+            <p className="landing-eyebrow">Your public request page</p>
+            <h2>Bright Coat quote request</h2>
+            <div className="public-page-form">
+              <div className="public-page-toggle">
+                <span className="is-active">Interior</span>
+                <span>Exterior</span>
+                <span>Fence</span>
+              </div>
+              <div className="public-page-field">
+                <small>Name</small>
+                <strong>Michael R.</strong>
+              </div>
+              <div className="public-page-field">
+                <small>Phone</small>
+                <strong>647-450-8736</strong>
+              </div>
+              <div className="public-page-field">
+                <small>Email</small>
+                <strong>michael@email.com</strong>
+              </div>
+              <div className="public-page-field">
+                <small>Address</small>
+                <strong>18 Victor Ave</strong>
+              </div>
+              <div className="public-page-field is-wide">
+                <small>Task description</small>
+                <strong>Paint 2 rooms and the hallway. Water stain on ceiling.</strong>
+              </div>
+              <div className="public-page-photo-field">
+                <div><small>Photos</small><span>Optional</span></div>
+                <div className="public-page-photos" aria-hidden="true">
+                  <span className="has-photo"><img src="/marketing/room-1.jpg" alt="" /></span>
+                  <span className="has-photo"><img src="/marketing/room-2.jpg" alt="" /></span>
+                  <span className="add-photo">+</span>
+                </div>
+              </div>
+              <div className="public-page-submit" aria-hidden="true">Request a quote</div>
+            </div>
+            <footer>Opens in any browser · no customer account</footer>
+          </div>
+        </article>
 
-function LiveFeature(props: { title: string; text: string }) {
-  return (
-    <article className="live-feature">
-      <strong>{props.title}</strong>
-      <p>{props.text}</p>
-    </article>
+        <div className="request-link-handoff" aria-hidden="true">
+          <span>→</span>
+          <small>opens as a draft</small>
+        </div>
+
+        <article className="request-app-phone" aria-label="Request draft as seen in the QuoteVan mobile app">
+          <div className="request-phone-hardware" aria-hidden="true">
+            <span>9:41</span>
+            <i />
+            <span>5G</span>
+          </div>
+          <div className="request-phone-screen">
+            <div className="request-phone-appbar">
+              <span><QuoteVanMark size={22} /><strong>QuoteVan</strong></span>
+              <b>Drafts</b>
+            </div>
+            <header>
+              <div>
+                <span className="landing-eyebrow">From your request link</span>
+                <h2>Request draft</h2>
+              </div>
+              <span className="app-push-badge">New</span>
+            </header>
+            <div className="app-request-summary">
+              <strong>18 Victor Ave, Toronto</strong>
+              <span>2 photos · Interior repaint · Michael R.</span>
+            </div>
+            <div className="app-request-lines">
+              <div><strong>Paint walls</strong><small>Suggested from request</small><span>Matched</span></div>
+              <div><strong>Patch ceiling stain</strong><small>Needs review from photo</small><span>Confirm</span></div>
+              <div><strong>Primer where needed</strong><small>Unpriced until you approve</small><span>Confirm</span></div>
+            </div>
+            <div className="app-pricing-note">
+              <span aria-hidden="true">✓</span>
+              <p><strong>You set the price.</strong> Nothing is shown to the customer until you send.</p>
+            </div>
+            <div className="app-request-actions">
+              <span>Open draft</span>
+              <span>Call</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
   );
 }
 
 function EmailDashboardPreview() {
-  const dashboardRef = useRef<HTMLDivElement | null>(null);
-  const [isInView, setIsInView] = useState(false);
   const rows = [
     {
       sender: "Bright Coat Painting",
       via: "QuoteVan",
       subject: "Your quote is ready",
-      preview: "Michael, your quote is ready to view",
+      preview: "Michael, your private quote is ready to review",
       time: "Now",
       important: true,
     },
@@ -231,51 +406,16 @@ function EmailDashboardPreview() {
     },
     {
       sender: "Calendar",
-      subject: "Tomorrow: exterior touch-up walkthrough",
+      subject: "Tomorrow: exterior walkthrough",
       preview: "Reminder for 10:30 AM with Daniel Ortega.",
       time: "Yesterday",
     },
-    {
-      sender: "Northline Hardware",
-      subject: "Receipt for primer and tape",
-      preview: "Your purchase receipt and warranty information.",
-      time: "Jul 25",
-    },
-    {
-      sender: "Avery Brooks",
-      subject: "Front door paint color",
-      preview: "We decided on the darker green you showed us.",
-      time: "Jul 24",
-    },
   ];
 
-  useEffect(() => {
-    const node = dashboardRef.current;
-
-    if (!node) {
-      return undefined;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsInView(Boolean(entry?.isIntersecting));
-      },
-      { threshold: 0.35 },
-    );
-
-    observer.observe(node);
-
-    return () => observer.disconnect();
-  }, []);
-
   return (
-    <div
-      className={isInView ? "email-dashboard is-in-view" : "email-dashboard"}
-      ref={dashboardRef}
-      aria-label="Customer inbox showing a new quote email from Bright Coat Painting"
-    >
+    <div className="email-dashboard" aria-label="Customer inbox showing a quote email from Bright Coat Painting">
       <div className="email-topbar">
-        <div className="email-menu" aria-hidden="true"><span /></div>
+        <span className="email-menu" aria-hidden="true"><i /></span>
         <div className="email-logo" aria-hidden="true">
           <svg fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
             <rect height="14" rx="2.5" width="19" x="2.5" y="5" />
@@ -284,35 +424,24 @@ function EmailDashboardPreview() {
           <span>Mail</span>
         </div>
         <div className="email-search">Search mail</div>
-        <div className="email-top-actions" aria-hidden="true">
-          <span />
-          <span />
-          <b>MC</b>
-        </div>
+        <div className="email-avatar" aria-hidden="true">MR</div>
       </div>
       <div className="email-main">
-        <div className="email-toolbar">
-          <span className="email-checkbox" />
-          <span>Primary</span>
-          <small>1 new</small>
-        </div>
         <div className="email-tabs" aria-hidden="true">
           <span className="is-active">Primary</span>
           <span>Updates</span>
-          <span>Promotions</span>
+          <small>1 new</small>
         </div>
         <div className="email-list">
           {rows.map((row) => (
             <article className={row.important ? "email-row is-quote" : "email-row"} key={`${row.sender}-${row.subject}`}>
-              <span className="email-checkbox" />
+              <span className="email-checkbox" aria-hidden="true" />
               <strong>
                 {row.sender}
                 {row.via ? <span className="email-row-via">via {row.via}</span> : null}
               </strong>
-              <p><b>{row.subject}</b> <span>- {row.preview}</span></p>
-              <span className="email-row-end">
-                <time>{row.time}</time>
-              </span>
+              <p><b>{row.subject}</b> <span>— {row.preview}</span></p>
+              <time>{row.time}</time>
             </article>
           ))}
         </div>
@@ -321,7 +450,7 @@ function EmailDashboardPreview() {
         <QuoteVanMark size={24} />
         <div>
           <strong>New quote received</strong>
-          <span>Private quote link from Bright Coat Painting</span>
+          <span>Private link from Bright Coat Painting</span>
         </div>
       </div>
     </div>
@@ -334,40 +463,41 @@ function PriceBookScreen() {
       <header className="price-book-screen-head">
         <div>
           <h3>Price book</h3>
-          <span>11 items</span>
+          <span>12 items</span>
         </div>
-        <button type="button" aria-label="Add price book item">+</button>
+        <span className="price-book-add" aria-hidden="true">+</span>
       </header>
 
       <section className="price-book-strength-card">
         <div>
           <span className="landing-eyebrow">Book strength</span>
-          <strong>8 of 11 confirmed</strong>
+          <strong>9 of 12 confirmed</strong>
         </div>
-        <ProgressMeter confirmed={8} total={11} />
+        <ProgressMeter confirmed={9} total={12} />
       </section>
 
       <section className="price-book-list-section">
         <div className="price-book-list-title">
-          <span>Active - matches green</span>
-          <b>8</b>
+          <span>Confirmed prices</span>
+          <b>9</b>
         </div>
         <div className="price-book-group is-active">
-          <PriceBookRow title="Paint walls" detail="Per room · S $294 · L $672" price="$420" tone="active" />
-          <PriceBookRow title="Paint ceiling" detail="Per room · S $126 · L $288" price="$180" tone="active" />
-          <PriceBookRow title="Paint trim" detail="Per room · S $112 · L $256" price="$160" tone="active" />
+          <PriceBookRow title="Paint walls" detail="Per room · Small $294 · Large $672" price="$420" tone="active" />
+          <PriceBookRow title="Paint ceiling" detail="Per room · Small $126 · Large $288" price="$180" tone="active" />
+          <PriceBookRow title="Paint trim" detail="Per room · Small $112 · Large $256" price="$160" tone="active" />
           <PriceBookRow title="Paint door" detail="Each" price="$95" tone="active" />
+          <PriceBookRow title="Patch drywall" detail="Per patch · confirmed" price="$85" tone="active" />
         </div>
       </section>
 
       <section className="price-book-list-section">
         <div className="price-book-list-title">
-          <span>Starters to confirm</span>
+          <span>Needs your confirmation</span>
           <b>3</b>
         </div>
         <div className="price-book-group is-starter">
-          <PriceBookRow title="Patch nail holes" detail="Per room · S $35 · L $75" price="$50" tone="starter" />
-          <PriceBookRow title="Primer coat" detail="Per room · S $80 · L $180" price="$120" tone="starter" />
+          <PriceBookRow title="Patch nail holes" detail="Per room · Small $35 · Large $75" price="$50" tone="starter" />
+          <PriceBookRow title="Primer coat" detail="Per room · Small $80 · Large $180" price="$120" tone="starter" />
         </div>
       </section>
     </article>
@@ -398,28 +528,6 @@ const audienceTrades = {
       { title: "Paint ceilings", detail: "2 rooms", price: "$360" },
       { title: "Paint trim", detail: "2 rooms", price: "$320" },
       { title: "Paint 2 doors", detail: "each", price: "$190" },
-    ],
-  },
-  cleaners: {
-    chipLabel: "Cleaners",
-    cardLabel: "A cleaner's quote",
-    total: "$490",
-    lines: [
-      { title: "Deep clean kitchen", detail: "1 visit", price: "$180" },
-      { title: "Deep clean bathrooms", detail: "2 baths", price: "$150" },
-      { title: "Interior windows", detail: "12 panes", price: "$90" },
-      { title: "Fridge + oven detail", detail: "add-on", price: "$70" },
-    ],
-  },
-  handymen: {
-    chipLabel: "Handymen",
-    cardLabel: "A handyman's quote",
-    total: "$415",
-    lines: [
-      { title: "Drywall patch repair", detail: "2 spots", price: "$120" },
-      { title: "Replace door hardware", detail: "3 doors", price: "$85" },
-      { title: "Mount shelving", detail: "4 shelves", price: "$150" },
-      { title: "Caulk and seal", detail: "kitchen + bath", price: "$60" },
     ],
   },
   fencing: {
@@ -536,8 +644,8 @@ function CustomerQuoteCard() {
         <p><b>Terms.</b> 50% deposit (<span>$966</span>) to schedule the job — balance due on completion.</p>
       </div>
       <div className="customer-quote-actions">
-        <button type="button">Accept quote</button>
-        <button type="button">Decline</button>
+        <span>Accept quote</span>
+        <span>Decline</span>
       </div>
       <small>Private link · quotevan.app/q/8f2a1c</small>
     </article>
@@ -552,44 +660,6 @@ function QuotePreviewLine(props: { title: string; detail: string; price: string 
         <small>{props.detail}</small>
       </span>
       <b>{props.price}</b>
-    </div>
-  );
-}
-
-function StoreBadges() {
-  return (
-    <div aria-label="QuoteVan mobile app availability" className="store-badges">
-      <a
-        href="https://apps.apple.com/us/app/quotevan/id6796754211"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Download QuoteVan on the App Store"
-        className="store-badge"
-      >
-        <span aria-hidden="true" className="store-badge-icon store-badge-icon-apple">
-          <svg viewBox="0 0 18 22">
-            <path d="M14.8 11.6c0-2.4 2-3.6 2.1-3.7-1.1-1.6-2.8-1.9-3.4-1.9-1.4-.1-2.7.8-3.5.8-.7 0-1.9-.8-3.1-.8-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.8 2.5 3.1 2.4 1.2 0 1.7-.8 3.1-.8s1.8.8 3.1.8c1.3 0 2.1-1.2 2.9-2.3.9-1.3 1.2-2.6 1.3-2.7 0 0-2.9-1.1-2.9-3.8ZM12.6 4.5c.7-.8 1.1-1.9 1-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2-.5 2.7-1.3Z" />
-          </svg>
-        </span>
-        <span>
-          <small>Download on the</small>
-          <strong>App Store</strong>
-        </span>
-      </a>
-      <span aria-label="QuoteVan Android app status" className="store-badge">
-        <span aria-hidden="true" className="store-badge-icon store-badge-icon-play">
-          <svg viewBox="0 0 22 24">
-            <path d="M2.1 1.1c-.4.3-.6.9-.6 1.6v18.6c0 .7.2 1.3.7 1.6l10.6-10.9L2.1 1.1Z" />
-            <path d="m16.2 8.2-3.4 3.8 3.4 3.8 3.7-2.1c1.2-.7 1.2-2.4 0-3.1l-3.7-2.4Z" />
-            <path d="m12.8 12-10.6 10.9c.5.3 1.1.3 1.8-.1l12.2-7-3.4-3.8Z" />
-            <path d="M16.2 8.2 4 1.2C3.3.8 2.6.8 2.1 1.1L12.8 12l3.4-3.8Z" />
-          </svg>
-        </span>
-        <span>
-          <small>Google Play</small>
-          <strong>Coming soon</strong>
-        </span>
-      </span>
     </div>
   );
 }
