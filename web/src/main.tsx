@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BillingReturnPage } from "./BillingReturnPage";
+import { EstimatePage } from "./EstimatePage";
 import { LegalPage } from "./LegalPage";
 import { LandingPage } from "./marketing/LandingPage";
 import { QuotePage } from "./QuotePage";
@@ -10,6 +11,11 @@ function Root() {
   const token = quoteTokenFromPath();
   if (token !== null) {
     return <QuotePage token={token} />;
+  }
+
+  const estimateOrgId = estimateOrgIdFromPath();
+  if (estimateOrgId !== null) {
+    return <EstimatePage orgId={estimateOrgId} embed={new URLSearchParams(window.location.search).get("embed") === "1"} />;
   }
 
   if (window.location.pathname === "/privacy") {
@@ -47,6 +53,12 @@ function Root() {
 function quoteTokenFromPath(): string | null {
   const parts = window.location.pathname.split("/").filter(Boolean);
   return parts[0] === "q" ? parts[1] ?? "" : null;
+}
+
+/** Returns the org id for an estimate page path, or null if the path does not match. */
+function estimateOrgIdFromPath(): string | null {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  return parts[0] === "estimate" || parts[0] === "embed" ? parts[1] ?? "" : null;
 }
 
 createRoot(document.getElementById("root")!).render(

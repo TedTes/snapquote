@@ -19,11 +19,13 @@ type ExpoRuntimeProcess = {
 
 const runtimeProcess = globalThis as unknown as { process?: ExpoRuntimeProcess };
 const rawApiBaseUrl = envValue("EXPO_PUBLIC_API_URL") ?? "https://dctmpfrbkgntiuhjbblu.functions.supabase.co/snapquote";
+const rawPublicWebBaseUrl = envValue("EXPO_PUBLIC_WEB_URL") ?? "https://quotevan.com";
 const snapquoteOrgId = envValue("EXPO_PUBLIC_SNAPQUOTE_ORG_ID");
 let authAccessToken: string | null = null;
 let authAccessTokenProvider: (() => Promise<string | null>) | null = null;
 
 export const apiBaseUrl = rawApiBaseUrl.replace(/\/$/, "");
+export const publicWebBaseUrl = rawPublicWebBaseUrl.replace(/\/$/, "");
 
 function envValue(key: string): string | undefined {
   const value = runtimeProcess.process?.env?.[key];

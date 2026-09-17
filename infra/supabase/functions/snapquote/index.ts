@@ -221,10 +221,13 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1)
 });
 
+const optionalNullableEmailSchema = z.preprocess(emptyStringToNull, z.string().trim().email().max(320).nullable().optional());
+const optionalNullablePhoneSchema = z.preprocess(emptyStringToNull, z.string().trim().min(7).max(32).nullable().optional());
+
 const customerSchema = z.object({
   name: z.string().trim().min(1).max(160),
-  email: z.string().email().nullable().optional(),
-  phone: z.string().trim().min(7).max(32).nullable().optional(),
+  email: optionalNullableEmailSchema,
+  phone: optionalNullablePhoneSchema,
   address: z.string().trim().min(1).max(400),
   city: z.string().trim().max(120).optional()
 });
@@ -259,6 +262,41 @@ const createQuoteSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["customerId"],
       message: "Provide exactly one of customerId or customer"
+    });
+  }
+});
+
+const websiteEstimateSchema = z.object({
+  orgId: z.string().uuid(),
+  source: z.enum(["website_widget", "website_page"]).default("website_widget"),
+  customer: z.object({
+    name: z.string().trim().min(1).max(160),
+    email: optionalNullableEmailSchema,
+    phone: optionalNullablePhoneSchema
+  }),
+  address: z.string().trim().min(1).max(400),
+  city: z.string().trim().max(120).optional(),
+  checklist: checklistSchema.default(defaultChecklist),
+  notes: z.string().trim().max(5000).default(""),
+  referrer: z.string().trim().max(1000).nullable().optional(),
+  company: z.string().trim().max(200).optional()
+}).superRefine((input, context) => {
+  const email = typeof input.customer.email === "string" ? input.customer.email.trim() : "";
+  const phone = typeof input.customer.phone === "string" ? input.customer.phone.trim() : "";
+
+  if (!email && !phone) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["customer", "email"],
+      message: "Provide an email or phone number"
+    });
+  }
+
+  if (!checklistHasEstimateScope(input.checklist)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["checklist"],
+      message: "Add at least one room, surface, or door"
     });
   }
 });
@@ -588,6 +626,16 @@ Deno.serve(async (request) => {
 
     if (route.method === "POST" && match(route.path, "/v1/quotes/:id/revise")) {
       return json(await reviseQuote(db, request, params(route.path, "/v1/quotes/:id/revise").id), 201);
+    }
+
+    if (route.method === "GET" && match(route.path, "/public/estimate-orgs/:orgId")) {
+      const orgId = params(route.path, "/public/estimate-orgs/:orgId").orgId;
+      enforceRateLimit(request, ["public_estimate_org", orgId, requestClientKey(request)], 60, 60_000);
+      return json(await publicEstimateOrg(db, orgId));
+    }
+
+    if (route.method === "POST" && route.path === "/public/estimates") {
+      return json(await createWebsiteEstimate(db, request), 201);
     }
 
     if (route.method === "GET" && match(route.path, "/public/quotes/:token")) {
@@ -2256,6 +2304,257 @@ async function createQuote(db: SupabaseClient, request: Request) {
   await createEvent(db, quote.id, "created");
 
   return getQuoteResponse(db, orgId, quote.id);
+}
+
+async function publicEstimateOrg(db: SupabaseClient, orgId: string) {
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+
+  return {
+    org: publicEstimateOrgResponse(org),
+    defaults: {
+      checklist: defaultChecklist,
+      currency: orgCurrency(org)
+    }
+  };
+}
+
+async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
+  const input = parse(websiteEstimateSchema, await request.json());
+
+  if (typeof input.company === "string" && input.company.trim().length > 0) {
+    throw new HttpError(400, "Request could not be submitted.");
+  }
+
+  const clientKey = requestClientKey(request);
+  enforceRateLimit(request, ["public_estimate", input.orgId, clientKey], 8, 10 * 60_000);
+
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", input.orgId));
+  const checklist = input.checklist as PainterChecklist;
+  const priceBookItems = await listPriceBook(db, input.orgId);
+  const transcript = websiteEstimateTranscript(input);
+  const draft = createPainterDraftLines({ checklist, transcript, priceBookItems });
+  const lineItems = draft.lineItems.map((line, index) => ({ ...line, position: index }));
+  const range = websiteEstimateRange(lineItems, Number(org.default_tax_rate));
+  const city = input.city?.trim() || deriveCustomerCity(input.address);
+  const email = normalizedEmail(input.customer.email);
+  const phone = stringOrNull(input.customer.phone);
+  const discount: QuoteDiscount = { type: "none", value: 0 };
+  const totals = computeTotalsIfReady({
+    lineItems,
+    discount,
+    taxRate: Number(org.default_tax_rate)
+  });
+  const validUntil = addDays(new Date(), Number(org.quote_valid_days));
+  const scopeNotes = uniqueStrings([
+    "Source: website estimate form.",
+    ...draft.scopeNotes,
+    range.disclaimer
+  ]);
+  const scopeSummary = buildScopeSummary(input.customer.name, checklist, scopeNotes);
+  const customer = await upsertCustomerFromInput(db, input.orgId, {
+    name: input.customer.name,
+    email,
+    phone,
+    address: input.address,
+    city
+  });
+  const quote = await single(db.from("snapquote_quotes").insert({
+    org_id: input.orgId,
+    customer_id: customer.id,
+    address: input.address,
+    work_type: inferQuoteWorkType("Website estimate", checklist),
+    job_title: "Website estimate",
+    valid_until: validUntil,
+    discount_type: discount.type,
+    discount_value: discount.value,
+    tax_rate: Number(org.default_tax_rate),
+    deposit_percent: Number(org.default_deposit_percent ?? 50),
+    payment_currency: orgCurrency(org),
+    notes: input.notes,
+    terms: org.default_terms,
+    scope_summary: scopeSummary,
+    scope_notes: scopeNotes,
+    conflicts: draft.conflicts,
+    checklist,
+    transcript,
+    audio_storage_path: null,
+    audio_content_type: null,
+    audio_duration_seconds: null,
+    ...totalsColumns(totals)
+  }).select("*"));
+
+  must(await db.from("snapquote_quote_line_items").insert(lineItems.map((line) => lineInsert(quote.id, line))));
+  must(await db.from("snapquote_quote_public_links").insert({ quote_id: quote.id, token: publicToken() }));
+
+  const estimateRequest = await single(db.from("snapquote_website_estimate_requests").insert({
+    org_id: input.orgId,
+    quote_id: quote.id,
+    customer_id: customer.id,
+    source: input.source,
+    status: "draft_created",
+    customer_name: input.customer.name,
+    customer_email: email,
+    customer_phone: phone,
+    address: input.address,
+    city,
+    checklist,
+    notes: input.notes,
+    estimate_low_cents: range.lowCents,
+    estimate_high_cents: range.highCents,
+    estimate_currency: orgCurrency(org),
+    line_count: lineItems.length,
+    unpriced_line_count: range.unpricedLineCount,
+    unconfirmed_line_count: range.unconfirmedLineCount,
+    disclaimer: range.disclaimer,
+    referrer: input.referrer ?? request.headers.get("referer"),
+    user_agent: request.headers.get("user-agent"),
+    ip_hash: await sha256Hex(clientKey)
+  }).select("*"));
+
+  await createEvent(db, quote.id, "created", {
+    source: "website_estimate",
+    estimateRequestId: estimateRequest.id,
+    estimateLowCents: range.lowCents,
+    estimateHighCents: range.highCents,
+    estimateCurrency: orgCurrency(org),
+    unpricedLineCount: range.unpricedLineCount,
+    unconfirmedLineCount: range.unconfirmedLineCount
+  });
+
+  return {
+    requestId: estimateRequest.id,
+    quoteId: quote.id,
+    org: publicEstimateOrgResponse(org),
+    estimate: {
+      lowCents: range.lowCents,
+      highCents: range.highCents,
+      currency: orgCurrency(org),
+      confidence: range.confidence,
+      disclaimer: range.disclaimer
+    },
+    lineItems: lineItems.map(websiteEstimateLineResponse),
+    scopeSummary,
+    status: "draft_created"
+  };
+}
+
+function publicEstimateOrgResponse(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    name: row.name,
+    trade: row.trade,
+    logoUrl: row.logo_url,
+    contactPhone: row.contact_phone,
+    website: row.website,
+    currency: orgCurrency(row)
+  };
+}
+
+function websiteEstimateLineResponse(line: QuoteLineItem) {
+  return {
+    position: line.position,
+    description: line.description,
+    quantity: line.quantity,
+    unit: line.unit,
+    unitPriceCents: line.unitPriceCents,
+    matchState: line.matchState,
+    kind: line.kind
+  };
+}
+
+function websiteEstimateRange(lineItems: QuoteLineItem[], taxRate: number) {
+  const pricedSubtotalCents = lineItems.reduce((sum, line) => {
+    if (line.unitPriceCents === null) {
+      return sum;
+    }
+
+    return sum + Math.round(line.quantity * line.unitPriceCents);
+  }, 0);
+  const unpricedLineCount = lineItems.filter((line) => line.matchState === "red" || line.unitPriceCents === null).length;
+  const unconfirmedLineCount = lineItems.filter((line) => line.matchState === "yellow").length;
+
+  if (pricedSubtotalCents <= 0) {
+    throw new HttpError(409, "This estimate needs contractor review before a range can be shown.");
+  }
+
+  const baseTotalCents = Math.round(pricedSubtotalCents * (1 + taxRate));
+  const spread = unpricedLineCount > 0
+    ? { low: 0.75, high: 1.45, confidence: "needs_review" as const }
+    : unconfirmedLineCount > 0
+      ? { low: 0.85, high: 1.25, confidence: "price_book_suggested" as const }
+      : { low: 0.9, high: 1.15, confidence: "price_book_confirmed" as const };
+  const lowCents = roundEstimateCents(baseTotalCents * spread.low, "down");
+  const highCents = Math.max(roundEstimateCents(baseTotalCents * spread.high, "up"), lowCents);
+  const disclaimer = unpricedLineCount > 0
+    ? "Preliminary range. Some requested work needs contractor review because it is not priced in the book."
+    : unconfirmedLineCount > 0
+      ? "Preliminary range based on suggested price-book items. Contractor will confirm before sending the final quote."
+      : "Preliminary range based on the contractor's confirmed price book. Final quote may change after review.";
+
+  return {
+    lowCents,
+    highCents,
+    confidence: spread.confidence,
+    disclaimer,
+    unpricedLineCount,
+    unconfirmedLineCount
+  };
+}
+
+function roundEstimateCents(value: number, direction: "down" | "up") {
+  const increment = value < 100_000 ? 2_500 : 5_000;
+  const rounded = direction === "down"
+    ? Math.floor(value / increment) * increment
+    : Math.ceil(value / increment) * increment;
+
+  return Math.max(0, rounded);
+}
+
+function websiteEstimateTranscript(input: z.infer<typeof websiteEstimateSchema>) {
+  const checklist = input.checklist;
+  const rooms = [
+    checklist.rooms.small > 0 ? `${checklist.rooms.small} small ${pluralWord(checklist.rooms.small, "room")}` : null,
+    checklist.rooms.medium > 0 ? `${checklist.rooms.medium} medium ${pluralWord(checklist.rooms.medium, "room")}` : null,
+    checklist.rooms.large > 0 ? `${checklist.rooms.large} large ${pluralWord(checklist.rooms.large, "room")}` : null
+  ].filter(Boolean);
+  const surfaces = [
+    checklist.surfaces.walls ? "walls" : null,
+    checklist.surfaces.ceilings ? "ceilings" : null,
+    checklist.surfaces.trim ? "trim" : null
+  ].filter(Boolean);
+
+  return [
+    `Website estimate request for ${input.customer.name}.`,
+    `Address: ${input.address}${input.city ? `, ${input.city}` : ""}.`,
+    rooms.length > 0 ? `Rooms: ${rooms.join(", ")}.` : null,
+    surfaces.length > 0 ? `Surfaces: ${surfaces.join(", ")}.` : null,
+    `Prep level: ${input.checklist.prepLevel}.`,
+    `Coats: ${input.checklist.coatCount}.`,
+    checklist.doorCount > 0 ? `Doors: ${checklist.doorCount}.` : null,
+    checklist.customerSuppliesPaint ? "Customer supplies paint." : "Contractor supplies paint and materials.",
+    input.notes ? `Customer notes: ${input.notes}` : null
+  ].filter(Boolean).join("\n");
+}
+
+function checklistHasEstimateScope(checklist: PainterChecklist) {
+  const roomCount = checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
+  const hasSurface = checklist.surfaces.walls || checklist.surfaces.ceilings || checklist.surfaces.trim;
+
+  return (roomCount > 0 && hasSurface) || checklist.doorCount > 0 || checklist.prepLevel === "heavy";
+}
+
+function pluralWord(count: number, noun: string) {
+  return count === 1 ? noun : `${noun}s`;
+}
+
+function orgCurrency(org: Record<string, unknown>) {
+  const value = typeof org.payment_currency === "string" ? org.payment_currency.trim().toLowerCase() : "cad";
+  return /^[a-z]{3}$/.test(value) ? value : "cad";
+}
+
+async function sha256Hex(value: string) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 async function transcribeAudio(db: SupabaseClient, request: Request) {
@@ -4611,6 +4910,10 @@ function extensionForContentType(contentType: "image/jpeg" | "image/png" | "imag
 function safeStorageName(fileName: string) {
   const cleaned = fileName.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
   return cleaned.length > 0 ? cleaned.slice(0, 120) : "recording.m4a";
+}
+
+function emptyStringToNull(value: unknown) {
+  return typeof value === "string" && value.trim().length === 0 ? null : value;
 }
 
 function normalizedEmail(email: string | null | undefined) {

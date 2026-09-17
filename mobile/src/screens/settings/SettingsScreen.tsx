@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CreditCard,
   FileText,
+  Globe,
   Lock,
   Mail,
   MessageSquare,
@@ -25,7 +26,7 @@ import { AppText } from "../../shared-ui/text";
 import { colors, fontStyles, radius, typography } from "../../shared-ui/theme";
 import { useQuoteStore } from "../../state/quoteStore";
 import { useAuthStore } from "../../state/authStore";
-import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
+import { publicWebBaseUrl, snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { contactEmails } from "../../config/contact";
 import { legalUrls } from "../../config/legal";
 
@@ -159,6 +160,29 @@ export default function SettingsScreen() {
     }
   }
 
+  function openWebsiteEstimateForm() {
+    if (authStatus !== "signed_in" || !me?.org.id) {
+      Alert.alert("Sign in required", "Sign in to open your website estimate form.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign in", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) }
+      ]);
+      return;
+    }
+
+    const pageUrl = `${publicWebBaseUrl}/estimate/${encodeURIComponent(me.org.id)}`;
+    const embedUrl = `${publicWebBaseUrl}/embed/${encodeURIComponent(me.org.id)}?embed=1`;
+    Alert.alert(
+      "Website estimate form",
+      `Page: ${pageUrl}
+
+Embed URL: ${embedUrl}`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Open page", onPress: () => void Linking.openURL(pageUrl) }
+      ]
+    );
+  }
+
   async function openPaymentSetup() {
     if (paymentStatus === "connected" || paymentsConnected) {
       Alert.alert("Online deposits connected", "Customers can pay quote deposits from the quote link.");
@@ -283,6 +307,12 @@ export default function SettingsScreen() {
             icon={<Book color={colors.ink2} size={16} strokeWidth={2.1} />}
             label="Book strength"
             onPress={() => router.push("/price-book")}
+          />
+          <SettingsRow
+            detail="Open and embed your instant estimate form"
+            icon={<Globe color={colors.ink2} size={16} strokeWidth={2.1} />}
+            label="Website estimate form"
+            onPress={openWebsiteEstimateForm}
           />
           <SettingsRow
             detail="Review your starter prices"
