@@ -175,6 +175,11 @@ const avatarUploadSchema = z.object({
   base64: z.string().min(1).max(8_000_000)
 });
 
+const pushDeviceSchema = z.object({
+  token: z.string().trim().regex(/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/).max(240),
+  platform: z.enum(["ios", "android"])
+});
+
 const audioUploadSchema = z.object({
   fileName: z.string().trim().min(1).max(180),
   contentType: z.enum([
@@ -278,6 +283,12 @@ const websiteEstimateSchema = z.object({
   city: z.string().trim().max(120).optional(),
   checklist: checklistSchema.default(defaultChecklist),
   notes: z.string().trim().max(5000).default(""),
+  timing: z.enum(["asap", "this_month", "flexible", "just_pricing"]).default("flexible"),
+  photos: z.array(z.object({
+    fileName: z.string().trim().min(1).max(160),
+    contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+    base64: z.string().min(1).max(12_000_000)
+  })).max(4).default([]),
   referrer: z.string().trim().max(1000).nullable().optional(),
   company: z.string().trim().max(200).optional()
 }).superRefine((input, context) => {
@@ -356,6 +367,10 @@ const sendSchema = z.object({
 }).transform((input) => ({
   channels: Array.from(new Set(input.channels))
 }));
+
+const requestContactSchema = z.object({
+  channel: z.enum(["call", "email"])
+});
 
 const inboundEmailSchema = z.object({
   publicToken: z.string().trim().min(16).max(160).optional(),
@@ -498,6 +513,10 @@ Deno.serve(async (request) => {
       return json(await updateMe(db, request));
     }
 
+    if (route.method === "POST" && route.path === "/v1/devices/push-token") {
+      return json(await registerPushDevice(db, request), 201);
+    }
+
     if (route.method === "POST" && route.path === "/v1/profile/avatar") {
       return json(await uploadAvatar(db, request));
     }
@@ -564,6 +583,22 @@ Deno.serve(async (request) => {
 
     if (route.method === "POST" && match(route.path, "/v1/customers/:id/merge")) {
       return json(await mergeCustomer(db, request, params(route.path, "/v1/customers/:id/merge").id));
+    }
+
+    if (route.method === "GET" && route.path === "/v1/requests") {
+      return json({ requests: await listWebsiteRequests(db, orgIdFromRequest(request)) });
+    }
+
+    if (route.method === "GET" && match(route.path, "/v1/requests/:id")) {
+      return json(await getWebsiteRequest(db, request, params(route.path, "/v1/requests/:id").id));
+    }
+
+    if (route.method === "POST" && match(route.path, "/v1/requests/:id/contact")) {
+      return json(await contactWebsiteRequest(db, request, params(route.path, "/v1/requests/:id/contact").id));
+    }
+
+    if (route.method === "POST" && match(route.path, "/v1/requests/:id/archive")) {
+      return json(await archiveWebsiteRequest(db, request, params(route.path, "/v1/requests/:id/archive").id));
     }
 
     if (route.method === "GET" && route.path === "/v1/quotes") {
@@ -635,6 +670,16 @@ Deno.serve(async (request) => {
     }
 
     if (route.method === "POST" && route.path === "/public/estimates") {
+      return json(await createWebsiteEstimate(db, request), 201);
+    }
+
+    if (route.method === "GET" && match(route.path, "/public/request-orgs/:orgId")) {
+      const orgId = params(route.path, "/public/request-orgs/:orgId").orgId;
+      enforceRateLimit(request, ["public_request_org", orgId, requestClientKey(request)], 60, 60_000);
+      return json(await publicEstimateOrg(db, orgId));
+    }
+
+    if (route.method === "POST" && route.path === "/public/requests") {
       return json(await createWebsiteEstimate(db, request), 201);
     }
 
@@ -2346,9 +2391,8 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
   });
   const validUntil = addDays(new Date(), Number(org.quote_valid_days));
   const scopeNotes = uniqueStrings([
-    "Source: website estimate form.",
-    ...draft.scopeNotes,
-    range.disclaimer
+    "Source: public quote request page.",
+    ...draft.scopeNotes
   ]);
   const scopeSummary = buildScopeSummary(input.customer.name, checklist, scopeNotes);
   const customer = await upsertCustomerFromInput(db, input.orgId, {
@@ -2362,8 +2406,8 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
     org_id: input.orgId,
     customer_id: customer.id,
     address: input.address,
-    work_type: inferQuoteWorkType("Website estimate", checklist),
-    job_title: "Website estimate",
+    work_type: inferQuoteWorkType("Website request", checklist),
+    job_title: "Website request",
     valid_until: validUntil,
     discount_type: discount.type,
     discount_value: discount.value,
@@ -2386,12 +2430,15 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
   must(await db.from("snapquote_quote_line_items").insert(lineItems.map((line) => lineInsert(quote.id, line))));
   must(await db.from("snapquote_quote_public_links").insert({ quote_id: quote.id, token: publicToken() }));
 
+  const requestId = crypto.randomUUID();
+  const photoPaths = await uploadWebsiteRequestPhotos(db, input.orgId, requestId, input.photos);
   const estimateRequest = await single(db.from("snapquote_website_estimate_requests").insert({
+    id: requestId,
     org_id: input.orgId,
     quote_id: quote.id,
     customer_id: customer.id,
     source: input.source,
-    status: "draft_created",
+    status: "new",
     customer_name: input.customer.name,
     customer_email: email,
     customer_phone: phone,
@@ -2399,6 +2446,8 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
     city,
     checklist,
     notes: input.notes,
+    timing: input.timing,
+    photo_paths: photoPaths,
     estimate_low_cents: range.lowCents,
     estimate_high_cents: range.highCents,
     estimate_currency: orgCurrency(org),
@@ -2412,29 +2461,260 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
   }).select("*"));
 
   await createEvent(db, quote.id, "created", {
-    source: "website_estimate",
+    source: "website_request",
     estimateRequestId: estimateRequest.id,
-    estimateLowCents: range.lowCents,
-    estimateHighCents: range.highCents,
-    estimateCurrency: orgCurrency(org),
     unpricedLineCount: range.unpricedLineCount,
     unconfirmedLineCount: range.unconfirmedLineCount
   });
 
+  await sendNewWebsiteRequestPush(db, input.orgId).catch((error) => {
+    console.warn("Could not send request push notification", messageFromError(error));
+  });
+
   return {
     requestId: estimateRequest.id,
-    quoteId: quote.id,
     org: publicEstimateOrgResponse(org),
-    estimate: {
-      lowCents: range.lowCents,
-      highCents: range.highCents,
-      currency: orgCurrency(org),
-      confidence: range.confidence,
-      disclaimer: range.disclaimer
+    status: "received",
+    message: "Your request was sent. The contractor will review it before sending a quote."
+  };
+}
+
+async function registerPushDevice(db: SupabaseClient, request: Request) {
+  const input = parse(pushDeviceSchema, await request.json());
+  const orgId = orgIdFromRequest(request);
+  const member = await memberFromBearer(db, request);
+
+  if (!member?.id || member.org_id !== orgId) {
+    throw new HttpError(401, "Sign in to register this device.");
+  }
+
+  const existing = await maybeSingle(
+    db.from("snapquote_push_devices").select("*").eq("expo_push_token", input.token).limit(1)
+  );
+  const values = {
+    org_id: orgId,
+    org_member_id: member.id,
+    expo_push_token: input.token,
+    platform: input.platform,
+    active: true,
+    last_registered_at: new Date().toISOString()
+  };
+  const row = existing
+    ? await single(db.from("snapquote_push_devices").update(values).eq("id", existing.id).select("*"))
+    : await single(db.from("snapquote_push_devices").insert(values).select("*"));
+
+  return {
+    id: row.id,
+    platform: row.platform,
+    active: row.active
+  };
+}
+
+async function sendNewWebsiteRequestPush(db: SupabaseClient, orgId: string) {
+  const { data: devices, error } = await db
+    .from("snapquote_push_devices")
+    .select("id, expo_push_token")
+    .eq("org_id", orgId)
+    .eq("active", true);
+
+  if (error) throw error;
+  if (!devices || devices.length === 0) return;
+
+  const { count } = await db
+    .from("snapquote_website_estimate_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("status", "new");
+
+  for (let offset = 0; offset < devices.length; offset += 100) {
+    const batch = devices.slice(offset, offset + 100);
+    const messages = batch.map((device) => ({
+      to: device.expo_push_token,
+      sound: "default",
+      channelId: "requests",
+      title: "New quote request",
+      body: "A new request is ready to review in QuoteVan.",
+      badge: count ?? 1,
+      data: { type: "website_request" }
+    }));
+    const headers: Record<string, string> = {
+      "accept": "application/json",
+      "content-type": "application/json"
+    };
+    const accessToken = stringOrNull(Deno.env.get("EXPO_PUSH_ACCESS_TOKEN"));
+    if (accessToken) headers.authorization = `Bearer ${accessToken}`;
+
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(messages)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Expo push service returned ${response.status}`);
+    }
+
+    const payload = await response.json().catch(() => null) as { data?: Array<{ details?: { error?: string } }> } | null;
+    const invalidDeviceIds = batch
+      .filter((_, index) => payload?.data?.[index]?.details?.error === "DeviceNotRegistered")
+      .map((device) => device.id);
+
+    if (invalidDeviceIds.length > 0) {
+      must(await db.from("snapquote_push_devices").update({ active: false }).in("id", invalidDeviceIds));
+    }
+  }
+}
+
+async function uploadWebsiteRequestPhotos(
+  db: SupabaseClient,
+  orgId: string,
+  requestId: string,
+  photos: z.infer<typeof websiteEstimateSchema>["photos"]
+) {
+  if (photos.length === 0) {
+    return [];
+  }
+
+  const bucket = "snapquote-request-photos";
+  const { error: bucketError } = await db.storage.createBucket(bucket, { public: false });
+
+  if (bucketError && !bucketError.message.toLowerCase().includes("already exists")) {
+    throw bucketError;
+  }
+
+  const paths: string[] = [];
+
+  for (const photo of photos) {
+    const objectPath = `${orgId}/${requestId}/${crypto.randomUUID()}-${safeStorageName(photo.fileName)}`;
+    const bytes = Uint8Array.from(atob(photo.base64), (char) => char.charCodeAt(0));
+    must(await db.storage.from(bucket).upload(objectPath, bytes, {
+      contentType: photo.contentType,
+      upsert: false
+    }));
+    paths.push(objectPath);
+  }
+
+  return paths;
+}
+
+async function listWebsiteRequests(db: SupabaseClient, orgId: string) {
+  const { data, error } = await db
+    .from("snapquote_website_estimate_requests")
+    .select("*")
+    .eq("org_id", orgId)
+    .is("archived_at", null)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return Promise.all(data.map((row) => websiteRequestResponse(db, orgId, row)));
+}
+
+async function getWebsiteRequest(db: SupabaseClient, request: Request, requestId: string) {
+  const orgId = orgIdFromRequest(request);
+  let row = await single(
+    db.from("snapquote_website_estimate_requests").select("*").eq("id", requestId).eq("org_id", orgId)
+  );
+
+  if (row.status === "new") {
+    row = await single(
+      db.from("snapquote_website_estimate_requests")
+        .update({ status: "opened", opened_at: new Date().toISOString() })
+        .eq("id", requestId)
+        .eq("org_id", orgId)
+        .select("*")
+    );
+  }
+
+  return websiteRequestResponse(db, orgId, row);
+}
+
+async function contactWebsiteRequest(db: SupabaseClient, request: Request, requestId: string) {
+  const orgId = orgIdFromRequest(request);
+  const input = parse(requestContactSchema, await request.json());
+  const existing = await single(
+    db.from("snapquote_website_estimate_requests").select("*").eq("id", requestId).eq("org_id", orgId)
+  );
+
+  if (existing.status === "archived") {
+    throw new HttpError(409, "Archived requests cannot be contacted");
+  }
+
+  const row = await single(
+    db.from("snapquote_website_estimate_requests")
+      .update({
+        status: existing.status === "quote_sent" ? "quote_sent" : "contacted",
+        opened_at: existing.opened_at ?? new Date().toISOString(),
+        contacted_at: new Date().toISOString(),
+        contact_channel: input.channel
+      })
+      .eq("id", requestId)
+      .eq("org_id", orgId)
+      .select("*")
+  );
+
+  return websiteRequestResponse(db, orgId, row);
+}
+
+async function archiveWebsiteRequest(db: SupabaseClient, request: Request, requestId: string) {
+  const orgId = orgIdFromRequest(request);
+  const now = new Date().toISOString();
+  const row = await single(
+    db.from("snapquote_website_estimate_requests")
+      .update({ status: "archived", archived_at: now })
+      .eq("id", requestId)
+      .eq("org_id", orgId)
+      .select("*")
+  );
+
+  return websiteRequestResponse(db, orgId, row);
+}
+
+async function websiteRequestResponse(db: SupabaseClient, orgId: string, row: Record<string, any>) {
+  const photoPaths = Array.isArray(row.photo_paths)
+    ? row.photo_paths.filter((value: unknown): value is string => typeof value === "string")
+    : [];
+  const photoUrls = await Promise.all(photoPaths.map(async (path) => {
+    const { data, error } = await db.storage.from("snapquote-request-photos").createSignedUrl(path, 60 * 60);
+    if (error) {
+      console.warn("Could not sign request photo", { path, message: error.message });
+      return null;
+    }
+    return data.signedUrl;
+  }));
+  const quote = row.quote_id ? await getQuoteResponse(db, orgId, row.quote_id) : null;
+
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    quoteId: row.quote_id,
+    customerId: row.customer_id,
+    source: row.source,
+    status: row.status,
+    customer: {
+      name: row.customer_name,
+      email: row.customer_email,
+      phone: row.customer_phone
     },
-    lineItems: lineItems.map(websiteEstimateLineResponse),
-    scopeSummary,
-    status: "draft_created"
+    address: row.address,
+    city: row.city,
+    checklist: row.checklist,
+    notes: row.notes,
+    timing: row.timing ?? "flexible",
+    photoUrls: photoUrls.filter((value): value is string => value !== null),
+    lineCount: row.line_count,
+    unpricedLineCount: row.unpriced_line_count,
+    unconfirmedLineCount: row.unconfirmed_line_count,
+    openedAt: row.opened_at,
+    contactedAt: row.contacted_at,
+    contactChannel: row.contact_channel,
+    quoteSentAt: row.quote_sent_at,
+    archivedAt: row.archived_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    quote
   };
 }
 
@@ -2450,18 +2730,6 @@ function publicEstimateOrgResponse(row: Record<string, unknown>) {
   };
 }
 
-function websiteEstimateLineResponse(line: QuoteLineItem) {
-  return {
-    position: line.position,
-    description: line.description,
-    quantity: line.quantity,
-    unit: line.unit,
-    unitPriceCents: line.unitPriceCents,
-    matchState: line.matchState,
-    kind: line.kind
-  };
-}
-
 function websiteEstimateRange(lineItems: QuoteLineItem[], taxRate: number) {
   const pricedSubtotalCents = lineItems.reduce((sum, line) => {
     if (line.unitPriceCents === null) {
@@ -2472,10 +2740,6 @@ function websiteEstimateRange(lineItems: QuoteLineItem[], taxRate: number) {
   }, 0);
   const unpricedLineCount = lineItems.filter((line) => line.matchState === "red" || line.unitPriceCents === null).length;
   const unconfirmedLineCount = lineItems.filter((line) => line.matchState === "yellow").length;
-
-  if (pricedSubtotalCents <= 0) {
-    throw new HttpError(409, "This estimate needs contractor review before a range can be shown.");
-  }
 
   const baseTotalCents = Math.round(pricedSubtotalCents * (1 + taxRate));
   const spread = unpricedLineCount > 0
@@ -2970,6 +3234,11 @@ async function sendQuote(db: SupabaseClient, request: Request, quoteId: string) 
   const delivery = await deliverQuoteNotification("quote_sent", await getQuoteResponse(db, orgId, quoteId), input.channels);
   const now = new Date().toISOString();
   must(await db.from("snapquote_quotes").update({ sent_at: now, status: "sent" }).eq("id", quoteId).eq("org_id", orgId));
+  must(await db.from("snapquote_website_estimate_requests").update({
+    status: "quote_sent",
+    opened_at: now,
+    quote_sent_at: now
+  }).eq("quote_id", quoteId).eq("org_id", orgId).neq("status", "archived"));
   const response = await getQuoteResponse(db, orgId, quoteId);
   await createEvent(db, quoteId, "sent", { channel: input.channels.length === 1 ? input.channels[0] : "multi", channels: input.channels, ...delivery });
 
