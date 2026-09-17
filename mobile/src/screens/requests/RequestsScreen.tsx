@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, ChevronRight, Inbox, MapPin } from "lucide-react-native";
+import { Camera, ChevronRight, Inbox, MapPin, RefreshCw, TriangleAlert } from "lucide-react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -33,6 +33,8 @@ export default function RequestsScreen() {
     }
   }
 
+  const hasBlockingError = Boolean(error) && requests.length === 0 && !loading;
+
   return (
     <Screen edges={["top"]}>
       <View style={styles.screen}>
@@ -55,9 +57,24 @@ export default function RequestsScreen() {
             ) : null}
           </View>
 
-          {error ? <AppText style={styles.error} tone="red" variant="body">{error}</AppText> : null}
+          {error && !hasBlockingError ? <AppText style={styles.error} tone="red" variant="body">{error}</AppText> : null}
 
-          {requests.length === 0 ? (
+          {hasBlockingError ? (
+            <View style={styles.errorState}>
+              <View style={styles.errorIcon}><TriangleAlert color={colors.red} size={27} /></View>
+              <AppText variant="panelTitle">Could not load requests</AppText>
+              <AppText style={styles.emptyCopy} variant="body">{error}</AppText>
+              <Pressable
+                accessibilityRole="button"
+                disabled={refreshing}
+                onPress={() => void refresh()}
+                style={({ pressed }) => [styles.retryButton, pressed ? styles.retryButtonPressed : null]}
+              >
+                <RefreshCw color={colors.onDark} size={17} />
+                <AppText tone="onDark" variant="button">{refreshing ? "Retrying..." : "Try again"}</AppText>
+              </Pressable>
+            </View>
+          ) : requests.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}><Inbox color={colors.accent} size={27} /></View>
               <AppText variant="panelTitle">No requests yet</AppText>
@@ -123,6 +140,10 @@ const styles = StyleSheet.create({
   countBadge: { alignItems: "center", backgroundColor: colors.accent, borderRadius: 18, height: 36, justifyContent: "center", minWidth: 36, paddingHorizontal: 10 },
   countText: { color: colors.onDark },
   error: { backgroundColor: colors.redBg, borderColor: colors.redBorder, borderRadius: radius.sm, borderWidth: 1, padding: spacing.md },
+  errorState: { alignItems: "center", flex: 1, justifyContent: "center", paddingHorizontal: spacing.xxl },
+  errorIcon: { alignItems: "center", backgroundColor: colors.redBg, borderRadius: 24, height: 48, justifyContent: "center", marginBottom: spacing.lg, width: 48 },
+  retryButton: { alignItems: "center", backgroundColor: colors.ink, borderRadius: radius.sm, flexDirection: "row", gap: spacing.sm, justifyContent: "center", marginTop: spacing.sm, minHeight: 48, paddingHorizontal: spacing.xl },
+  retryButtonPressed: { opacity: 0.82 },
   list: { gap: spacing.md },
   row: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, gap: 10, padding: spacing.lg },
   rowPressed: { backgroundColor: colors.surfaceRaised },

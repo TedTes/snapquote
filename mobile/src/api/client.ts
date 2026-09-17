@@ -679,8 +679,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       ? await authAccessTokenProvider()
       : authAccessToken;
   const requestInit: RequestInit = {
+    cache: "no-store",
     method: options.method ?? "GET",
     headers: {
+      "Cache-Control": "no-cache",
       "Content-Type": "application/json",
       ...(authorizationToken ? { Authorization: `Bearer ${authorizationToken}` } : {}),
       ...(snapquoteOrgId ? { "x-snapquote-org-id": snapquoteOrgId } : {})
@@ -692,8 +694,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     requestInit.body = JSON.stringify(options.body);
   }
 
+  const requestUrl = `${apiBaseUrl}${path}`;
+
   try {
-    const response = await fetch(`${apiBaseUrl}${path}`, requestInit);
+    const response = await fetch(requestUrl, requestInit);
 
     const text = await response.text();
     const data: unknown = text.length > 0 ? JSON.parse(text) : null;

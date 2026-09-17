@@ -5720,6 +5720,7 @@ function json(body: unknown, status = 200) {
     status,
     headers: {
       ...corsHeaders,
+      "cache-control": "no-store",
       "content-type": "application/json"
     }
   });
