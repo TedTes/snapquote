@@ -111,6 +111,39 @@ export type ApiQuote = {
   isStale: boolean;
 };
 
+export type ApiWebsiteRequestStatus = "new" | "opened" | "contacted" | "quote_sent" | "archived";
+
+export type ApiWebsiteRequest = {
+  id: string;
+  orgId: string;
+  quoteId: string;
+  customerId: string;
+  source: "website_widget" | "website_page";
+  status: ApiWebsiteRequestStatus;
+  customer: {
+    name: string;
+    email: string | null;
+    phone: string | null;
+  };
+  address: string;
+  city: string;
+  checklist: PainterChecklist;
+  notes: string;
+  timing: "asap" | "this_month" | "flexible" | "just_pricing";
+  photoUrls: string[];
+  lineCount: number;
+  unpricedLineCount: number;
+  unconfirmedLineCount: number;
+  openedAt: string | null;
+  contactedAt: string | null;
+  contactChannel: "call" | "email" | null;
+  quoteSentAt: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  quote: ApiQuote | null;
+};
+
 export type MeResponse = {
   user: {
     id: string;
@@ -276,6 +309,12 @@ export const snapquoteApi = {
       body: input
     }),
 
+  registerPushToken: (input: { token: string; platform: "ios" | "android" }) =>
+    request<{ id: string; platform: "ios" | "android"; active: boolean }>("/v1/devices/push-token", {
+      method: "POST",
+      body: input
+    }),
+
   uploadAvatar: (input: { fileName: string; contentType: "image/jpeg" | "image/png" | "image/webp"; base64: string }) =>
     request<{ org: MeResponse["org"] }>("/v1/profile/avatar", {
       method: "POST",
@@ -402,6 +441,21 @@ export const snapquoteApi = {
         body: { targetCustomerId }
       }
     ),
+
+  listRequests: () => request<{ requests: ApiWebsiteRequest[] }>("/v1/requests"),
+
+  getRequest: (id: string) => request<ApiWebsiteRequest>(`/v1/requests/${id}`),
+
+  contactRequest: (id: string, channel: "call" | "email") =>
+    request<ApiWebsiteRequest>(`/v1/requests/${id}/contact`, {
+      method: "POST",
+      body: { channel }
+    }),
+
+  archiveRequest: (id: string) =>
+    request<ApiWebsiteRequest>(`/v1/requests/${id}/archive`, {
+      method: "POST"
+    }),
 
   listQuotes: () => request<{ quotes: ApiQuote[] }>("/v1/quotes"),
 

@@ -8,8 +8,10 @@ import Archivo600SemiBold from "../../assets/fonts/Archivo_600SemiBold.ttf";
 import Archivo700Bold from "../../assets/fonts/Archivo_700Bold.ttf";
 import Archivo800ExtraBold from "../../assets/fonts/Archivo_800ExtraBold.ttf";
 import { AuthGate } from "../screens/auth/AuthGate";
+import { usePushNotifications } from "../sync/usePushNotifications";
 
 export default function RootLayout() {
+  usePushNotifications();
   const [fontsLoaded] = useFonts({
     Archivo_400Regular: Archivo400Regular,
     Archivo_500Medium: Archivo500Medium,

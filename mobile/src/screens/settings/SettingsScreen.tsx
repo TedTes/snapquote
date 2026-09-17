@@ -160,19 +160,19 @@ export default function SettingsScreen() {
     }
   }
 
-  function openWebsiteEstimateForm() {
+  function openWebsiteRequestPage() {
     if (authStatus !== "signed_in" || !me?.org.id) {
-      Alert.alert("Sign in required", "Sign in to open your website estimate form.", [
+      Alert.alert("Sign in required", "Sign in to open your public request page.", [
         { text: "Cancel", style: "cancel" },
         { text: "Sign in", onPress: () => router.push({ pathname: "/auth", params: { from: "app" } }) }
       ]);
       return;
     }
 
-    const pageUrl = `${publicWebBaseUrl}/estimate/${encodeURIComponent(me.org.id)}`;
+    const pageUrl = `${publicWebBaseUrl}/request/${encodeURIComponent(me.org.id)}`;
     const embedUrl = `${publicWebBaseUrl}/embed/${encodeURIComponent(me.org.id)}?embed=1`;
     Alert.alert(
-      "Website estimate form",
+      "Public request page",
       `Page: ${pageUrl}
 
 Embed URL: ${embedUrl}`,
@@ -309,10 +309,10 @@ Embed URL: ${embedUrl}`,
             onPress={() => router.push("/price-book")}
           />
           <SettingsRow
-            detail="Open and embed your instant estimate form"
+            detail="Share or embed your quote request form"
             icon={<Globe color={colors.ink2} size={16} strokeWidth={2.1} />}
-            label="Website estimate form"
-            onPress={openWebsiteEstimateForm}
+            label="Public request page"
+            onPress={openWebsiteRequestPage}
           />
           <SettingsRow
             detail="Review your starter prices"
