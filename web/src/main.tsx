@@ -55,10 +55,12 @@ function quoteTokenFromPath(): string | null {
   return parts[0] === "q" ? parts[1] ?? "" : null;
 }
 
-/** Returns the org id for an estimate page path, or null if the path does not match. */
+/** Returns the org id for a public request page path, including legacy estimate links. */
 function estimateOrgIdFromPath(): string | null {
   const parts = window.location.pathname.split("/").filter(Boolean);
-  return parts[0] === "estimate" || parts[0] === "embed" ? parts[1] ?? "" : null;
+  return parts[0] === "request" || parts[0] === "p" || parts[0] === "estimate" || parts[0] === "embed"
+    ? parts[1] ?? ""
+    : null;
 }
 
 createRoot(document.getElementById("root")!).render(

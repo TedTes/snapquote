@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 const apiBaseUrl = (import.meta.env.VITE_SNAPQUOTE_API_URL ?? "https://dctmpfrbkgntiuhjbblu.functions.supabase.co/snapquote").replace(/\/$/, "");
 
@@ -29,30 +29,20 @@ type EstimateOrgResponse = {
   };
 };
 
-type EstimateLine = {
-  position: number;
-  description: string;
-  quantity: number;
-  unit: string | null;
-  unitPriceCents: number | null;
-  matchState: "green" | "yellow" | "red";
-  kind: "labour" | "material";
+type RequestResponse = {
+  requestId: string;
+  org: EstimateOrg;
+  status: "received";
+  message: string;
 };
 
-type EstimateResponse = {
-  requestId: string;
-  quoteId: string;
-  org: EstimateOrg;
-  estimate: {
-    lowCents: number;
-    highCents: number;
-    currency: string;
-    confidence: "price_book_confirmed" | "price_book_suggested" | "needs_review";
-    disclaimer: string;
-  };
-  lineItems: EstimateLine[];
-  scopeSummary: string;
-  status: "draft_created";
+type Timing = "asap" | "this_month" | "flexible" | "just_pricing";
+
+type RequestPhoto = {
+  fileName: string;
+  contentType: "image/jpeg" | "image/png" | "image/webp";
+  base64: string;
+  previewUrl: string;
 };
 
 type OrgState =
@@ -78,18 +68,20 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [notes, setNotes] = useState("");
+  const [timing, setTiming] = useState<Timing>("flexible");
+  const [photos, setPhotos] = useState<RequestPhoto[]>([]);
   const [company, setCompany] = useState("");
   const [checklist, setChecklist] = useState<PainterChecklist>(fallbackChecklist);
   const [submitState, setSubmitState] = useState<"idle" | "submitting">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<EstimateResponse | null>(null);
+  const [result, setResult] = useState<RequestResponse | null>(null);
 
   useEffect(() => {
     let canceled = false;
 
     async function loadOrg() {
       try {
-        const response = await api<EstimateOrgResponse>(`/public/estimate-orgs/${encodeURIComponent(orgId)}`);
+        const response = await api<EstimateOrgResponse>(`/public/request-orgs/${encodeURIComponent(orgId)}`);
 
         if (!canceled) {
           setOrgState({ kind: "ready", org: response.org, defaults: response.defaults });
@@ -97,7 +89,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
         }
       } catch {
         if (!canceled) {
-          setOrgState({ kind: "error", message: "This estimate form is not available. Ask the contractor for a direct link." });
+          setOrgState({ kind: "error", message: "This request form is not available. Ask the contractor for a direct link." });
         }
       }
     }
@@ -109,15 +101,10 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   }, [orgId]);
 
   const org = orgState.kind === "ready" ? orgState.org : null;
-  const currency = org?.currency ?? "cad";
   const hasContact = email.trim().length > 0 || phone.trim().length > 0;
   const canSubmit = customerName.trim().length > 0 && address.trim().length > 0 && hasContact && submitState === "idle";
-  const rangeText = useMemo(() => {
-    if (!result) return "";
-    return `${formatMoney(result.estimate.lowCents, result.estimate.currency)} - ${formatMoney(result.estimate.highCents, result.estimate.currency)}`;
-  }, [result]);
 
-  async function submitEstimate(event: FormEvent<HTMLFormElement>) {
+  async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!canSubmit) {
@@ -129,7 +116,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
     setError(null);
 
     try {
-      const response = await api<EstimateResponse>("/public/estimates", {
+      const response = await api<RequestResponse>("/public/requests", {
         method: "POST",
         body: JSON.stringify({
           orgId,
@@ -143,13 +130,15 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
           city: city.trim() || undefined,
           checklist,
           notes,
+          timing,
+          photos: photos.map(({ fileName, contentType, base64 }) => ({ fileName, contentType, base64 })),
           referrer: document.referrer || null,
           company
         })
       });
       setResult(response);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "We could not create the estimate. Try again.");
+      setError(requestError instanceof Error ? requestError.message : "We could not send the request. Try again.");
     } finally {
       setSubmitState("idle");
     }
@@ -169,18 +158,18 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
 
   return (
     <main className={embed ? "estimate-page is-embed" : "estimate-page"}>
-      <section className="estimate-shell" aria-label="Instant painting estimate">
+      <section className="estimate-shell" aria-label="Painting quote request">
         <header className="estimate-page-header">
           <BrandMark org={org} />
           <div>
-            <p className="eyebrow">Instant painting estimate</p>
-            <h1>{org?.name ?? "QuoteVan estimate"}</h1>
+            <p className="eyebrow">Request a quote</p>
+            <h1>{org?.name ?? "QuoteVan request"}</h1>
             <p>{org ? estimateContactLine(org) : "Loading contractor details..."}</p>
           </div>
         </header>
 
         <div className="estimate-layout">
-          <form className="estimate-form" onSubmit={submitEstimate}>
+          <form className="estimate-form" onSubmit={submitRequest}>
             <label className="estimate-hidden-field" aria-hidden="true">
               Company
               <input autoComplete="off" tabIndex={-1} value={company} onChange={(event) => setCompany(event.target.value)} />
@@ -241,6 +230,20 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
             </section>
 
             <section className="estimate-form-section">
+              <div className="estimate-section-head">
+                <p className="section-label">Photos and timing</p>
+                <span>{photos.length}/4 photos</span>
+              </div>
+              <PhotoPicker photos={photos} onChange={setPhotos} onError={setError} />
+              <SelectField label="When do you need the work?" value={timing} onChange={(value) => setTiming(value as Timing)}>
+                <option value="asap">As soon as possible</option>
+                <option value="this_month">This month</option>
+                <option value="flexible">My timing is flexible</option>
+                <option value="just_pricing">I am comparing quotes</option>
+              </SelectField>
+            </section>
+
+            <section className="estimate-form-section">
               <label className="estimate-input-label">
                 <span>Anything else?</span>
                 <textarea
@@ -255,43 +258,33 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
             {error ? <p className="estimate-error" role="alert">{error}</p> : null}
 
             <button className="estimate-submit" type="submit" disabled={!canSubmit}>
-              {submitState === "submitting" ? "Creating estimate..." : "Get estimate range"}
+              {submitState === "submitting" ? "Sending request..." : "Send quote request"}
             </button>
           </form>
 
           <aside className="estimate-result-panel" aria-live="polite">
             {result ? (
               <>
-                <p className="section-label">Estimated range</p>
-                <strong className="estimate-range">{rangeText}</strong>
-                <p className="estimate-result-copy">{result.estimate.disclaimer}</p>
-                <div className="estimate-result-status">
-                  <span>Draft saved in QuoteVan</span>
-                  <b>{result.lineItems.length} lines</b>
-                </div>
-                <div className="estimate-result-lines">
-                  {result.lineItems.slice(0, 6).map((line) => (
-                    <div className="estimate-result-line" key={`${line.position}-${line.description}`}>
-                      <span>
-                        <strong>{line.description}</strong>
-                        <small>{line.quantity} {line.unit ?? "item"}</small>
-                      </span>
-                      <b>{line.unitPriceCents === null ? "Review" : formatMoney(Math.round(line.quantity * line.unitPriceCents), currency)}</b>
-                    </div>
-                  ))}
+                <span className="estimate-success-mark" aria-hidden="true">&#10003;</span>
+                <p className="section-label">Request received</p>
+                <strong className="estimate-range">Sent to {result.org.name}</strong>
+                <p className="estimate-result-copy">{result.message}</p>
+                <div className="estimate-result-status is-success">
+                  <span>Reference</span>
+                  <b>{result.requestId.slice(0, 8).toUpperCase()}</b>
                 </div>
               </>
             ) : (
               <>
-                <p className="section-label">Price-book estimate</p>
-                <strong className="estimate-range">Instant range</strong>
+                <p className="section-label">What happens next</p>
+                <strong className="estimate-range">A real quote, reviewed first.</strong>
                 <p className="estimate-result-copy">
-                  Submit the job details to see a preliminary range from the contractor's QuoteVan price book.
+                  Your request opens as a draft in the contractor's app. They review the work and contact you or email the finished quote.
                 </p>
-                <div className="estimate-result-placeholder">
-                  <span />
-                  <span />
-                  <span />
+                <div className="estimate-next-steps">
+                  <span><b>1</b> Send details and photos</span>
+                  <span><b>2</b> Contractor reviews the draft</span>
+                  <span><b>3</b> Receive the quote by email</span>
                 </div>
               </>
             )}
@@ -377,6 +370,55 @@ function Toggle(props: { label: string; checked: boolean; onChange: (checked: bo
   );
 }
 
+function PhotoPicker(props: {
+  photos: RequestPhoto[];
+  onChange: (photos: RequestPhoto[]) => void;
+  onError: (message: string | null) => void;
+}) {
+  async function addPhotos(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (files.length === 0) return;
+
+    if (props.photos.length + files.length > 4) {
+      props.onError("Add up to 4 photos.");
+      return;
+    }
+
+    try {
+      const next = await Promise.all(files.map(photoFromFile));
+      props.onError(null);
+      props.onChange([...props.photos, ...next]);
+    } catch (photoError) {
+      props.onError(photoError instanceof Error ? photoError.message : "One of the photos could not be added.");
+    }
+  }
+
+  return (
+    <div className="estimate-photo-picker">
+      <div className="estimate-photo-grid">
+        {props.photos.map((photo, index) => (
+          <figure className="estimate-photo-preview" key={`${photo.fileName}-${index}`}>
+            <img alt={`Job photo ${index + 1}`} src={photo.previewUrl} />
+            <button type="button" aria-label={`Remove ${photo.fileName}`} onClick={() => props.onChange(props.photos.filter((_, photoIndex) => photoIndex !== index))}>
+              &times;
+            </button>
+          </figure>
+        ))}
+        {props.photos.length < 4 ? (
+          <label className="estimate-photo-add">
+            <input accept="image/jpeg,image/png,image/webp" multiple onChange={addPhotos} type="file" />
+            <strong>+</strong>
+            <span>Add photos</span>
+          </label>
+        ) : null}
+      </div>
+      <p>Wide room photos help the contractor prepare a more accurate quote.</p>
+    </div>
+  );
+}
+
 function BrandMark(props: { org: EstimateOrg | null }) {
   if (props.org?.logoUrl) {
     return <img alt="" className="estimate-brand-mark image" src={props.org.logoUrl} />;
@@ -416,11 +458,74 @@ function clampCount(value: number) {
   return Math.max(0, Math.min(20, value));
 }
 
-function formatMoney(cents: number, currency: string) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(cents / 100);
+async function photoFromFile(file: File): Promise<RequestPhoto> {
+  if (!(["image/jpeg", "image/png", "image/webp"] as string[]).includes(file.type)) {
+    throw new Error("Use JPG, PNG, or WebP photos.");
+  }
+
+  if (file.size > 16_000_000) {
+    throw new Error("Each original photo must be smaller than 16 MB.");
+  }
+
+  const compressed = await compressPhoto(file);
+  const previewUrl = await readFile(compressed);
+  const base64 = previewUrl.split(",", 2)[1];
+
+  if (!base64) {
+    throw new Error("One of the photos could not be read.");
+  }
+
+  return {
+    fileName: `${file.name.replace(/\.[^.]+$/, "") || "job-photo"}.jpg`,
+    contentType: "image/jpeg",
+    base64,
+    previewUrl
+  };
+}
+
+async function compressPhoto(file: File) {
+  const image = await loadImage(file);
+  const maxEdge = 1600;
+  const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+
+  if (!context) throw new Error("This browser could not prepare the photo.");
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Photo could not be compressed.")), "image/jpeg", 0.82);
+  });
+}
+
+function loadImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("One of the photos could not be opened."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function readFile(file: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Photo could not be read."));
+    reader.onerror = () => reject(new Error("Photo could not be read."));
+    reader.readAsDataURL(file);
+  });
 }
