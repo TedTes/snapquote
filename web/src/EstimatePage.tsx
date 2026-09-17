@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 const apiBaseUrl = (import.meta.env.VITE_SNAPQUOTE_API_URL ?? "https://dctmpfrbkgntiuhjbblu.functions.supabase.co/snapquote").replace(/\/$/, "");
 
@@ -74,7 +74,18 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   const [checklist, setChecklist] = useState<PainterChecklist>(fallbackChecklist);
   const [submitState, setSubmitState] = useState<"idle" | "submitting">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<RequestResponse | null>(null);
+  const [result, setResult] = useState<RequestResponse | null>(() => readSubmissionReceipt(orgId));
+  const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    setResult(readSubmissionReceipt(orgId));
+  }, [orgId]);
+
+  useEffect(() => {
+    if (result) {
+      confirmationHeadingRef.current?.focus();
+    }
+  }, [result]);
 
   useEffect(() => {
     let canceled = false;
@@ -107,6 +118,8 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (result) return;
+
     if (!canSubmit) {
       setError("Add your name, job address, and either email or phone.");
       return;
@@ -136,6 +149,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
           company
         })
       });
+      writeSubmissionReceipt(orgId, response);
       setResult(response);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "We could not send the request. Try again.");
@@ -168,8 +182,23 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
           </div>
         </header>
 
-        <div className="estimate-layout">
-          <form className="estimate-form" onSubmit={submitRequest}>
+        {result ? (
+          <section className="estimate-confirmation" aria-live="polite">
+            <span className="estimate-confirmation-mark" aria-hidden="true">&#10003;</span>
+            <p className="section-label">Request received</p>
+            <h2 ref={confirmationHeadingRef} tabIndex={-1}>Thanks. Your request is in.</h2>
+            <p className="estimate-confirmation-copy">
+              It has been sent to <strong>{org?.name ?? result.org.name}</strong>. They will review your details and contact you before sending the quote.
+            </p>
+            <div className="estimate-confirmation-reference">
+              <span>Reference</span>
+              <strong>{result.requestId.slice(0, 8).toUpperCase()}</strong>
+            </div>
+            <p className="estimate-confirmation-close">You can close this page.</p>
+          </section>
+        ) : (
+          <div className="estimate-layout">
+            <form className="estimate-form" onSubmit={submitRequest}>
             <label className="estimate-hidden-field" aria-hidden="true">
               Company
               <input autoComplete="off" tabIndex={-1} value={company} onChange={(event) => setCompany(event.target.value)} />
@@ -260,36 +289,22 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
             <button className="estimate-submit" type="submit" disabled={!canSubmit}>
               {submitState === "submitting" ? "Sending request..." : "Send quote request"}
             </button>
-          </form>
+            </form>
 
-          <aside className="estimate-result-panel" aria-live="polite">
-            {result ? (
-              <>
-                <span className="estimate-success-mark" aria-hidden="true">&#10003;</span>
-                <p className="section-label">Request received</p>
-                <strong className="estimate-range">Sent to {result.org.name}</strong>
-                <p className="estimate-result-copy">{result.message}</p>
-                <div className="estimate-result-status is-success">
-                  <span>Reference</span>
-                  <b>{result.requestId.slice(0, 8).toUpperCase()}</b>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="section-label">What happens next</p>
-                <strong className="estimate-range">A real quote, reviewed first.</strong>
-                <p className="estimate-result-copy">
-                  Your request opens as a draft in the contractor's app. They review the work and contact you or email the finished quote.
-                </p>
-                <div className="estimate-next-steps">
-                  <span><b>1</b> Send details and photos</span>
-                  <span><b>2</b> Contractor reviews the draft</span>
-                  <span><b>3</b> Receive the quote by email</span>
-                </div>
-              </>
-            )}
-          </aside>
-        </div>
+            <aside className="estimate-result-panel">
+              <p className="section-label">What happens next</p>
+              <strong className="estimate-range">A real quote, reviewed first.</strong>
+              <p className="estimate-result-copy">
+                Your request opens as a draft in the contractor's app. They review the work and contact you or email the finished quote.
+              </p>
+              <div className="estimate-next-steps">
+                <span><b>1</b> Send details and photos</span>
+                <span><b>2</b> Contractor reviews the draft</span>
+                <span><b>3</b> Receive the quote by email</span>
+              </div>
+            </aside>
+          </div>
+        )}
       </section>
     </main>
   );
@@ -456,6 +471,32 @@ function emptyToNull(value: string) {
 
 function clampCount(value: number) {
   return Math.max(0, Math.min(20, value));
+}
+
+function submissionStorageKey(orgId: string) {
+  return `quotevan-request-received:${orgId}`;
+}
+
+function readSubmissionReceipt(orgId: string): RequestResponse | null {
+  try {
+    const stored = window.sessionStorage.getItem(submissionStorageKey(orgId));
+    if (!stored) return null;
+
+    const receipt = JSON.parse(stored) as Partial<RequestResponse>;
+    return typeof receipt.requestId === "string" && receipt.status === "received" && receipt.org?.name
+      ? receipt as RequestResponse
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSubmissionReceipt(orgId: string, response: RequestResponse) {
+  try {
+    window.sessionStorage.setItem(submissionStorageKey(orgId), JSON.stringify(response));
+  } catch {
+    // The in-memory result still prevents another submission in this page view.
+  }
 }
 
 async function photoFromFile(file: File): Promise<RequestPhoto> {
