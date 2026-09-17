@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Archive, Camera, ChevronRight, Clock3, Mail, MapPin, Phone, User } from "lucide-react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import type { Href } from "expo-router";
 import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { ApiWebsiteRequest } from "../../api/client";
 import { snapquoteApi, userFacingErrorMessage } from "../../api/client";
@@ -95,7 +94,7 @@ export default function RequestDetailScreen() {
     try {
       await snapquoteApi.archiveRequest(request.id);
       removeRequest(request.id);
-      router.replace("/requests" as Href);
+      router.replace("/requests");
     } catch (error) {
       Alert.alert("Could not archive request", userFacingErrorMessage(error));
     } finally {

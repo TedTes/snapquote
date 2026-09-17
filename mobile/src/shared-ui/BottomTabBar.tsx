@@ -1,6 +1,5 @@
 import { ClipboardList, Home, Inbox, Plus, Settings as SettingsIcon } from "lucide-react-native";
 import { router, usePathname } from "expo-router";
-import type { Href } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, fontStyles, shadowSm, spacing } from "./theme";
@@ -58,7 +57,7 @@ function TabItem(props: { active: boolean; badge: number; tab: (typeof tabs)[num
   const Icon = props.tab.icon;
 
   return (
-    <Pressable accessibilityRole="button" onPress={() => router.replace(props.tab.href as Href)} style={styles.item}>
+    <Pressable accessibilityRole="button" onPress={() => router.replace(props.tab.href)} style={styles.item}>
       <View style={[styles.iconWrap, props.active ? styles.iconWrapActive : null]}>
         <Icon color={props.active ? colors.ink : colors.ink3} size={23} strokeWidth={props.active ? 2.45 : 2} />
         {props.badge > 0 ? (

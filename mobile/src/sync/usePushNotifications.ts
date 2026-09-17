@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
-import type { Href } from "expo-router";
 import { Platform } from "react-native";
 import { snapquoteApi } from "../api/client";
 import { useAuthStore } from "../state/authStore";
@@ -25,7 +24,7 @@ export function usePushNotifications() {
     const request = response.notification.request;
     if (handledResponseId.current === request.identifier) return;
     handledResponseId.current = request.identifier;
-    if (request.content.data["type"] === "website_request") router.push("/requests" as Href);
+    if (request.content.data["type"] === "website_request") router.push("/requests");
   }, []);
 
   useEffect(() => {
