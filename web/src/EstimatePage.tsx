@@ -45,6 +45,22 @@ type RequestPhoto = {
   previewUrl: string;
 };
 
+type RequestVideo = {
+  file: File;
+  fileName: string;
+  contentType: "video/mp4" | "video/quicktime" | "video/webm";
+  durationSeconds: number;
+  previewUrl: string;
+};
+
+type RequestUploadResponse = {
+  uploadId: string;
+  bucket: string;
+  storagePath: string;
+  signedUrl: string;
+  expiresInSeconds: number;
+};
+
 type OrgState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -70,6 +86,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   const [notes, setNotes] = useState("");
   const [timing, setTiming] = useState<Timing>("flexible");
   const [photos, setPhotos] = useState<RequestPhoto[]>([]);
+  const [video, setVideo] = useState<RequestVideo | null>(null);
   const [company, setCompany] = useState("");
   const [checklist, setChecklist] = useState<PainterChecklist>(fallbackChecklist);
   const [submitState, setSubmitState] = useState<"idle" | "submitting">("idle");
@@ -129,6 +146,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
     setError(null);
 
     try {
+      const uploadedVideo = video ? await uploadRequestVideo(orgId, video, company) : null;
       const response = await api<RequestResponse>("/public/requests", {
         method: "POST",
         body: JSON.stringify({
@@ -145,6 +163,13 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
           notes,
           timing,
           photos: photos.map(({ fileName, contentType, base64 }) => ({ fileName, contentType, base64 })),
+          videos: uploadedVideo ? [{
+            fileName: video!.fileName,
+            contentType: video!.contentType,
+            byteSize: video!.file.size,
+            durationSeconds: video!.durationSeconds,
+            storagePath: uploadedVideo.storagePath
+          }] : [],
           referrer: document.referrer || null,
           company
         })
@@ -264,6 +289,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                 <span>{photos.length}/4 photos</span>
               </div>
               <PhotoPicker photos={photos} onChange={setPhotos} onError={setError} />
+              <VideoPicker video={video} onChange={setVideo} onError={setError} />
               <SelectField label="When do you need the work?" value={timing} onChange={(value) => setTiming(value as Timing)}>
                 <option value="asap">As soon as possible</option>
                 <option value="this_month">This month</option>
@@ -434,6 +460,53 @@ function PhotoPicker(props: {
   );
 }
 
+function VideoPicker(props: {
+  video: RequestVideo | null;
+  onChange: (video: RequestVideo | null) => void;
+  onError: (message: string | null) => void;
+}) {
+  async function addVideo(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const next = await videoFromFile(file);
+      if (props.video) URL.revokeObjectURL(props.video.previewUrl);
+      props.onError(null);
+      props.onChange(next);
+    } catch (videoError) {
+      props.onError(videoError instanceof Error ? videoError.message : "The video could not be added.");
+    }
+  }
+
+  function removeVideo() {
+    if (props.video) URL.revokeObjectURL(props.video.previewUrl);
+    props.onChange(null);
+  }
+
+  return (
+    <div className="estimate-video-picker">
+      {props.video ? (
+        <figure className="estimate-video-preview">
+          <video controls preload="metadata" src={props.video.previewUrl} />
+          <div>
+            <strong>{props.video.fileName}</strong>
+            <span>{Math.round(props.video.durationSeconds)} sec · {formatFileSize(props.video.file.size)}</span>
+          </div>
+          <button type="button" aria-label={`Remove ${props.video.fileName}`} onClick={removeVideo}>&times;</button>
+        </figure>
+      ) : (
+        <label className="estimate-video-add">
+          <input accept="video/mp4,video/quicktime,video/webm" onChange={addVideo} type="file" />
+          <span aria-hidden="true">+</span>
+          <div><strong>Add a short video</strong><small>Up to 90 seconds and 60 MB</small></div>
+        </label>
+      )}
+    </div>
+  );
+}
+
 function BrandMark(props: { org: EstimateOrg | null }) {
   if (props.org?.logoUrl) {
     return <img alt="" className="estimate-brand-mark image" src={props.org.logoUrl} />;
@@ -458,6 +531,34 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   return await response.json() as T;
+}
+
+async function uploadRequestVideo(orgId: string, video: RequestVideo, company: string) {
+  const upload = await api<RequestUploadResponse>("/public/request-uploads", {
+    method: "POST",
+    body: JSON.stringify({
+      orgId,
+      fileName: video.fileName,
+      contentType: video.contentType,
+      byteSize: video.file.size,
+      durationSeconds: video.durationSeconds,
+      company
+    })
+  });
+  const form = new FormData();
+  form.append("cacheControl", "3600");
+  form.append("", video.file);
+  const response = await fetch(upload.signedUrl, {
+    method: "PUT",
+    headers: { "x-upsert": "false" },
+    body: form
+  });
+
+  if (!response.ok) {
+    throw new Error("The video upload did not finish. Check your connection and try again.");
+  }
+
+  return upload;
 }
 
 function estimateContactLine(org: EstimateOrg) {
@@ -522,6 +623,48 @@ async function photoFromFile(file: File): Promise<RequestPhoto> {
     base64,
     previewUrl
   };
+}
+
+async function videoFromFile(file: File): Promise<RequestVideo> {
+  const allowedTypes = ["video/mp4", "video/quicktime", "video/webm"] as const;
+  if (!allowedTypes.some((type) => type === file.type)) {
+    throw new Error("Use an MP4, MOV, or WebM video.");
+  }
+  if (file.size > 60_000_000) {
+    throw new Error("Video must be smaller than 60 MB.");
+  }
+
+  const previewUrl = URL.createObjectURL(file);
+  try {
+    const durationSeconds = await readVideoDuration(previewUrl);
+    if (durationSeconds <= 0 || durationSeconds > 90) {
+      throw new Error("Video must be 90 seconds or shorter.");
+    }
+    return {
+      file,
+      fileName: file.name,
+      contentType: file.type as RequestVideo["contentType"],
+      durationSeconds,
+      previewUrl
+    };
+  } catch (error) {
+    URL.revokeObjectURL(previewUrl);
+    throw error;
+  }
+}
+
+function readVideoDuration(previewUrl: string) {
+  return new Promise<number>((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => resolve(video.duration);
+    video.onerror = () => reject(new Error("The video could not be opened."));
+    video.src = previewUrl;
+  });
+}
+
+function formatFileSize(bytes: number) {
+  return `${Math.max(0.1, bytes / 1_000_000).toFixed(1)} MB`;
 }
 
 async function compressPhoto(file: File) {

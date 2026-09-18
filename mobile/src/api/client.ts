@@ -112,6 +112,34 @@ export type ApiQuote = {
 };
 
 export type ApiWebsiteRequestStatus = "new" | "opened" | "contacted" | "quote_sent" | "archived";
+export type ApiRequestAnalysisStatus = "not_requested" | "pending" | "processing" | "completed" | "failed" | "no_media";
+
+export type ApiRequestMedia = {
+  id: string;
+  type: "photo" | "video";
+  fileName: string;
+  contentType: string;
+  processingStatus: "uploaded" | "pending" | "processing" | "completed" | "failed";
+  url: string | null;
+  analysis: Record<string, unknown>;
+  analysisError: string | null;
+};
+
+export type ApiRequestAnalysisSuggestion = {
+  id: string;
+  type: "task" | "site_condition" | "question";
+  description: string;
+  quantity: number | null;
+  unit: "room" | "each" | "hour" | "flat" | "sqft" | "lnft" | "day" | null;
+  kind: "labour" | "material" | null;
+  confidence: number;
+  assumptions: string[];
+  evidenceMediaIds: string[];
+  status: "pending" | "accepted" | "rejected";
+  quoteLineItemId: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+};
 
 export type ApiWebsiteRequest = {
   id: string;
@@ -131,6 +159,20 @@ export type ApiWebsiteRequest = {
   notes: string;
   timing: "asap" | "this_month" | "flexible" | "just_pricing";
   photoUrls: string[];
+  media: ApiRequestMedia[];
+  analysis: {
+    status: ApiRequestAnalysisStatus;
+    model: string | null;
+    version: string | null;
+    error: string | null;
+    summary: {
+      summary?: string;
+      coverage?: { sufficient: boolean; missing: string[] };
+    };
+    startedAt: string | null;
+    completedAt: string | null;
+    suggestions: ApiRequestAnalysisSuggestion[];
+  };
   lineCount: number;
   unpricedLineCount: number;
   unconfirmedLineCount: number;
@@ -445,6 +487,21 @@ export const snapquoteApi = {
   listRequests: () => request<{ requests: ApiWebsiteRequest[] }>("/v1/requests"),
 
   getRequest: (id: string) => request<ApiWebsiteRequest>(`/v1/requests/${id}`),
+
+  analyzeRequest: (id: string) =>
+    request<ApiWebsiteRequest>(`/v1/requests/${id}/analyze`, {
+      method: "POST"
+    }),
+
+  acceptRequestSuggestion: (requestId: string, suggestionId: string) =>
+    request<ApiWebsiteRequest>(`/v1/requests/${requestId}/suggestions/${suggestionId}/accept`, {
+      method: "POST"
+    }),
+
+  rejectRequestSuggestion: (requestId: string, suggestionId: string) =>
+    request<ApiWebsiteRequest>(`/v1/requests/${requestId}/suggestions/${suggestionId}/reject`, {
+      method: "POST"
+    }),
 
   contactRequest: (id: string, channel: "call" | "email") =>
     request<ApiWebsiteRequest>(`/v1/requests/${id}/contact`, {

@@ -4,13 +4,11 @@ import {
   assertQuoteCanSend,
   buildScopeSummary,
   computeTotalsIfReady,
-  createPainterDraftLines,
   defaultCorePrices,
   defaultChecklist,
   deriveQuoteStatus,
   getQuoteSendBlockers,
   isQuoteStale,
-  lineFromPriceBook,
   lineInsert,
   priceBookInsert,
   priceBookItemFromRow,
@@ -37,6 +35,13 @@ import {
   type ServicePriceSuggestionRow,
   type ServiceTemplateRow
 } from "./domain.ts";
+import { buildDraftFromEvidence, lineItemsFromExtraction } from "./drafting.ts";
+import {
+  assertPhotoAnalysisEvidence,
+  photoAnalysisJsonSchema,
+  photoAnalysisSuggestionRows,
+  photoAnalysisUserContext
+} from "./photoAnalysis.ts";
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -289,6 +294,13 @@ const websiteEstimateSchema = z.object({
     contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
     base64: z.string().min(1).max(12_000_000)
   })).max(4).default([]),
+  videos: z.array(z.object({
+    fileName: z.string().trim().min(1).max(160),
+    contentType: z.enum(["video/mp4", "video/quicktime", "video/webm"]),
+    byteSize: z.number().int().positive().max(60_000_000),
+    durationSeconds: z.number().positive().max(90),
+    storagePath: z.string().trim().min(1).max(1000)
+  })).max(1).default([]),
   referrer: z.string().trim().max(1000).nullable().optional(),
   company: z.string().trim().max(200).optional()
 }).superRefine((input, context) => {
@@ -312,6 +324,15 @@ const websiteEstimateSchema = z.object({
   }
 });
 
+const publicRequestMediaUploadSchema = z.object({
+  orgId: z.string().uuid(),
+  fileName: z.string().trim().min(1).max(160),
+  contentType: z.enum(["video/mp4", "video/quicktime", "video/webm"]),
+  byteSize: z.number().int().positive().max(60_000_000),
+  durationSeconds: z.number().positive().max(90),
+  company: z.string().trim().max(200).optional()
+});
+
 const extractScopeSchema = z.object({
   transcript: z.string().trim().max(5000).default(""),
   typedNotes: z.string().trim().max(5000).default(""),
@@ -330,6 +351,29 @@ const extractionResultSchema = z.object({
   })).max(40),
   site_conditions: z.array(z.string().trim().min(1).max(240)).max(20),
   questions_for_contractor: z.array(z.string().trim().min(1).max(240)).max(20)
+});
+
+const photoAnalysisResultSchema = z.object({
+  summary: z.string().trim().min(1).max(1200),
+  tasks: z.array(z.object({
+    description: z.string().trim().min(1).max(240),
+    quantity: z.number().positive().nullable(),
+    unit: z.enum(["room", "each", "hour", "flat", "sqft", "lnft", "day"]).nullable(),
+    kind: z.enum(["labour", "material"]),
+    assumptions: z.array(z.string().trim().min(1).max(240)).max(10),
+    confidence: z.number().min(0).max(1),
+    evidence_media_ids: z.array(z.string().uuid()).min(1).max(4)
+  })).max(30),
+  site_conditions: z.array(z.object({
+    description: z.string().trim().min(1).max(240),
+    confidence: z.number().min(0).max(1),
+    evidence_media_ids: z.array(z.string().uuid()).min(1).max(4)
+  })).max(20),
+  questions_for_contractor: z.array(z.string().trim().min(1).max(240)).max(20),
+  coverage: z.object({
+    sufficient: z.boolean(),
+    missing: z.array(z.string().trim().min(1).max(240)).max(20)
+  })
 });
 
 const quotePatchSchema = z.object({
@@ -593,6 +637,20 @@ Deno.serve(async (request) => {
       return json(await getWebsiteRequest(db, request, params(route.path, "/v1/requests/:id").id));
     }
 
+    if (route.method === "POST" && match(route.path, "/v1/requests/:id/analyze")) {
+      return json(await analyzeWebsiteRequestMedia(db, request, params(route.path, "/v1/requests/:id/analyze").id));
+    }
+
+    if (route.method === "POST" && match(route.path, "/v1/requests/:id/suggestions/:suggestionId/accept")) {
+      const routeParams = params(route.path, "/v1/requests/:id/suggestions/:suggestionId/accept");
+      return json(await acceptWebsiteRequestSuggestion(db, request, routeParams.id, routeParams.suggestionId));
+    }
+
+    if (route.method === "POST" && match(route.path, "/v1/requests/:id/suggestions/:suggestionId/reject")) {
+      const routeParams = params(route.path, "/v1/requests/:id/suggestions/:suggestionId/reject");
+      return json(await rejectWebsiteRequestSuggestion(db, request, routeParams.id, routeParams.suggestionId));
+    }
+
     if (route.method === "POST" && match(route.path, "/v1/requests/:id/contact")) {
       return json(await contactWebsiteRequest(db, request, params(route.path, "/v1/requests/:id/contact").id));
     }
@@ -677,6 +735,10 @@ Deno.serve(async (request) => {
       const orgId = params(route.path, "/public/request-orgs/:orgId").orgId;
       enforceRateLimit(request, ["public_request_org", orgId, requestClientKey(request)], 60, 60_000);
       return json(await publicEstimateOrg(db, orgId));
+    }
+
+    if (route.method === "POST" && route.path === "/public/request-uploads") {
+      return json(await createPublicRequestMediaUpload(db, request), 201);
     }
 
     if (route.method === "POST" && route.path === "/public/requests") {
@@ -2286,11 +2348,6 @@ async function createQuote(db: SupabaseClient, request: Request) {
 
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
   const priceBookItems = await listPriceBook(db, orgId);
-  const draft = createPainterDraftLines({
-    checklist: input.checklist as PainterChecklist,
-    transcript: input.transcript,
-    priceBookItems
-  });
   const extractionResult = await extractScopeForInput({
     transcript: input.transcript,
     typedNotes: input.typedNotes ?? "",
@@ -2300,18 +2357,14 @@ async function createQuote(db: SupabaseClient, request: Request) {
     extraction: fallbackExtraction(input.transcript, input.typedNotes ?? "", input.checklist as PainterChecklist)
   }));
   console.info("SnapQuote quote extraction source", { source: extractionResult.source });
-  const extractedLines = lineItemsFromExtraction({
-    tasks: extractionResult.extraction.tasks,
-    existingLines: draft.lineItems,
-    priceBookItems,
-    startPosition: draft.lineItems.length
+  const draft = buildDraftFromEvidence({
+    checklist: input.checklist as PainterChecklist,
+    transcript: input.transcript,
+    extraction: extractionResult.extraction,
+    priceBookItems
   });
-  const lineItems = [...draft.lineItems, ...extractedLines].map((line, index) => ({ ...line, position: index }));
-  const scopeNotes = uniqueStrings([
-    ...draft.scopeNotes,
-    ...extractionResult.extraction.site_conditions,
-    ...extractionResult.extraction.questions_for_contractor.map((question) => `Question: ${question}`)
-  ]);
+  const lineItems = draft.lineItems;
+  const scopeNotes = draft.scopeNotes;
   const discount: QuoteDiscount = { type: "none", value: 0 };
   const totals = computeTotalsIfReady({
     lineItems,
@@ -2363,6 +2416,39 @@ async function publicEstimateOrg(db: SupabaseClient, orgId: string) {
   };
 }
 
+async function createPublicRequestMediaUpload(db: SupabaseClient, request: Request) {
+  const input = parse(publicRequestMediaUploadSchema, await request.json());
+  if (typeof input.company === "string" && input.company.trim().length > 0) {
+    throw new HttpError(400, "Upload could not be prepared.");
+  }
+
+  enforceRateLimit(request, ["public_request_upload", input.orgId, requestClientKey(request)], 4, 10 * 60_000);
+  await single(db.from("snapquote_orgs").select("id").eq("id", input.orgId));
+
+  const bucket = "snapquote-request-media";
+  const { error: bucketError } = await db.storage.createBucket(bucket, {
+    public: false,
+    fileSizeLimit: 60_000_000,
+    allowedMimeTypes: ["video/mp4", "video/quicktime", "video/webm"]
+  });
+  if (bucketError && !bucketError.message.toLowerCase().includes("already exists")) {
+    throw bucketError;
+  }
+
+  const uploadId = crypto.randomUUID();
+  const storagePath = `${input.orgId}/pending/${uploadId}-${safeStorageName(input.fileName)}`;
+  const { data, error } = await db.storage.from(bucket).createSignedUploadUrl(storagePath);
+  if (error) throw error;
+
+  return {
+    uploadId,
+    bucket,
+    storagePath,
+    signedUrl: data.signedUrl,
+    expiresInSeconds: 2 * 60 * 60
+  };
+}
+
 async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
   const input = parse(websiteEstimateSchema, await request.json());
 
@@ -2377,8 +2463,17 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
   const checklist = input.checklist as PainterChecklist;
   const priceBookItems = await listPriceBook(db, input.orgId);
   const transcript = websiteEstimateTranscript(input);
-  const draft = createPainterDraftLines({ checklist, transcript, priceBookItems });
-  const lineItems = draft.lineItems.map((line, index) => ({ ...line, position: index }));
+  const extractionResult = await extractScopeForInput({
+    transcript,
+    typedNotes: "",
+    checklist
+  }).catch(() => ({
+    source: "fallback" as const,
+    extraction: fallbackExtraction(transcript, "", checklist)
+  }));
+  console.info("SnapQuote website request extraction source", { source: extractionResult.source });
+  const draft = buildDraftFromEvidence({ checklist, transcript, extraction: extractionResult.extraction, priceBookItems });
+  const lineItems = draft.lineItems;
   const range = websiteEstimateRange(lineItems, Number(org.default_tax_rate));
   const city = input.city?.trim() || deriveCustomerCity(input.address);
   const email = normalizedEmail(input.customer.email);
@@ -2394,7 +2489,7 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
     "Source: public quote request page.",
     ...draft.scopeNotes
   ]);
-  const scopeSummary = buildScopeSummary(input.customer.name, checklist, scopeNotes);
+  const scopeSummary = extractionResult.extraction.scope_summary || buildScopeSummary(input.customer.name, checklist, scopeNotes);
   const customer = await upsertCustomerFromInput(db, input.orgId, {
     name: input.customer.name,
     email,
@@ -2431,7 +2526,10 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
   must(await db.from("snapquote_quote_public_links").insert({ quote_id: quote.id, token: publicToken() }));
 
   const requestId = crypto.randomUUID();
-  const photoPaths = await uploadWebsiteRequestPhotos(db, input.orgId, requestId, input.photos);
+  const uploadedPhotos = await uploadWebsiteRequestPhotos(db, input.orgId, requestId, input.photos);
+  const uploadedVideos = await finalizeWebsiteRequestVideos(db, input.orgId, requestId, input.videos);
+  const uploadedMedia = [...uploadedPhotos, ...uploadedVideos];
+  const photoPaths = uploadedPhotos.map((photo) => photo.storagePath);
   const estimateRequest = await single(db.from("snapquote_website_estimate_requests").insert({
     id: requestId,
     org_id: input.orgId,
@@ -2448,6 +2546,7 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
     notes: input.notes,
     timing: input.timing,
     photo_paths: photoPaths,
+    analysis_status: uploadedMedia.length > 0 ? "not_requested" : "no_media",
     estimate_low_cents: range.lowCents,
     estimate_high_cents: range.highCents,
     estimate_currency: orgCurrency(org),
@@ -2460,9 +2559,25 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
     ip_hash: await sha256Hex(clientKey)
   }).select("*"));
 
+  if (uploadedMedia.length > 0) {
+    must(await db.from("snapquote_request_media").insert(uploadedMedia.map((media) => ({
+      request_id: estimateRequest.id,
+      org_id: input.orgId,
+      media_type: media.mediaType,
+      storage_bucket: media.storageBucket,
+      storage_path: media.storagePath,
+      file_name: media.fileName,
+      content_type: media.contentType,
+      duration_seconds: media.durationSeconds,
+      analysis: media.analysis,
+      processing_status: "uploaded"
+    }))));
+  }
+
   await createEvent(db, quote.id, "created", {
     source: "website_request",
     estimateRequestId: estimateRequest.id,
+    extractionSource: extractionResult.source,
     unpricedLineCount: range.unpricedLineCount,
     unconfirmedLineCount: range.unconfirmedLineCount
   });
@@ -2582,7 +2697,15 @@ async function uploadWebsiteRequestPhotos(
     throw bucketError;
   }
 
-  const paths: string[] = [];
+  const uploadedPhotos: Array<{
+    mediaType: "photo";
+    storageBucket: string;
+    storagePath: string;
+    fileName: string;
+    contentType: string;
+    durationSeconds: null;
+    analysis: Record<string, unknown>;
+  }> = [];
 
   for (const photo of photos) {
     const objectPath = `${orgId}/${requestId}/${crypto.randomUUID()}-${safeStorageName(photo.fileName)}`;
@@ -2591,10 +2714,65 @@ async function uploadWebsiteRequestPhotos(
       contentType: photo.contentType,
       upsert: false
     }));
-    paths.push(objectPath);
+    uploadedPhotos.push({
+      mediaType: "photo",
+      storageBucket: bucket,
+      storagePath: objectPath,
+      fileName: photo.fileName,
+      contentType: photo.contentType,
+      durationSeconds: null,
+      analysis: {}
+    });
   }
 
-  return paths;
+  return uploadedPhotos;
+}
+
+async function finalizeWebsiteRequestVideos(
+  db: SupabaseClient,
+  orgId: string,
+  requestId: string,
+  videos: z.infer<typeof websiteEstimateSchema>["videos"]
+) {
+  const bucket = "snapquote-request-media";
+  const uploadedVideos: Array<{
+    mediaType: "video";
+    storageBucket: string;
+    storagePath: string;
+    fileName: string;
+    contentType: string;
+    durationSeconds: number;
+    analysis: Record<string, unknown>;
+  }> = [];
+
+  for (const video of videos) {
+    const pendingPrefix = `${orgId}/pending/`;
+    if (!video.storagePath.startsWith(pendingPrefix) || video.storagePath.includes("..")) {
+      throw new HttpError(400, "Video upload does not belong to this request link.");
+    }
+
+    const { data: info, error: infoError } = await db.storage.from(bucket).info(video.storagePath);
+    if (infoError) throw new HttpError(400, "Video upload was not completed. Try uploading it again.");
+    const storedSize = typeof info.size === "number" ? info.size : video.byteSize;
+    if (storedSize <= 0 || storedSize > 60_000_000) {
+      throw new HttpError(400, "Video must be smaller than 60 MB.");
+    }
+
+    const finalPath = `${orgId}/${requestId}/${crypto.randomUUID()}-${safeStorageName(video.fileName)}`;
+    const { error: moveError } = await db.storage.from(bucket).move(video.storagePath, finalPath);
+    if (moveError) throw moveError;
+    uploadedVideos.push({
+      mediaType: "video",
+      storageBucket: bucket,
+      storagePath: finalPath,
+      fileName: video.fileName,
+      contentType: video.contentType,
+      durationSeconds: video.durationSeconds,
+      analysis: {}
+    });
+  }
+
+  return uploadedVideos;
 }
 
 async function listWebsiteRequests(db: SupabaseClient, orgId: string) {
@@ -2629,6 +2807,311 @@ async function getWebsiteRequest(db: SupabaseClient, request: Request, requestId
   }
 
   return websiteRequestResponse(db, orgId, row);
+}
+
+async function analyzeWebsiteRequestMedia(db: SupabaseClient, request: Request, requestId: string) {
+  const orgId = orgIdFromRequest(request);
+  const requestRow = await single(
+    db.from("snapquote_website_estimate_requests").select("*").eq("id", requestId).eq("org_id", orgId)
+  );
+  const { data: mediaRows, error: mediaError } = await db
+    .from("snapquote_request_media")
+    .select("*")
+    .eq("request_id", requestId)
+    .eq("org_id", orgId)
+    .eq("media_type", "photo")
+    .order("created_at", { ascending: true });
+
+  if (mediaError) throw mediaError;
+  if (!mediaRows || mediaRows.length === 0) {
+    throw new HttpError(409, "Add at least one photo before running photo analysis.");
+  }
+
+  const startedAt = new Date().toISOString();
+  must(await db.from("snapquote_website_estimate_requests").update({
+    analysis_status: "processing",
+    analysis_error: null,
+    analysis_started_at: startedAt,
+    analysis_completed_at: null
+  }).eq("id", requestId).eq("org_id", orgId));
+  must(await db.from("snapquote_request_media").update({
+    processing_status: "processing",
+    analysis_error: null
+  }).in("id", mediaRows.map((media) => media.id)).eq("org_id", orgId));
+
+  try {
+    const result = await analyzeRequestPhotosWithOpenAI(db, requestRow, mediaRows);
+    const completedAt = new Date().toISOString();
+    const version = "photo-v1";
+
+    must(await db.from("snapquote_request_analysis_suggestions").delete()
+      .eq("request_id", requestId)
+      .eq("org_id", orgId)
+      .eq("status", "pending"));
+
+    const suggestions = photoAnalysisSuggestionRows(requestId, orgId, result.analysis);
+    if (suggestions.length > 0) {
+      must(await db.from("snapquote_request_analysis_suggestions").insert(suggestions));
+    }
+
+    for (const media of mediaRows) {
+      const mediaAnalysis = {
+        tasks: result.analysis.tasks.filter((task) => task.evidence_media_ids.includes(media.id)),
+        siteConditions: result.analysis.site_conditions.filter((condition) => condition.evidence_media_ids.includes(media.id))
+      };
+      must(await db.from("snapquote_request_media").update({
+        processing_status: "completed",
+        analysis: mediaAnalysis,
+        analysis_model: result.model,
+        analysis_version: version,
+        analysis_error: null
+      }).eq("id", media.id).eq("org_id", orgId));
+    }
+
+    must(await db.from("snapquote_website_estimate_requests").update({
+      analysis_status: "completed",
+      analysis_model: result.model,
+      analysis_version: version,
+      analysis_error: null,
+      analysis_summary: result.analysis,
+      analysis_completed_at: completedAt
+    }).eq("id", requestId).eq("org_id", orgId));
+
+    return getWebsiteRequestWithoutOpening(db, orgId, requestId);
+  } catch (error) {
+    const message = messageFromError(error).slice(0, 1000);
+    must(await db.from("snapquote_website_estimate_requests").update({
+      analysis_status: "failed",
+      analysis_error: message,
+      analysis_completed_at: new Date().toISOString()
+    }).eq("id", requestId).eq("org_id", orgId));
+    must(await db.from("snapquote_request_media").update({
+      processing_status: "failed",
+      analysis_error: message
+    }).in("id", mediaRows.map((media) => media.id)).eq("org_id", orgId));
+    console.warn("SnapQuote photo analysis failed", { requestId, message });
+    throw new HttpError(502, "Photo analysis could not be completed. Try again.");
+  }
+}
+
+async function getWebsiteRequestWithoutOpening(db: SupabaseClient, orgId: string, requestId: string) {
+  const row = await single(
+    db.from("snapquote_website_estimate_requests").select("*").eq("id", requestId).eq("org_id", orgId)
+  );
+  return websiteRequestResponse(db, orgId, row);
+}
+
+async function analyzeRequestPhotosWithOpenAI(
+  db: SupabaseClient,
+  requestRow: Record<string, any>,
+  mediaRows: Array<Record<string, any>>
+) {
+  const openAiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!openAiKey) throw new Error("OPENAI_API_KEY is not configured");
+
+  const model = Deno.env.get("OPENAI_VISION_MODEL") ?? Deno.env.get("OPENAI_MODEL") ?? "gpt-4.1-mini";
+  const imageContent: Array<Record<string, unknown>> = [];
+
+  for (const media of mediaRows) {
+    const { data, error } = await db.storage
+      .from(String(media.storage_bucket))
+      .createSignedUrl(String(media.storage_path), 10 * 60);
+    if (error) throw error;
+    imageContent.push({ type: "input_text", text: `Photo evidence ID: ${media.id}` });
+    imageContent.push({ type: "input_image", image_url: data.signedUrl, detail: "high" });
+  }
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "authorization": `Bearer ${openAiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: "system",
+          content: [
+            "Analyze job-site photos for a painting contractor.",
+            "Report only visible evidence relevant to scope; never invent prices, measurements, quantities, materials, or hidden damage.",
+            "Do not identify or describe people. Ignore faces and personal attributes.",
+            "Use the supplied photo evidence IDs exactly. Every task and site condition must cite at least one photo.",
+            "If coverage is incomplete or a detail cannot be verified visually, add a contractor question or coverage warning.",
+            "Quantities must be null unless directly countable in the photos."
+          ].join(" ")
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: JSON.stringify(photoAnalysisUserContext(requestRow, mediaRows.map((media) => media.id)))
+            },
+            ...imageContent
+          ]
+        }
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "snapquote_photo_analysis",
+          strict: true,
+          schema: photoAnalysisJsonSchema()
+        }
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(`OpenAI photo analysis failed with ${response.status}: ${message.slice(0, 500)}`);
+  }
+
+  const body = await response.json();
+  const analysis = parse(photoAnalysisResultSchema, JSON.parse(extractResponseText(body)));
+  assertPhotoAnalysisEvidence(analysis, mediaRows.map((media) => String(media.id)));
+
+  return { model, analysis };
+}
+
+async function acceptWebsiteRequestSuggestion(
+  db: SupabaseClient,
+  request: Request,
+  requestId: string,
+  suggestionId: string
+) {
+  const orgId = orgIdFromRequest(request);
+  const requestRow = await single(
+    db.from("snapquote_website_estimate_requests").select("*").eq("id", requestId).eq("org_id", orgId)
+  );
+  const suggestion = await single(
+    db.from("snapquote_request_analysis_suggestions")
+      .select("*")
+      .eq("id", suggestionId)
+      .eq("request_id", requestId)
+      .eq("org_id", orgId)
+  );
+
+  if (suggestion.status !== "pending") {
+    throw new HttpError(409, "This photo suggestion has already been reviewed.");
+  }
+  if (!requestRow.quote_id) {
+    throw new HttpError(409, "This request does not have a draft quote.");
+  }
+
+  const quote = await single(
+    db.from("snapquote_quotes").select("*").eq("id", requestRow.quote_id).eq("org_id", orgId)
+  ) as QuoteRow;
+  if (quote.status !== "draft") {
+    throw new HttpError(409, "Photo suggestions can only be added to a draft quote.");
+  }
+
+  let quoteLineItemId: string | null = null;
+  if (suggestion.suggestion_type === "task") {
+    const existingLines = await listLines(db, quote.id);
+    const priceBookItems = await listPriceBook(db, orgId);
+    const generated = lineItemsFromExtraction({
+      tasks: [{
+        description: suggestion.description,
+        quantity: suggestion.quantity === null ? null : Number(suggestion.quantity),
+        unit: suggestion.unit,
+        kind: suggestion.line_kind ?? "labour",
+        assumptions: responseStringArray(suggestion.assumptions),
+        confidence: 1
+      }],
+      existingLines,
+      priceBookItems,
+      startPosition: existingLines.length
+    });
+
+    if (generated.length === 0) {
+      throw new HttpError(409, "This work is already covered by the draft quote.");
+    }
+
+    const generatedLine = generated[0];
+    const priceConfidence = generatedLine.priceConfidence ?? 0;
+    const requiresPriceReview = generatedLine.unitPriceCents === null || priceConfidence < 0.95;
+    const acceptedLine: QuoteLineItem = {
+      ...generatedLine,
+      scopeConfidence: 1,
+      requiresReview: requiresPriceReview,
+      matchConfidence: generatedLine.unitPriceCents === null ? 0 : Math.min(1, priceConfidence),
+      matchState: generatedLine.unitPriceCents === null ? "red" : requiresPriceReview ? "yellow" : "green",
+      evidenceRefs: uniqueStrings([
+        ...responseStringArray(generatedLine.evidenceRefs),
+        ...responseStringArray(suggestion.evidence_media_ids).map((id) => `photo:${id}`),
+        "provider_accept"
+      ])
+    };
+    const inserted = await single(
+      db.from("snapquote_quote_line_items").insert(lineInsert(quote.id, acceptedLine)).select("*")
+    );
+    quoteLineItemId = inserted.id;
+    await recomputeQuoteTotals(db, orgId, quote.id);
+    await updateWebsiteRequestDraftCounts(db, requestRow, quote);
+  } else {
+    const notePrefix = suggestion.suggestion_type === "question" ? "Question" : "Photo observation";
+    const scopeNotes = uniqueStrings([
+      ...responseStringArray(quote.scope_notes),
+      `${notePrefix}: ${suggestion.description}`
+    ]);
+    must(await db.from("snapquote_quotes").update({ scope_notes: scopeNotes }).eq("id", quote.id).eq("org_id", orgId));
+  }
+
+  must(await db.from("snapquote_request_analysis_suggestions").update({
+    status: "accepted",
+    quote_line_item_id: quoteLineItemId,
+    decided_at: new Date().toISOString()
+  }).eq("id", suggestionId).eq("request_id", requestId).eq("org_id", orgId));
+
+  return getWebsiteRequestWithoutOpening(db, orgId, requestId);
+}
+
+async function rejectWebsiteRequestSuggestion(
+  db: SupabaseClient,
+  request: Request,
+  requestId: string,
+  suggestionId: string
+) {
+  const orgId = orgIdFromRequest(request);
+  await single(
+    db.from("snapquote_website_estimate_requests").select("id").eq("id", requestId).eq("org_id", orgId)
+  );
+  const suggestion = await single(
+    db.from("snapquote_request_analysis_suggestions")
+      .select("*")
+      .eq("id", suggestionId)
+      .eq("request_id", requestId)
+      .eq("org_id", orgId)
+  );
+  if (suggestion.status !== "pending") {
+    throw new HttpError(409, "This photo suggestion has already been reviewed.");
+  }
+
+  must(await db.from("snapquote_request_analysis_suggestions").update({
+    status: "rejected",
+    decided_at: new Date().toISOString()
+  }).eq("id", suggestionId).eq("request_id", requestId).eq("org_id", orgId));
+
+  return getWebsiteRequestWithoutOpening(db, orgId, requestId);
+}
+
+async function updateWebsiteRequestDraftCounts(
+  db: SupabaseClient,
+  requestRow: Record<string, any>,
+  quote: QuoteRow
+) {
+  const lineItems = await listLines(db, quote.id);
+  const range = websiteEstimateRange(lineItems, Number(quote.tax_rate));
+  must(await db.from("snapquote_website_estimate_requests").update({
+    estimate_low_cents: range.lowCents,
+    estimate_high_cents: range.highCents,
+    line_count: lineItems.length,
+    unpriced_line_count: range.unpricedLineCount,
+    unconfirmed_line_count: range.unconfirmedLineCount,
+    disclaimer: range.disclaimer
+  }).eq("id", requestRow.id).eq("org_id", requestRow.org_id));
 }
 
 async function contactWebsiteRequest(db: SupabaseClient, request: Request, requestId: string) {
@@ -2676,7 +3159,34 @@ async function websiteRequestResponse(db: SupabaseClient, orgId: string, row: Re
   const photoPaths = Array.isArray(row.photo_paths)
     ? row.photo_paths.filter((value: unknown): value is string => typeof value === "string")
     : [];
-  const photoUrls = await Promise.all(photoPaths.map(async (path) => {
+  const [mediaResult, suggestionResult, quote] = await Promise.all([
+    db.from("snapquote_request_media").select("*").eq("request_id", row.id).eq("org_id", orgId).order("created_at", { ascending: true }),
+    db.from("snapquote_request_analysis_suggestions").select("*").eq("request_id", row.id).eq("org_id", orgId).order("created_at", { ascending: true }),
+    row.quote_id ? getQuoteResponse(db, orgId, row.quote_id) : Promise.resolve(null)
+  ]);
+  if (mediaResult.error) throw mediaResult.error;
+  if (suggestionResult.error) throw suggestionResult.error;
+
+  const media = await Promise.all((mediaResult.data ?? []).map(async (item) => {
+    const { data, error } = await db.storage.from(item.storage_bucket).createSignedUrl(item.storage_path, 60 * 60);
+    if (error) {
+      console.warn("Could not sign request media", { path: item.storage_path, message: error.message });
+    }
+    return {
+      id: item.id,
+      type: item.media_type,
+      fileName: item.file_name,
+      contentType: item.content_type,
+      processingStatus: item.processing_status,
+      url: error ? null : data.signedUrl,
+      analysis: item.analysis ?? {},
+      analysisError: item.analysis_error
+    };
+  }));
+  const mediaPhotoUrls = media
+    .filter((item) => item.type === "photo" && item.url !== null)
+    .map((item) => item.url as string);
+  const legacyPhotoUrls = mediaPhotoUrls.length > 0 ? [] : await Promise.all(photoPaths.map(async (path) => {
     const { data, error } = await db.storage.from("snapquote-request-photos").createSignedUrl(path, 60 * 60);
     if (error) {
       console.warn("Could not sign request photo", { path, message: error.message });
@@ -2684,7 +3194,6 @@ async function websiteRequestResponse(db: SupabaseClient, orgId: string, row: Re
     }
     return data.signedUrl;
   }));
-  const quote = row.quote_id ? await getQuoteResponse(db, orgId, row.quote_id) : null;
 
   return {
     id: row.id,
@@ -2703,7 +3212,20 @@ async function websiteRequestResponse(db: SupabaseClient, orgId: string, row: Re
     checklist: row.checklist,
     notes: row.notes,
     timing: row.timing ?? "flexible",
-    photoUrls: photoUrls.filter((value): value is string => value !== null),
+    photoUrls: mediaPhotoUrls.length > 0
+      ? mediaPhotoUrls
+      : legacyPhotoUrls.filter((value): value is string => value !== null),
+    media,
+    analysis: {
+      status: row.analysis_status ?? (photoPaths.length > 0 ? "not_requested" : "no_media"),
+      model: row.analysis_model,
+      version: row.analysis_version,
+      error: row.analysis_error,
+      summary: row.analysis_summary ?? {},
+      startedAt: row.analysis_started_at,
+      completedAt: row.analysis_completed_at,
+      suggestions: (suggestionResult.data ?? []).map(requestAnalysisSuggestionResponse)
+    },
     lineCount: row.line_count,
     unpricedLineCount: row.unpriced_line_count,
     unconfirmedLineCount: row.unconfirmed_line_count,
@@ -2716,6 +3238,30 @@ async function websiteRequestResponse(db: SupabaseClient, orgId: string, row: Re
     updatedAt: row.updated_at,
     quote
   };
+}
+
+function requestAnalysisSuggestionResponse(row: Record<string, any>) {
+  return {
+    id: row.id,
+    type: row.suggestion_type,
+    description: row.description,
+    quantity: row.quantity === null ? null : Number(row.quantity),
+    unit: row.unit,
+    kind: row.line_kind,
+    confidence: Number(row.confidence),
+    assumptions: responseStringArray(row.assumptions),
+    evidenceMediaIds: responseStringArray(row.evidence_media_ids),
+    status: row.status,
+    quoteLineItemId: row.quote_line_item_id,
+    decidedAt: row.decided_at,
+    createdAt: row.created_at
+  };
+}
+
+function responseStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function publicEstimateOrgResponse(row: Record<string, unknown>) {
@@ -3135,7 +3681,14 @@ async function confirmLine(db: SupabaseClient, request: Request, quoteId: string
       .is("archived_at", null)
       .select("*")
   );
-  must(await db.from("snapquote_quote_line_items").update({ match_state: "green", match_confidence: 1 }).eq("id", lineId));
+  const scopeConfidence = line.scope_confidence ?? 1;
+  const scopeNeedsReview = scopeConfidence < 0.95;
+  must(await db.from("snapquote_quote_line_items").update({
+    price_confidence: 1,
+    requires_review: scopeNeedsReview,
+    match_state: scopeNeedsReview ? "yellow" : "green",
+    match_confidence: Math.min(scopeConfidence, 1)
+  }).eq("id", lineId));
   await recomputeQuoteTotals(db, orgId, quoteId);
 
   return {
@@ -3191,6 +3744,9 @@ async function saveLineToPriceBook(db: SupabaseClient, request: Request, quoteId
     source: "price_book",
     price_book_item_id: item.id,
     price_book_item_key: item.key,
+    scope_confidence: 1,
+    price_confidence: 1,
+    requires_review: false,
     match_confidence: 1,
     match_state: "green"
   }).eq("id", lineId));
@@ -5371,127 +5927,6 @@ function fallbackExtraction(transcript: string, typedNotes: string, checklist: P
       ? ["Confirm quantities for the unmeasured extra work before sending."]
       : []
   };
-}
-
-function lineItemsFromExtraction(params: {
-  tasks: z.infer<typeof extractionResultSchema>["tasks"];
-  existingLines: QuoteLineItem[];
-  priceBookItems: PriceBookItem[];
-  startPosition: number;
-}) {
-  const lines: QuoteLineItem[] = [];
-
-  for (const task of params.tasks) {
-    if (isTaskAlreadyCovered(task.description, [...params.existingLines, ...lines])) {
-      continue;
-    }
-
-    const item = bestPriceBookMatch(task.description, params.priceBookItems);
-    const quantity = task.quantity ?? 1;
-    const unit = normalizeExtractedUnit(task.unit);
-    const position = params.startPosition + lines.length;
-
-    if (item) {
-      lines.push(lineFromPriceBook(item, task.description, quantity, null, position));
-      continue;
-    }
-
-    lines.push({
-      position,
-      description: task.description,
-      quantity,
-      unit,
-      unitPriceCents: null,
-      kind: task.kind,
-      source: "manual",
-      priceBookItemId: null,
-      priceBookItemKey: null,
-      matchConfidence: task.confidence,
-      matchState: "red"
-    });
-  }
-
-  return lines;
-}
-
-function isTaskAlreadyCovered(description: string, lines: QuoteLineItem[]) {
-  const normalized = normalizeText(description);
-  const buckets = [
-    /paint walls?/,
-    /paint ceilings?/,
-    /paint trim/,
-    /paint doors?/,
-    /patch .*holes?/,
-    /primer|prime/,
-    /wallpaper/,
-    /material allowance|paint.*material/
-  ];
-
-  if (buckets.some((bucket) => bucket.test(normalized) && lines.some((line) => bucket.test(normalizeText(line.description))))) {
-    return true;
-  }
-
-  const taskTokens = tokenSet(description);
-  return lines.some((line) => overlapScore(taskTokens, tokenSet(line.description)) >= 0.72);
-}
-
-function bestPriceBookMatch(description: string, items: PriceBookItem[]) {
-  const descriptionTokens = tokenSet(description);
-  let best: { item: PriceBookItem; score: number } | null = null;
-
-  for (const item of items) {
-    const score = Math.max(
-      overlapScore(descriptionTokens, tokenSet(item.name)),
-      overlapScore(descriptionTokens, tokenSet(item.description)),
-      item.key ? overlapScore(descriptionTokens, tokenSet(item.key.replaceAll("_", " "))) : 0
-    );
-
-    if (!best || score > best.score) {
-      best = { item, score };
-    }
-  }
-
-  return best && best.score >= 0.55 ? best.item : null;
-}
-
-function normalizeExtractedUnit(unit: string | null): QuoteLineItem["unit"] {
-  if (
-    unit === "room" ||
-    unit === "each" ||
-    unit === "hour" ||
-    unit === "flat" ||
-    unit === "sqft" ||
-    unit === "lnft" ||
-    unit === "day"
-  ) {
-    return unit;
-  }
-
-  return "flat";
-}
-
-function tokenSet(value: string) {
-  return new Set(normalizeText(value).split(" ").filter((token) => token.length >= 3));
-}
-
-function overlapScore(left: Set<string>, right: Set<string>) {
-  if (left.size === 0 || right.size === 0) {
-    return 0;
-  }
-
-  let matches = 0;
-
-  for (const token of left) {
-    if (right.has(token)) {
-      matches += 1;
-    }
-  }
-
-  return matches / Math.max(left.size, right.size);
-}
-
-function normalizeText(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function uniqueStrings(values: string[]) {
