@@ -438,6 +438,11 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
                   priceBookItemId: null,
                   matchConfidence: null,
                   matchState: "green" as const,
+                  scopeConfidence: 1,
+                  priceConfidence: 1,
+                  requiresReview: false,
+                  assumptions: [],
+                  evidenceRefs: ["provider_edit"],
                 }
               : line,
           ),
@@ -467,6 +472,11 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
           priceBookItemId: null,
           matchConfidence: null,
           matchState: "green",
+          scopeConfidence: 1,
+          priceConfidence: 1,
+          requiresReview: false,
+          assumptions: [],
+          evidenceRefs: ["provider_edit"],
         };
 
         return withUpdatedAt({
@@ -539,8 +549,10 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
                   candidateLine.id === lineId
                     ? {
                         ...candidateLine,
-                        matchState: "green" as const,
-                        matchConfidence: 1,
+                        priceConfidence: 1,
+                        requiresReview: (candidateLine.scopeConfidence ?? 1) < 0.95,
+                        matchState: (candidateLine.scopeConfidence ?? 1) < 0.95 ? "yellow" as const : "green" as const,
+                        matchConfidence: Math.min(candidateLine.scopeConfidence ?? 1, 1),
                       }
                     : candidateLine,
                 ),
@@ -603,6 +615,11 @@ export const useQuoteStore = create<QuoteStoreState>()(persist((set, get) => ({
                         priceBookItemKey: item.key,
                         matchConfidence: 1,
                         matchState: "green" as const,
+                        scopeConfidence: 1,
+                        priceConfidence: 1,
+                        requiresReview: false,
+                        assumptions: [],
+                        evidenceRefs: ["provider_edit"],
                       }
                     : candidateLine,
                 ),

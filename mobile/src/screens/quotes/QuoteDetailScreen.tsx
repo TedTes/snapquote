@@ -862,6 +862,9 @@ function lineSubtitle(line: StoredLineItem): string {
   }
 
   if (line.matchState === "yellow") {
+    if ((line.priceConfidence ?? line.matchConfidence ?? 0) >= 0.95) {
+      return "Scope suggestion · review before sending";
+    }
     return "Starter price — confirm once";
   }
 
@@ -874,6 +877,9 @@ function lineSourceText(line: StoredLineItem, tone: "green" | "yellow" | "red"):
   }
 
   if (tone === "yellow") {
+    if ((line.priceConfidence ?? line.matchConfidence ?? 0) >= 0.95) {
+      return "Price confirmed · scope needs review";
+    }
     return "Starter price · confirm once";
   }
 

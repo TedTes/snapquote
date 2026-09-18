@@ -102,6 +102,7 @@ export default function EditLineScreen() {
   const isYellowConfirmMode =
     existingLine !== undefined &&
     existingLine.matchState === "yellow" &&
+    (existingLine.priceConfidence ?? existingLine.matchConfidence ?? 0) < 1 &&
     !overriding;
 
   async function handleConfirm() {
@@ -161,6 +162,11 @@ export default function EditLineScreen() {
       priceBookItemKey: null,
       matchConfidence: null,
       matchState: "green",
+      scopeConfidence: 1,
+      priceConfidence: 1,
+      requiresReview: false,
+      assumptions: [],
+      evidenceRefs: ["provider_edit"],
     };
 
     try {
@@ -311,7 +317,7 @@ export default function EditLineScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {existingLine ? (
           <Chip
-            label={chipLabel(existingLine.matchState)}
+            label={chipLabel(existingLine)}
             tone={existingLine.matchState}
           />
         ) : null}
@@ -481,12 +487,16 @@ function unitChipLabel(unit: QuoteUnit): string {
   return unit;
 }
 
-function chipLabel(matchState: "green" | "yellow" | "red"): string {
-  if (matchState === "green") {
+function chipLabel(line: QuoteLineItem): string {
+  if (line.matchState === "green") {
     return "Priced";
   }
 
-  if (matchState === "yellow") {
+  if (line.matchState === "yellow" && (line.priceConfidence ?? line.matchConfidence ?? 0) >= 0.95) {
+    return "Scope needs review";
+  }
+
+  if (line.matchState === "yellow") {
     return "Suggested starter price";
   }
 
