@@ -294,7 +294,11 @@ export function createPainterDraftLines(params: {
         description: "Patch nail holes",
         quantity: Math.max(totalRooms, 1),
         size: dominantRoomSize(params.checklist),
-        position: lines.length
+        position: lines.length,
+        scopeConfidence: 0.85,
+        requiresScopeReview: true,
+        assumptions: ["Customer notes mentioned patching nail holes."],
+        evidenceRefs: ["customer_notes"]
       })
     );
   }
@@ -307,7 +311,11 @@ export function createPainterDraftLines(params: {
         description: "Primer coat",
         quantity: Math.max(totalRooms, 1),
         size: dominantRoomSize(params.checklist),
-        position: lines.length
+        position: lines.length,
+        scopeConfidence: 0.82,
+        requiresScopeReview: true,
+        assumptions: ["Customer notes mentioned primer."],
+        evidenceRefs: ["customer_notes"]
       })
     );
   }
@@ -318,7 +326,11 @@ export function createPainterDraftLines(params: {
         item: lookup.get("material_allowance") ?? null,
         description: "Material allowance",
         quantity: 1,
-        position: lines.length
+        position: lines.length,
+        scopeConfidence: 0.8,
+        requiresScopeReview: true,
+        assumptions: ["Customer notes mentioned a material allowance."],
+        evidenceRefs: ["customer_notes"]
       })
     );
   }
@@ -335,7 +347,12 @@ export function createPainterDraftLines(params: {
       priceBookItemId: null,
       priceBookItemKey: "remove_wallpaper",
       matchConfidence: 0,
-      matchState: "red"
+      matchState: "red",
+      scopeConfidence: 0.78,
+      priceConfidence: 0,
+      requiresReview: true,
+      assumptions: ["Customer notes mentioned wallpaper removal without a measured quantity."],
+      evidenceRefs: ["customer_notes"]
     });
   }
 
@@ -395,8 +412,16 @@ function lineFromPriceBook(params: {
   description: string;
   quantity: number;
   position: number;
-  size?: "small" | "medium" | "large";
+  size?: "small" | "medium" | "large" | undefined;
+  scopeConfidence?: number;
+  requiresScopeReview?: boolean;
+  assumptions?: string[];
+  evidenceRefs?: string[];
 }): QuoteLineItem {
+  const scopeConfidence = params.scopeConfidence ?? 1;
+  const assumptions = params.assumptions ?? ["Scope came from the customer checklist."];
+  const evidenceRefs = params.evidenceRefs ?? ["checklist"];
+
   if (params.item === null) {
     return {
       position: params.position,
@@ -409,12 +434,22 @@ function lineFromPriceBook(params: {
       priceBookItemId: null,
       priceBookItemKey: null,
       matchConfidence: 0,
-      matchState: "red"
+      matchState: "red",
+      scopeConfidence,
+      priceConfidence: 0,
+      requiresReview: true,
+      assumptions,
+      evidenceRefs
     };
   }
 
-  const unitPriceCents = resolvePriceForRoomSize(params.item, params.size ?? "medium");
+  const unitPriceCents = params.item.pricing.type === "room_size"
+    ? params.size ? resolvePriceForRoomSize(params.item, params.size) : null
+    : params.item.pricing.unitPriceCents;
   const confirmed = params.item.confirmedAt !== null;
+  const priceConfidence = confirmed ? 1 : 0.7;
+  const requiresReview = params.requiresScopeReview === true || !confirmed || unitPriceCents === null;
+  const matchState = unitPriceCents === null ? "red" : requiresReview ? "yellow" : "green";
 
   return {
     position: params.position,
@@ -426,8 +461,13 @@ function lineFromPriceBook(params: {
     source: "price_book",
     priceBookItemId: params.item.id,
     priceBookItemKey: params.item.key,
-    matchConfidence: confirmed ? 1 : 0.7,
-    matchState: confirmed ? "green" : "yellow"
+    matchConfidence: Math.min(scopeConfidence, priceConfidence),
+    matchState,
+    scopeConfidence,
+    priceConfidence,
+    requiresReview,
+    assumptions,
+    evidenceRefs
   };
 }
 
@@ -514,7 +554,11 @@ function totalRoomCount(checklist: PainterChecklist): number {
   return checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
 }
 
-function dominantRoomSize(checklist: PainterChecklist): "small" | "medium" | "large" {
+function dominantRoomSize(checklist: PainterChecklist): "small" | "medium" | "large" | undefined {
+  if (totalRoomCount(checklist) === 0) {
+    return undefined;
+  }
+
   if (checklist.rooms.large >= checklist.rooms.medium && checklist.rooms.large >= checklist.rooms.small) {
     return "large";
   }

@@ -121,6 +121,11 @@ export type QuoteLineItem = {
   priceBookItemKey?: string | null;
   matchConfidence: number | null;
   matchState: MatchState;
+  scopeConfidence?: number | null;
+  priceConfidence?: number | null;
+  requiresReview?: boolean;
+  assumptions?: string[];
+  evidenceRefs?: string[];
 };
 
 export type QuoteDiscount =
@@ -294,6 +299,11 @@ export type LineRow = {
   price_book_item_key: string | null;
   match_confidence: number | null;
   match_state: MatchState;
+  scope_confidence?: number | null;
+  price_confidence?: number | null;
+  requires_review?: boolean;
+  assumptions?: unknown;
+  evidence_refs?: unknown;
   created_at: string;
   updated_at: string;
 };
@@ -480,7 +490,12 @@ export function quoteLineFromRow(row: LineRow): QuoteLineItem & { id: string } {
     priceBookItemId: row.price_book_item_id,
     priceBookItemKey: row.price_book_item_key,
     matchConfidence: row.match_confidence,
-    matchState: row.match_state
+    matchState: row.match_state,
+    scopeConfidence: row.scope_confidence ?? (row.match_state === "red" ? row.match_confidence ?? 0.5 : 1),
+    priceConfidence: row.price_confidence ?? (row.unit_price_cents === null ? 0 : row.match_confidence ?? 0.7),
+    requiresReview: row.requires_review ?? row.match_state !== "green",
+    assumptions: stringArray(row.assumptions),
+    evidenceRefs: stringArray(row.evidence_refs)
   };
 }
 
@@ -498,7 +513,12 @@ export function lineInsert(quoteId: string, line: QuoteLineItem) {
     price_book_item_id: line.priceBookItemId,
     price_book_item_key: line.priceBookItemKey ?? null,
     match_confidence: line.matchConfidence,
-    match_state: line.matchState
+    match_state: line.matchState,
+    scope_confidence: line.scopeConfidence ?? (line.matchState === "red" ? line.matchConfidence ?? 0.5 : 1),
+    price_confidence: line.priceConfidence ?? (line.unitPriceCents === null ? 0 : line.matchConfidence ?? 0.7),
+    requires_review: line.requiresReview ?? line.matchState !== "green",
+    assumptions: line.assumptions ?? [],
+    evidence_refs: line.evidenceRefs ?? []
   };
 }
 
@@ -508,7 +528,7 @@ export function computeQuoteTotals(input: {
   taxRate: number;
 }): QuoteTotals {
   const subtotalCents = input.lineItems.reduce((sum, item) => {
-    if (item.matchState !== "green" || item.unitPriceCents === null) {
+    if (item.matchState !== "green" || item.unitPriceCents === null || item.requiresReview === true) {
       throw new Error("Cannot compute quote totals while line items are unpriced or unconfirmed");
     }
 
@@ -533,7 +553,9 @@ export function computeQuoteTotals(input: {
 
 export function getQuoteSendBlockers(lineItems: QuoteLineItem[]) {
   const redCount = lineItems.filter((line) => line.matchState === "red").length;
-  const yellowCount = lineItems.filter((line) => line.matchState === "yellow").length;
+  const yellowCount = lineItems.filter(
+    (line) => line.matchState === "yellow" || (line.matchState !== "red" && line.requiresReview === true)
+  ).length;
   const reasons: string[] = [];
 
   if (redCount > 0) {
@@ -655,12 +677,36 @@ export function createPainterDraftLines(params: {
 
   if (mentions(params.transcript, ["patch", "nail hole", "holes"])) {
     const rooms = totalRooms(params.checklist) || 1;
-    lines.push(lineFromPriceBook(lookup.get("patch_nail_holes") ?? null, "Patch nail holes", rooms, "medium", lines.length));
+    lines.push(lineFromPriceBook(
+      lookup.get("patch_nail_holes") ?? null,
+      "Patch nail holes",
+      rooms,
+      dominantRoomSize(params.checklist),
+      lines.length,
+      {
+        scopeConfidence: 0.85,
+        requiresScopeReview: true,
+        assumptions: ["Customer notes mentioned patching nail holes."],
+        evidenceRefs: ["customer_notes"]
+      }
+    ));
   }
 
   if (mentions(params.transcript, ["primer", "prime"])) {
     const rooms = totalRooms(params.checklist) || 1;
-    lines.push(lineFromPriceBook(lookup.get("primer_coat") ?? null, "Primer coat", rooms, "medium", lines.length));
+    lines.push(lineFromPriceBook(
+      lookup.get("primer_coat") ?? null,
+      "Primer coat",
+      rooms,
+      dominantRoomSize(params.checklist),
+      lines.length,
+      {
+        scopeConfidence: 0.82,
+        requiresScopeReview: true,
+        assumptions: ["Customer notes mentioned primer."],
+        evidenceRefs: ["customer_notes"]
+      }
+    ));
   }
 
   if (!params.checklist.customerSuppliesPaint) {
@@ -681,7 +727,12 @@ export function createPainterDraftLines(params: {
       priceBookItemId: null,
       priceBookItemKey: null,
       matchConfidence: null,
-      matchState: "red"
+      matchState: "red",
+      scopeConfidence: 0.78,
+      priceConfidence: 0,
+      requiresReview: true,
+      assumptions: ["Customer notes mentioned wallpaper removal without a measured quantity."],
+      evidenceRefs: ["customer_notes"]
     });
   }
 
@@ -734,8 +785,18 @@ export function lineFromPriceBook(
   description: string,
   quantity: number,
   roomSize: "small" | "medium" | "large" | null,
-  position: number
+  position: number,
+  evidence: {
+    scopeConfidence?: number;
+    requiresScopeReview?: boolean;
+    assumptions?: string[];
+    evidenceRefs?: string[];
+  } = {}
 ): QuoteLineItem {
+  const scopeConfidence = evidence.scopeConfidence ?? 1;
+  const assumptions = evidence.assumptions ?? ["Scope came from the customer checklist."];
+  const evidenceRefs = evidence.evidenceRefs ?? ["checklist"];
+
   if (item === null) {
     return {
       position,
@@ -748,15 +809,23 @@ export function lineFromPriceBook(
       priceBookItemId: null,
       priceBookItemKey: null,
       matchConfidence: null,
-      matchState: "red"
+      matchState: "red",
+      scopeConfidence,
+      priceConfidence: 0,
+      requiresReview: true,
+      assumptions,
+      evidenceRefs
     };
   }
 
   const confirmed = item.confirmedAt !== null;
   const unitPriceCents =
     item.pricing.type === "room_size"
-      ? item.pricing.prices[roomSize ?? "medium"]
+      ? roomSize === null ? null : item.pricing.prices[roomSize]
       : item.pricing.unitPriceCents;
+  const priceConfidence = confirmed ? 1 : 0.7;
+  const requiresReview = evidence.requiresScopeReview === true || !confirmed || unitPriceCents === null;
+  const matchState = unitPriceCents === null ? "red" : requiresReview ? "yellow" : "green";
 
   return {
     position,
@@ -768,8 +837,13 @@ export function lineFromPriceBook(
     source: "price_book",
     priceBookItemId: item.id,
     priceBookItemKey: item.key,
-    matchConfidence: confirmed ? 1 : 0.7,
-    matchState: confirmed ? "green" : "yellow"
+    matchConfidence: Math.min(scopeConfidence, priceConfidence),
+    matchState,
+    scopeConfidence,
+    priceConfidence,
+    requiresReview,
+    assumptions,
+    evidenceRefs
   };
 }
 
@@ -829,6 +903,19 @@ function mentions(text: string, terms: string[]) {
 
 function totalRooms(checklist: PainterChecklist) {
   return checklist.rooms.small + checklist.rooms.medium + checklist.rooms.large;
+}
+
+function dominantRoomSize(checklist: PainterChecklist): "small" | "medium" | "large" | null {
+  if (totalRooms(checklist) === 0) return null;
+  if (checklist.rooms.large >= checklist.rooms.medium && checklist.rooms.large >= checklist.rooms.small) return "large";
+  if (checklist.rooms.small > checklist.rooms.medium) return "small";
+  return "medium";
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
 }
 
 function plural(count: number, noun: string) {

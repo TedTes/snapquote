@@ -12,7 +12,9 @@ export type SendBlockers = {
 
 export function getQuoteSendBlockers(lineItems: QuoteLineItem[]): SendBlockers {
   const redLineCount = lineItems.filter((line) => line.matchState === "red").length;
-  const yellowLineCount = lineItems.filter((line) => line.matchState === "yellow").length;
+  const yellowLineCount = lineItems.filter(
+    (line) => line.matchState === "yellow" || (line.matchState !== "red" && line.requiresReview === true)
+  ).length;
   const reasons: string[] = [];
 
   if (redLineCount > 0) {

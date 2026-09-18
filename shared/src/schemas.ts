@@ -274,7 +274,12 @@ export const quoteLineItemSchema = z
     priceBookItemId: idSchema.nullable(),
     priceBookItemKey: z.string().trim().min(1).max(80).nullable().optional(),
     matchConfidence: z.number().min(0).max(1).nullable(),
-    matchState: lineItemMatchStateSchema
+    matchState: lineItemMatchStateSchema,
+    scopeConfidence: z.number().min(0).max(1).nullable().optional(),
+    priceConfidence: z.number().min(0).max(1).nullable().optional(),
+    requiresReview: z.boolean().optional(),
+    assumptions: z.array(z.string().trim().min(1).max(240)).max(10).optional(),
+    evidenceRefs: z.array(z.string().trim().min(1).max(500)).max(20).optional()
   })
   .superRefine((item, ctx) => {
     if (item.matchState === "green" && item.unitPriceCents === null) {
@@ -298,6 +303,14 @@ export const quoteLineItemSchema = z
         code: z.ZodIssueCode.custom,
         path: ["matchConfidence"],
         message: "Green price-book lines must include match confidence"
+      });
+    }
+
+    if (item.matchState === "green" && item.requiresReview === true) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["requiresReview"],
+        message: "Green lines cannot require review"
       });
     }
   });

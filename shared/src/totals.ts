@@ -15,7 +15,7 @@ export type QuoteTotals = {
 
 export function computeQuoteTotals(input: QuoteTotalsInput): QuoteTotals {
   const subtotalCents = input.lineItems.reduce((sum, item) => {
-    if (item.matchState !== "green" || item.unitPriceCents === null) {
+    if (item.matchState !== "green" || item.unitPriceCents === null || item.requiresReview === true) {
       throw new Error("Cannot compute quote totals while line items are unpriced or unconfirmed");
     }
 
