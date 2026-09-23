@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   assertPhotoAnalysisEvidence,
+  assertPhotoSuitability,
+  noUsablePhotoAnalysis,
   photoAnalysisSuggestionRows,
   photoAnalysisUserContext,
+  usablePhotoMediaIds,
   type PhotoAnalysisResult
 } from "../../infra/supabase/functions/snapquote/photoAnalysis.ts";
 
@@ -65,5 +68,26 @@ describe("photo analysis contract", () => {
     expect(rows.map((row) => row.suggestion_type)).toEqual(["task", "site_condition", "question"]);
     expect(rows[0]?.evidence_media_ids).toEqual([mediaId]);
     expect(rows[2]?.evidence_media_ids).toEqual([]);
+  });
+
+  it("rejects person-dominant photos before scope analysis", () => {
+    const suitability = {
+      media: [{
+        media_id: mediaId,
+        classification: "person_dominant" as const,
+        reason: "A person is the primary subject and the job area is only incidental background."
+      }]
+    };
+
+    expect(() => assertPhotoSuitability(suitability, [mediaId])).not.toThrow();
+    expect(usablePhotoMediaIds(suitability)).toEqual([]);
+    expect(photoAnalysisSuggestionRows("request", "org", noUsablePhotoAnalysis())).toEqual([]);
+  });
+
+  it("requires every request photo to receive exactly one suitability result", () => {
+    expect(() => assertPhotoSuitability({ media: [] }, [mediaId])).toThrow("exactly once");
+    expect(() => assertPhotoSuitability({
+      media: [{ media_id: otherMediaId, classification: "job_site", reason: "A room is visible." }]
+    }, [mediaId])).toThrow("outside this request");
   });
 });

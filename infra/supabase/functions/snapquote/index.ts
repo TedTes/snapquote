@@ -38,9 +38,13 @@ import {
 import { buildDraftFromEvidence, lineItemsFromExtraction } from "./drafting.ts";
 import {
   assertPhotoAnalysisEvidence,
+  assertPhotoSuitability,
+  noUsablePhotoAnalysis,
   photoAnalysisJsonSchema,
   photoAnalysisSuggestionRows,
-  photoAnalysisUserContext
+  photoAnalysisUserContext,
+  photoSuitabilityJsonSchema,
+  usablePhotoMediaIds
 } from "./photoAnalysis.ts";
 
 const corsHeaders = {
@@ -390,6 +394,14 @@ const photoAnalysisResultSchema = z.object({
     sufficient: z.boolean(),
     missing: z.array(z.string().trim().min(1).max(240)).max(20)
   })
+});
+
+const photoSuitabilityResultSchema = z.object({
+  media: z.array(z.object({
+    media_id: z.string().uuid(),
+    classification: z.enum(["job_site", "person_dominant", "unrelated", "unusable"]),
+    reason: z.string().trim().min(1).max(240)
+  })).min(1).max(4)
 });
 
 const quotePatchSchema = z.object({
@@ -2860,7 +2872,20 @@ async function analyzeWebsiteRequestMedia(db: SupabaseClient, request: Request, 
   try {
     const result = await analyzeRequestPhotosWithOpenAI(db, requestRow, mediaRows);
     const completedAt = new Date().toISOString();
-    const version = "photo-v1";
+    const version = "photo-v2";
+    const analysisSummary = {
+      ...result.analysis,
+      photoSuitability: {
+        usableMediaIds: usablePhotoMediaIds(result.suitability),
+        rejectedMedia: result.suitability.media
+          .filter((item) => item.classification !== "job_site")
+          .map((item) => ({
+            mediaId: item.media_id,
+            classification: item.classification,
+            reason: item.reason
+          }))
+      }
+    };
 
     must(await db.from("snapquote_request_analysis_suggestions").delete()
       .eq("request_id", requestId)
@@ -2874,6 +2899,7 @@ async function analyzeWebsiteRequestMedia(db: SupabaseClient, request: Request, 
 
     for (const media of mediaRows) {
       const mediaAnalysis = {
+        suitability: result.suitability.media.find((item) => item.media_id === media.id) ?? null,
         tasks: result.analysis.tasks.filter((task) => task.evidence_media_ids.includes(media.id)),
         siteConditions: result.analysis.site_conditions.filter((condition) => condition.evidence_media_ids.includes(media.id))
       };
@@ -2891,7 +2917,7 @@ async function analyzeWebsiteRequestMedia(db: SupabaseClient, request: Request, 
       analysis_model: result.model,
       analysis_version: version,
       analysis_error: null,
-      analysis_summary: result.analysis,
+      analysis_summary: analysisSummary,
       analysis_completed_at: completedAt
     }).eq("id", requestId).eq("org_id", orgId));
 
@@ -2928,15 +2954,28 @@ async function analyzeRequestPhotosWithOpenAI(
   if (!openAiKey) throw new Error("OPENAI_API_KEY is not configured");
 
   const model = Deno.env.get("OPENAI_VISION_MODEL") ?? Deno.env.get("OPENAI_MODEL") ?? "gpt-4.1-mini";
-  const imageContent: Array<Record<string, unknown>> = [];
+  const photos: Array<{ id: string; signedUrl: string }> = [];
 
   for (const media of mediaRows) {
     const { data, error } = await db.storage
       .from(String(media.storage_bucket))
       .createSignedUrl(String(media.storage_path), 10 * 60);
     if (error) throw error;
-    imageContent.push({ type: "input_text", text: `Photo evidence ID: ${media.id}` });
-    imageContent.push({ type: "input_image", image_url: data.signedUrl, detail: "high" });
+    photos.push({ id: String(media.id), signedUrl: data.signedUrl });
+  }
+
+  const suitability = await screenRequestPhotosWithOpenAI(openAiKey, model, photos);
+  const usableIds = usablePhotoMediaIds(suitability);
+
+  if (usableIds.length === 0) {
+    return { model, analysis: noUsablePhotoAnalysis(), suitability };
+  }
+
+  const usableIdSet = new Set(usableIds);
+  const imageContent: Array<Record<string, unknown>> = [];
+  for (const photo of photos.filter((item) => usableIdSet.has(item.id))) {
+    imageContent.push({ type: "input_text", text: `Photo evidence ID: ${photo.id}` });
+    imageContent.push({ type: "input_image", image_url: photo.signedUrl, detail: "high" });
   }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -2952,7 +2991,11 @@ async function analyzeRequestPhotosWithOpenAI(
           role: "system",
           content: [
             "Analyze job-site photos for a painting contractor.",
-            "Report only visible evidence relevant to scope; never invent prices, measurements, quantities, materials, or hidden damage.",
+            "Every supplied image has already passed a job-photo suitability check, but you must still report only clearly visible evidence relevant to scope.",
+            "The checklist and notes are context only. They are not visual evidence and must never be used to claim that work or damage is visible.",
+            "Do not suggest painting a wall, ceiling, trim, or other surface merely because that surface exists in the image.",
+            "A task requires visible damage, preparation need, unfinished work, or another specific visual condition that supports that task.",
+            "Never invent prices, measurements, quantities, materials, rooms outside the frame, or hidden damage.",
             "Do not identify or describe people. Ignore faces and personal attributes.",
             "Use the supplied photo evidence IDs exactly. Every task and site condition must cite at least one photo.",
             "If coverage is incomplete or a detail cannot be verified visually, add a contractor question or coverage warning.",
@@ -2988,9 +3031,65 @@ async function analyzeRequestPhotosWithOpenAI(
 
   const body = await response.json();
   const analysis = parse(photoAnalysisResultSchema, JSON.parse(extractResponseText(body)));
-  assertPhotoAnalysisEvidence(analysis, mediaRows.map((media) => String(media.id)));
+  assertPhotoAnalysisEvidence(analysis, usableIds);
 
-  return { model, analysis };
+  return { model, analysis, suitability };
+}
+
+async function screenRequestPhotosWithOpenAI(
+  openAiKey: string,
+  model: string,
+  photos: Array<{ id: string; signedUrl: string }>
+) {
+  const content: Array<Record<string, unknown>> = [];
+  for (const photo of photos) {
+    content.push({ type: "input_text", text: `Photo evidence ID: ${photo.id}` });
+    content.push({ type: "input_image", image_url: photo.signedUrl, detail: "low" });
+  }
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "authorization": `Bearer ${openAiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      input: [{
+        role: "system",
+        content: [
+          "Act only as a strict relevance gate for contractor job photos.",
+          "Classify each supplied photo exactly once and use its evidence ID exactly.",
+          "Use job_site only when the primary subject clearly shows a room, work surface, construction detail, or damage intended for contractor review.",
+          "Use person_dominant for selfies, portraits, or photos where a person occupies the foreground and the job area is incidental background.",
+          "Never treat walls, ceilings, trim, or structures incidentally visible behind a person as job evidence.",
+          "Use unrelated for other subjects and unusable for images that are too dark, blurry, obstructed, or otherwise impossible to assess.",
+          "Do not identify, describe, or infer attributes about any person. Return only suitability classifications."
+        ].join(" ")
+      }, {
+        role: "user",
+        content
+      }],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "snapquote_photo_suitability",
+          strict: true,
+          schema: photoSuitabilityJsonSchema()
+        }
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(`OpenAI photo suitability failed with ${response.status}: ${message.slice(0, 500)}`);
+  }
+
+  const body = await response.json();
+  const result = parse(photoSuitabilityResultSchema, JSON.parse(extractResponseText(body)));
+  assertPhotoSuitability(result, photos.map((photo) => photo.id));
+  return result;
 }
 
 async function acceptWebsiteRequestSuggestion(

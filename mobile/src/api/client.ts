@@ -170,6 +170,14 @@ export type ApiWebsiteRequest = {
     summary: {
       summary?: string;
       coverage?: { sufficient: boolean; missing: string[] };
+      photoSuitability?: {
+        usableMediaIds: string[];
+        rejectedMedia: Array<{
+          mediaId: string;
+          classification: "person_dominant" | "unrelated" | "unusable";
+          reason: string;
+        }>;
+      };
     };
     startedAt: string | null;
     completedAt: string | null;

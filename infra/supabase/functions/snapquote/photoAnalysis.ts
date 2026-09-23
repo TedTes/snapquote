@@ -21,6 +21,14 @@ export type PhotoAnalysisResult = {
   };
 };
 
+export type PhotoSuitabilityResult = {
+  media: Array<{
+    media_id: string;
+    classification: "job_site" | "person_dominant" | "unrelated" | "unusable";
+    reason: string;
+  }>;
+};
+
 export function photoAnalysisUserContext(requestRow: Record<string, unknown>, mediaIds: string[]) {
   return {
     checklist: requestRow.checklist,
@@ -62,6 +70,38 @@ export function assertPhotoAnalysisEvidence(analysis: PhotoAnalysisResult, allow
   if (referenced.some((id) => !allowed.has(id))) {
     throw new Error("Photo analysis referenced media outside this request");
   }
+}
+
+export function assertPhotoSuitability(result: PhotoSuitabilityResult, allowedMediaIds: string[]) {
+  const allowed = new Set(allowedMediaIds);
+  const returnedIds = result.media.map((item) => item.media_id);
+
+  if (returnedIds.length !== allowed.size || new Set(returnedIds).size !== returnedIds.length) {
+    throw new Error("Photo suitability must classify every request photo exactly once");
+  }
+
+  if (returnedIds.some((id) => !allowed.has(id))) {
+    throw new Error("Photo suitability referenced media outside this request");
+  }
+}
+
+export function usablePhotoMediaIds(result: PhotoSuitabilityResult) {
+  return result.media
+    .filter((item) => item.classification === "job_site")
+    .map((item) => item.media_id);
+}
+
+export function noUsablePhotoAnalysis(): PhotoAnalysisResult {
+  return {
+    summary: "The submitted photos do not clearly show the job area, so no work was inferred.",
+    tasks: [],
+    site_conditions: [],
+    questions_for_contractor: [],
+    coverage: {
+      sufficient: false,
+      missing: ["Add clear photos focused on the rooms, surfaces, or damage that need work."]
+    }
+  };
 }
 
 export function photoAnalysisSuggestionRows(requestId: string, orgId: string, analysis: PhotoAnalysisResult) {
@@ -157,6 +197,34 @@ export function photoAnalysisJsonSchema() {
         properties: {
           sufficient: { type: "boolean" },
           missing: { type: "array", items: { type: "string" } }
+        }
+      }
+    }
+  };
+}
+
+export function photoSuitabilityJsonSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["media"],
+    properties: {
+      media: {
+        type: "array",
+        minItems: 1,
+        maxItems: 4,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["media_id", "classification", "reason"],
+          properties: {
+            media_id: { type: "string" },
+            classification: {
+              type: "string",
+              enum: ["job_site", "person_dominant", "unrelated", "unusable"]
+            },
+            reason: { type: "string" }
+          }
         }
       }
     }

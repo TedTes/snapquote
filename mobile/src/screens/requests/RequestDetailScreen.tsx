@@ -249,12 +249,20 @@ function PhotoAnalysisSection(props: {
   const pendingSuggestions = analysis?.suggestions?.filter((suggestion) => suggestion.status === "pending") ?? [];
   const completed = analysis?.status === "completed";
   const failed = analysis?.status === "failed";
+  const noUsableEvidence = completed && analysis.summary.photoSuitability?.usableMediaIds.length === 0;
 
   return (
     <View style={styles.section}>
       <View style={styles.analysisHeading}>
         <AppText variant="sectionLabel">Photo analysis</AppText>
-        {completed ? <View style={styles.analysisDone}><CheckCircle2 color={colors.accent} size={15} /><AppText tone="green" variant="meta">Analyzed</AppText></View> : null}
+        {completed ? (
+          <View style={noUsableEvidence ? styles.analysisNeedsPhotos : styles.analysisDone}>
+            {noUsableEvidence ? <AlertTriangle color={colors.amber} size={15} /> : <CheckCircle2 color={colors.accent} size={15} />}
+            <AppText tone={noUsableEvidence ? "amber" : "green"} variant="meta">
+              {noUsableEvidence ? "Needs job photos" : "Analyzed"}
+            </AppText>
+          </View>
+        ) : null}
       </View>
       <View style={styles.analysisBody}>
         {completed ? (
@@ -288,7 +296,7 @@ function PhotoAnalysisSection(props: {
                 </View>
               </View>
             ))}
-            {pendingSuggestions.length === 0 ? <AppText tone="green" variant="meta">All photo suggestions reviewed.</AppText> : null}
+            {pendingSuggestions.length === 0 && !noUsableEvidence ? <AppText tone="green" variant="meta">All photo suggestions reviewed.</AppText> : null}
             {analysis.summary.coverage && !analysis.summary.coverage.sufficient ? (
               <View style={styles.coverageWarning}>
                 <AlertTriangle color={colors.amber} size={17} />
@@ -296,6 +304,17 @@ function PhotoAnalysisSection(props: {
                   {analysis.summary.coverage.missing.join(" · ")}
                 </AppText>
               </View>
+            ) : null}
+            {!noUsableEvidence ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={props.analyzing}
+                onPress={props.onAnalyze}
+                style={[styles.analysisAgainButton, props.analyzing ? styles.disabled : null]}
+              >
+                <Search color={colors.ink2} size={15} />
+                <AppText variant="button">{props.analyzing ? "Analyzing..." : "Analyze again"}</AppText>
+              </Pressable>
             ) : null}
           </>
         ) : (
@@ -378,9 +397,11 @@ const styles = StyleSheet.create({
   videoIcon: { alignItems: "center", backgroundColor: colors.accentBg, borderRadius: radius.sm, height: 42, justifyContent: "center", width: 42 },
   analysisHeading: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   analysisDone: { alignItems: "center", flexDirection: "row", gap: spacing.xs },
+  analysisNeedsPhotos: { alignItems: "center", backgroundColor: colors.amberBg, borderRadius: radius.sm, flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   analysisBody: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, gap: spacing.md, padding: spacing.lg },
   analysisIntro: { alignItems: "center", flexDirection: "row", gap: spacing.md },
   analysisButton: { alignItems: "center", backgroundColor: colors.dark, borderRadius: radius.sm, flexDirection: "row", gap: spacing.sm, justifyContent: "center", minHeight: 48 },
+  analysisAgainButton: { alignItems: "center", borderColor: colors.border, borderRadius: radius.sm, borderWidth: 1, flexDirection: "row", gap: spacing.sm, justifyContent: "center", minHeight: 42 },
   suggestionRow: { alignItems: "center", borderTopColor: colors.border, borderTopWidth: 1, flexDirection: "row", gap: spacing.md, paddingTop: spacing.md },
   suggestionCopy: { flex: 1, gap: 3 },
   suggestionActions: { flexDirection: "row", gap: spacing.sm },
