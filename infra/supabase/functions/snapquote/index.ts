@@ -289,6 +289,8 @@ const websiteEstimateSchema = z.object({
   checklist: checklistSchema.default(defaultChecklist),
   notes: z.string().trim().max(5000).default(""),
   timing: z.enum(["asap", "this_month", "flexible", "just_pricing"]).default("flexible"),
+  preferredStartDate: z.string().date().nullable().optional(),
+  preferredEndDate: z.string().date().nullable().optional(),
   photos: z.array(z.object({
     fileName: z.string().trim().min(1).max(160),
     contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
@@ -320,6 +322,20 @@ const websiteEstimateSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["checklist"],
       message: "Add at least one room, surface, or door"
+    });
+  }
+
+  if (input.preferredEndDate && !input.preferredStartDate) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["preferredEndDate"],
+      message: "Choose a preferred start date before the end date"
+    });
+  } else if (input.preferredStartDate && input.preferredEndDate && input.preferredEndDate < input.preferredStartDate) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["preferredEndDate"],
+      message: "Preferred end date cannot be before the start date"
     });
   }
 });
@@ -2545,6 +2561,8 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
     checklist,
     notes: input.notes,
     timing: input.timing,
+    preferred_start_date: input.preferredStartDate ?? null,
+    preferred_end_date: input.preferredEndDate ?? null,
     photo_paths: photoPaths,
     analysis_status: uploadedMedia.length > 0 ? "not_requested" : "no_media",
     estimate_low_cents: range.lowCents,
@@ -3128,7 +3146,7 @@ async function contactWebsiteRequest(db: SupabaseClient, request: Request, reque
   const row = await single(
     db.from("snapquote_website_estimate_requests")
       .update({
-        status: existing.status === "quote_sent" ? "quote_sent" : "contacted",
+        status: existing.status === "new" || existing.status === "contacted" ? "opened" : existing.status,
         opened_at: existing.opened_at ?? new Date().toISOString(),
         contacted_at: new Date().toISOString(),
         contact_channel: input.channel
@@ -3212,6 +3230,8 @@ async function websiteRequestResponse(db: SupabaseClient, orgId: string, row: Re
     checklist: row.checklist,
     notes: row.notes,
     timing: row.timing ?? "flexible",
+    preferredStartDate: row.preferred_start_date ?? null,
+    preferredEndDate: row.preferred_end_date ?? null,
     photoUrls: mediaPhotoUrls.length > 0
       ? mediaPhotoUrls
       : legacyPhotoUrls.filter((value): value is string => value !== null),

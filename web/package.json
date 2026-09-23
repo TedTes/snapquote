@@ -12,6 +12,7 @@
     "deploy": "pnpm build && wrangler pages deploy dist --project-name snapquote-public"
   },
   "dependencies": {
+    "@daypicker/react": "^10.0.1",
     "@snapquote/shared": "workspace:*",
     "react": "19.1.0",
     "react-dom": "19.1.0"

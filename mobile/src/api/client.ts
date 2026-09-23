@@ -158,6 +158,8 @@ export type ApiWebsiteRequest = {
   checklist: PainterChecklist;
   notes: string;
   timing: "asap" | "this_month" | "flexible" | "just_pricing";
+  preferredStartDate: string | null;
+  preferredEndDate: string | null;
   photoUrls: string[];
   media: ApiRequestMedia[];
   analysis: {

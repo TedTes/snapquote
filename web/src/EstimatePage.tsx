@@ -1,14 +1,18 @@
+import { DayPicker, type DateRange } from "@daypicker/react";
+import "@daypicker/react/style.css";
 import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 const apiBaseUrl = (import.meta.env.VITE_SNAPQUOTE_API_URL ?? "https://dctmpfrbkgntiuhjbblu.functions.supabase.co/snapquote").replace(/\/$/, "");
 
-type PainterChecklist = {
-  rooms: { small: number; medium: number; large: number };
+type PaintSupply = "customer" | "contractor";
+type PaintChoice = PaintSupply | "unsure";
+
+/** What a homeowner can reliably say about the job. Room size, prep, coats, and price are the contractor's call. */
+type HomeownerJobInput = {
+  roomCount: number;
   surfaces: { walls: boolean; ceilings: boolean; trim: boolean };
   doorCount: number;
-  prepLevel: "light" | "normal" | "heavy";
-  coatCount: 1 | 2;
-  customerSuppliesPaint: boolean;
+  paintSupply: PaintSupply | null;
 };
 
 type EstimateOrg = {
@@ -19,14 +23,13 @@ type EstimateOrg = {
   contactPhone: string | null;
   website: string | null;
   currency: string;
+  /** Optional profile details. They render only when the API provides them. */
+  serviceArea?: string | null;
+  about?: string | null;
 };
 
 type EstimateOrgResponse = {
   org: EstimateOrg;
-  defaults: {
-    checklist: PainterChecklist;
-    currency: string;
-  };
 };
 
 type RequestResponse = {
@@ -35,8 +38,6 @@ type RequestResponse = {
   status: "received";
   message: string;
 };
-
-type Timing = "asap" | "this_month" | "flexible" | "just_pricing";
 
 type RequestPhoto = {
   fileName: string;
@@ -64,33 +65,49 @@ type RequestUploadResponse = {
 type OrgState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; org: EstimateOrg; defaults: EstimateOrgResponse["defaults"] };
+  | { kind: "ready"; org: EstimateOrg };
 
-const fallbackChecklist: PainterChecklist = {
-  rooms: { small: 0, medium: 2, large: 0 },
-  surfaces: { walls: true, ceilings: false, trim: false },
-  doorCount: 0,
-  prepLevel: "normal",
-  coatCount: 2,
-  customerSuppliesPaint: true
+type FieldKey = "scope" | "name" | "contact" | "email" | "phone" | "address";
+type FieldErrors = Partial<Record<FieldKey, string>>;
+type StepState = "done" | "current" | "upcoming";
+
+/** Element that receives focus when a field is invalid. Order matches the page. */
+const fieldOrder: FieldKey[] = ["scope", "name", "contact", "email", "phone", "address"];
+const fieldIds: Record<FieldKey, string> = {
+  scope: "estimate-rooms",
+  name: "estimate-name",
+  contact: "estimate-email",
+  email: "estimate-email",
+  phone: "estimate-phone",
+  address: "estimate-address"
 };
+
+const maxRooms = 20;
+const maxDoors = 50;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   const { orgId, embed = false } = props;
   const [orgState, setOrgState] = useState<OrgState>({ kind: "loading" });
+  const [roomCount, setRoomCount] = useState(0);
+  const [surfaces, setSurfaces] = useState<HomeownerJobInput["surfaces"]>({ walls: false, ceilings: false, trim: false });
+  const [doorCount, setDoorCount] = useState(0);
+  const [paintChoice, setPaintChoice] = useState<PaintChoice | null>(null);
+  const [notes, setNotes] = useState("");
+  const [photos, setPhotos] = useState<RequestPhoto[]>([]);
+  const [video, setVideo] = useState<RequestVideo | null>(null);
+  const [preferredStartDate, setPreferredStartDate] = useState("");
+  const [preferredEndDate, setPreferredEndDate] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
-  const [notes, setNotes] = useState("");
-  const [timing, setTiming] = useState<Timing>("flexible");
-  const [photos, setPhotos] = useState<RequestPhoto[]>([]);
-  const [video, setVideo] = useState<RequestVideo | null>(null);
   const [company, setCompany] = useState("");
-  const [checklist, setChecklist] = useState<PainterChecklist>(fallbackChecklist);
   const [submitState, setSubmitState] = useState<"idle" | "submitting">("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [showErrors, setShowErrors] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<RequestResponse | null>(() => readSubmissionReceipt(orgId));
   const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -112,8 +129,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
         const response = await api<EstimateOrgResponse>(`/public/request-orgs/${encodeURIComponent(orgId)}`);
 
         if (!canceled) {
-          setOrgState({ kind: "ready", org: response.org, defaults: response.defaults });
-          setChecklist(response.defaults.checklist);
+          setOrgState({ kind: "ready", org: response.org });
         }
       } catch {
         if (!canceled) {
@@ -129,21 +145,36 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   }, [orgId]);
 
   const org = orgState.kind === "ready" ? orgState.org : null;
-  const hasContact = email.trim().length > 0 || phone.trim().length > 0;
-  const canSubmit = customerName.trim().length > 0 && address.trim().length > 0 && hasContact && submitState === "idle";
+  const errors = validateRequest({ roomCount, doorCount, notes, name: customerName, email, phone, address });
+  const visibleErrors: FieldErrors = showErrors ? errors : {};
+  const summaryKeys = fieldOrder.filter((key) => visibleErrors[key]);
+  const jobReady = !errors.scope;
+  const contactReady = !errors.name && !errors.contact && !errors.email && !errors.phone && !errors.address;
+  const steps: Array<{ label: string; state: StepState }> = [
+    { label: "Describe the job", state: jobReady ? "done" : "current" },
+    { label: "Add contact details", state: contactReady ? "done" : jobReady ? "current" : "upcoming" },
+    { label: "Request received", state: jobReady && contactReady ? "current" : "upcoming" }
+  ];
+  const scopeDescribedBy = visibleErrors.scope ? "estimate-scope-error" : undefined;
+  const contactDescribedBy = visibleErrors.contact ? "estimate-contact-error" : undefined;
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (result) return;
+    if (result || submitState === "submitting") return;
 
-    if (!canSubmit) {
-      setError("Add your name, job address, and either email or phone.");
+    const firstInvalid = fieldOrder.find((key) => errors[key]);
+
+    if (firstInvalid) {
+      setSubmitError(null);
+      setShowErrors(true);
+      // Wait for the inline errors to render so the scroll position accounts for them.
+      window.requestAnimationFrame(() => focusField(firstInvalid));
       return;
     }
 
     setSubmitState("submitting");
-    setError(null);
+    setSubmitError(null);
 
     try {
       const uploadedVideo = video ? await uploadRequestVideo(orgId, video, company) : null;
@@ -159,9 +190,15 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
           },
           address,
           city: city.trim() || undefined,
-          checklist,
+          job: {
+            roomCount,
+            surfaces,
+            doorCount,
+            paintSupply: paintChoice === "customer" || paintChoice === "contractor" ? paintChoice : null
+          } satisfies HomeownerJobInput,
           notes,
-          timing,
+          preferredStartDate: preferredStartDate || null,
+          preferredEndDate: preferredEndDate || null,
           photos: photos.map(({ fileName, contentType, base64 }) => ({ fileName, contentType, base64 })),
           videos: uploadedVideo ? [{
             fileName: video!.fileName,
@@ -177,7 +214,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
       writeSubmissionReceipt(orgId, response);
       setResult(response);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "We could not send the request. Try again.");
+      setSubmitError(requestError instanceof Error ? requestError.message : "We could not send the request. Try again.");
     } finally {
       setSubmitState("idle");
     }
@@ -197,15 +234,8 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
 
   return (
     <main className={embed ? "estimate-page is-embed" : "estimate-page"}>
-      <section className="estimate-shell" aria-label="Painting quote request">
-        <header className="estimate-page-header">
-          <BrandMark org={org} />
-          <div>
-            <p className="eyebrow">Request a quote</p>
-            <h1>{org?.name ?? "QuoteVan request"}</h1>
-            <p>{org ? estimateContactLine(org) : "Loading contractor details..."}</p>
-          </div>
-        </header>
+      <section className="estimate-shell" aria-label="Quote request">
+        <ProviderHeader org={org} />
 
         {result ? (
           <section className="estimate-confirmation" aria-live="polite">
@@ -223,191 +253,401 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
           </section>
         ) : (
           <div className="estimate-layout">
-            <form className="estimate-form" onSubmit={submitRequest}>
-            <label className="estimate-hidden-field" aria-hidden="true">
-              Company
-              <input autoComplete="off" tabIndex={-1} value={company} onChange={(event) => setCompany(event.target.value)} />
-            </label>
-
-            <section className="estimate-form-section">
-              <div className="estimate-section-head">
-                <p className="section-label">Your details</p>
-              </div>
-              <div className="estimate-field-grid two">
-                <TextField label="Name" value={customerName} onChange={setCustomerName} autoComplete="name" required />
-                <TextField label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
-              </div>
-              <div className="estimate-field-grid two">
-                <TextField label="Phone" type="tel" value={phone} onChange={setPhone} autoComplete="tel" />
-                <TextField label="City" value={city} onChange={setCity} autoComplete="address-level2" />
-              </div>
-              <TextField label="Job address" value={address} onChange={setAddress} autoComplete="street-address" required />
-            </section>
-
-            <section className="estimate-form-section">
-              <div className="estimate-section-head">
-                <p className="section-label">Rooms</p>
-              </div>
-              <div className="estimate-stepper-grid">
-                <Stepper label="Small" value={checklist.rooms.small} onChange={(value) => updateRoom("small", value)} />
-                <Stepper label="Medium" value={checklist.rooms.medium} onChange={(value) => updateRoom("medium", value)} />
-                <Stepper label="Large" value={checklist.rooms.large} onChange={(value) => updateRoom("large", value)} />
-              </div>
-            </section>
-
-            <section className="estimate-form-section">
-              <div className="estimate-section-head">
-                <p className="section-label">Work</p>
-              </div>
-              <div className="estimate-toggle-grid" aria-label="Surfaces to paint">
-                <Toggle label="Walls" checked={checklist.surfaces.walls} onChange={(checked) => updateSurface("walls", checked)} />
-                <Toggle label="Ceilings" checked={checklist.surfaces.ceilings} onChange={(checked) => updateSurface("ceilings", checked)} />
-                <Toggle label="Trim" checked={checklist.surfaces.trim} onChange={(checked) => updateSurface("trim", checked)} />
-              </div>
-              <div className="estimate-field-grid three">
-                <SelectField label="Prep" value={checklist.prepLevel} onChange={(value) => setChecklist((current) => ({ ...current, prepLevel: value as PainterChecklist["prepLevel"] }))}>
-                  <option value="light">Light</option>
-                  <option value="normal">Normal</option>
-                  <option value="heavy">Heavy</option>
-                </SelectField>
-                <SelectField label="Coats" value={String(checklist.coatCount)} onChange={(value) => setChecklist((current) => ({ ...current, coatCount: Number(value) as 1 | 2 }))}>
-                  <option value="1">1 coat</option>
-                  <option value="2">2 coats</option>
-                </SelectField>
-                <Stepper label="Doors" value={checklist.doorCount} onChange={(value) => setChecklist((current) => ({ ...current, doorCount: value }))} />
-              </div>
-              <Toggle
-                label="I will supply the paint"
-                checked={checklist.customerSuppliesPaint}
-                onChange={(checked) => setChecklist((current) => ({ ...current, customerSuppliesPaint: checked }))}
-              />
-            </section>
-
-            <section className="estimate-form-section">
-              <div className="estimate-section-head">
-                <p className="section-label">Photos and timing</p>
-                <span>{photos.length}/4 photos</span>
-              </div>
-              <PhotoPicker photos={photos} onChange={setPhotos} onError={setError} />
-              <VideoPicker video={video} onChange={setVideo} onError={setError} />
-              <SelectField label="When do you need the work?" value={timing} onChange={(value) => setTiming(value as Timing)}>
-                <option value="asap">As soon as possible</option>
-                <option value="this_month">This month</option>
-                <option value="flexible">My timing is flexible</option>
-                <option value="just_pricing">I am comparing quotes</option>
-              </SelectField>
-            </section>
-
-            <section className="estimate-form-section">
-              <label className="estimate-input-label">
-                <span>Anything else?</span>
-                <textarea
-                  rows={4}
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  placeholder="Example: Patch nail holes, sand rough areas, prime where needed."
-                />
+            <form className="estimate-form" noValidate onSubmit={submitRequest}>
+              <label className="estimate-hidden-field" aria-hidden="true">
+                Company
+                <input autoComplete="off" tabIndex={-1} value={company} onChange={(event) => setCompany(event.target.value)} />
               </label>
-            </section>
 
-            {error ? <p className="estimate-error" role="alert">{error}</p> : null}
+              <section className="estimate-form-section" aria-labelledby="estimate-scope-title">
+                <div className="estimate-section-head">
+                  <h2 id="estimate-scope-title">Tell us about the job</h2>
+                </div>
+                <p className="estimate-section-hint">A rough idea is enough. The contractor confirms the details and the price.</p>
 
-            <button className="estimate-submit" type="submit" disabled={!canSubmit}>
-              {submitState === "submitting" ? "Sending request..." : "Send quote request"}
-            </button>
+                <div className="estimate-field-grid two counts">
+                  <CountField
+                    describedBy={scopeDescribedBy}
+                    id={fieldIds.scope}
+                    invalid={Boolean(visibleErrors.scope)}
+                    label="Rooms to paint"
+                    max={maxRooms}
+                    value={roomCount}
+                    onChange={setRoomCount}
+                  />
+                  <CountField
+                    describedBy={scopeDescribedBy}
+                    id="estimate-doors"
+                    invalid={Boolean(visibleErrors.scope)}
+                    label="Doors to paint"
+                    max={maxDoors}
+                    value={doorCount}
+                    onChange={setDoorCount}
+                  />
+                </div>
+
+                <fieldset className="estimate-fieldset">
+                  <legend>What needs painting?<small>Optional</small></legend>
+                  <div className="estimate-choice-grid surfaces">
+                    <Choice type="checkbox" label="Walls" checked={surfaces.walls} onChange={(checked) => setSurfaces((current) => ({ ...current, walls: checked }))} />
+                    <Choice type="checkbox" label="Ceilings" checked={surfaces.ceilings} onChange={(checked) => setSurfaces((current) => ({ ...current, ceilings: checked }))} />
+                    <Choice type="checkbox" label="Trim" checked={surfaces.trim} onChange={(checked) => setSurfaces((current) => ({ ...current, trim: checked }))} />
+                  </div>
+                </fieldset>
+
+                <fieldset className="estimate-fieldset">
+                  <legend>Who is providing the paint?<small>Optional</small></legend>
+                  <div className="estimate-choice-grid paint">
+                    <Choice type="radio" name="estimate-paint" label="I have the paint" checked={paintChoice === "customer"} onChange={() => setPaintChoice("customer")} />
+                    <Choice type="radio" name="estimate-paint" label="Contractor supplies" checked={paintChoice === "contractor"} onChange={() => setPaintChoice("contractor")} />
+                    <Choice type="radio" name="estimate-paint" label="Not sure yet" checked={paintChoice === "unsure"} onChange={() => setPaintChoice("unsure")} />
+                  </div>
+                </fieldset>
+
+                <div className={visibleErrors.scope ? "estimate-field has-error" : "estimate-field"}>
+                  <label htmlFor="estimate-notes">Describe the job or areas<small>Optional</small></label>
+                  <textarea
+                    aria-describedby={scopeDescribedBy}
+                    aria-invalid={visibleErrors.scope ? true : undefined}
+                    id="estimate-notes"
+                    rows={4}
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Which rooms or areas, colours, repairs, or anything the painter should know."
+                  />
+                  {visibleErrors.scope ? <FieldError id="estimate-scope-error">{visibleErrors.scope}</FieldError> : null}
+                </div>
+              </section>
+
+              <section className="estimate-form-section" aria-labelledby="estimate-photos-title">
+                <div className="estimate-section-head">
+                  <h2 id="estimate-photos-title">Add photos</h2>
+                  <span>Optional &middot; {photos.length}/4</span>
+                </div>
+                <PhotoPicker photos={photos} onChange={setPhotos} onError={setMediaError} />
+                <VideoPicker video={video} onChange={setVideo} onError={setMediaError} />
+                {mediaError ? <FieldError id="estimate-media-error">{mediaError}</FieldError> : null}
+              </section>
+
+              <PreferredTimelinePicker
+                endDate={preferredEndDate}
+                startDate={preferredStartDate}
+                onChange={(startDate, endDate) => {
+                  setPreferredStartDate(startDate);
+                  setPreferredEndDate(endDate);
+                }}
+              />
+
+              <section className="estimate-form-section" aria-labelledby="estimate-contact-title">
+                <div className="estimate-section-head">
+                  <h2 id="estimate-contact-title">Contact and job address</h2>
+                </div>
+                <p className="estimate-section-hint">Add an email or phone number so the contractor can reach you.</p>
+
+                <TextField
+                  autoComplete="name"
+                  error={visibleErrors.name}
+                  id={fieldIds.name}
+                  label="Name"
+                  required
+                  value={customerName}
+                  onChange={setCustomerName}
+                />
+                <div className="estimate-field-grid two">
+                  <TextField
+                    autoComplete="email"
+                    describedBy={contactDescribedBy}
+                    error={visibleErrors.email}
+                    id={fieldIds.email}
+                    invalid={Boolean(visibleErrors.contact)}
+                    inputMode="email"
+                    label="Email"
+                    type="email"
+                    value={email}
+                    onChange={setEmail}
+                  />
+                  <TextField
+                    autoComplete="tel"
+                    describedBy={contactDescribedBy}
+                    error={visibleErrors.phone}
+                    id={fieldIds.phone}
+                    invalid={Boolean(visibleErrors.contact)}
+                    inputMode="tel"
+                    label="Phone"
+                    type="tel"
+                    value={phone}
+                    onChange={setPhone}
+                  />
+                </div>
+                {visibleErrors.contact ? <FieldError id="estimate-contact-error">{visibleErrors.contact}</FieldError> : null}
+                <div className="estimate-field-grid address">
+                  <TextField
+                    autoComplete="street-address"
+                    error={visibleErrors.address}
+                    id={fieldIds.address}
+                    label="Job address"
+                    required
+                    value={address}
+                    onChange={setAddress}
+                  />
+                  <TextField autoComplete="address-level2" id="estimate-city" label="City" optional value={city} onChange={setCity} />
+                </div>
+              </section>
+
+              <div className="estimate-submit-area">
+                {summaryKeys.length > 0 ? (
+                  <div className="estimate-summary" role="alert">
+                    <strong>{summaryKeys.length === 1 ? "One thing needs fixing" : `${summaryKeys.length} things need fixing`}</strong>
+                    <ul>
+                      {summaryKeys.map((key) => (
+                        <li key={key}>
+                          <button type="button" onClick={() => focusField(key)}>{visibleErrors[key]}</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {submitError ? <p className="estimate-error" role="alert">{submitError}</p> : null}
+                <button className="estimate-submit" type="submit" disabled={submitState === "submitting"}>
+                  {submitState === "submitting" ? "Sending request..." : "Send quote request"}
+                </button>
+              </div>
             </form>
 
-            <aside className="estimate-result-panel">
-              <p className="section-label">What happens next</p>
-              <strong className="estimate-range">A real quote, reviewed first.</strong>
-              <p className="estimate-result-copy">
-                Your request opens as a draft in the contractor's app. They review the work and contact you or email the finished quote.
+            <aside className="estimate-next" aria-labelledby="estimate-next-title">
+              <h2 id="estimate-next-title">What happens next</h2>
+              <p>
+                No price is shown here. {org?.name ?? "The contractor"} reviews your request first, then sends you a quote.
               </p>
-              <div className="estimate-next-steps">
-                <span><b>1</b> Send details and photos</span>
-                <span><b>2</b> Contractor reviews the draft</span>
-                <span><b>3</b> Receive the quote by email</span>
-              </div>
+              <ol className="estimate-steps">
+                {steps.map((step, index) => (
+                  <li className={`is-${step.state}`} key={step.label} aria-current={step.state === "current" ? "step" : undefined}>
+                    <span className="estimate-step-mark" aria-hidden="true">{step.state === "done" ? "✓" : index + 1}</span>
+                    <span>
+                      {step.label}
+                      {step.state === "done" ? <span className="estimate-sr-only"> (done)</span> : null}
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </aside>
           </div>
         )}
       </section>
     </main>
   );
+}
 
-  function updateRoom(size: keyof PainterChecklist["rooms"], value: number) {
-    setChecklist((current) => ({
-      ...current,
-      rooms: { ...current.rooms, [size]: value }
-    }));
+function validateRequest(values: {
+  roomCount: number;
+  doorCount: number;
+  notes: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}): FieldErrors {
+  const errors: FieldErrors = {};
+  const email = values.email.trim();
+  const phone = values.phone.trim();
+
+  if (values.roomCount === 0 && values.doorCount === 0 && values.notes.trim().length === 0) {
+    errors.scope = "Add the number of rooms or doors, or describe the job.";
   }
 
-  function updateSurface(surface: keyof PainterChecklist["surfaces"], checked: boolean) {
-    setChecklist((current) => ({
-      ...current,
-      surfaces: { ...current.surfaces, [surface]: checked }
-    }));
+  if (values.name.trim().length === 0) {
+    errors.name = "Enter your name.";
   }
+
+  if (!email && !phone) {
+    errors.contact = "Add an email address or phone number.";
+  }
+
+  if (email && !emailPattern.test(email)) {
+    errors.email = "Enter a valid email address, like name@example.com.";
+  }
+
+  if (phone && phone.replace(/\D/g, "").length < 7) {
+    errors.phone = "Enter a phone number with at least 7 digits.";
+  }
+
+  if (values.address.trim().length === 0) {
+    errors.address = "Enter the job address.";
+  }
+
+  return errors;
+}
+
+function focusField(key: FieldKey) {
+  const element = document.getElementById(fieldIds[key]);
+  if (!element) return;
+
+  element.focus({ preventScroll: true });
+  element.scrollIntoView({
+    block: "center",
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+  });
+}
+
+function FieldError(props: { id: string; children: ReactNode }) {
+  return <p className="estimate-field-error" id={props.id}>{props.children}</p>;
 }
 
 function TextField(props: {
+  id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   autoComplete?: string;
+  inputMode?: "email" | "tel";
   required?: boolean;
+  optional?: boolean;
+  error?: string | undefined;
+  /** Marks the input invalid when the message is shown elsewhere, such as under a pair of fields. */
+  invalid?: boolean;
+  describedBy?: string | undefined;
 }) {
+  const errorId = `${props.id}-error`;
+  const invalid = Boolean(props.error) || props.invalid === true;
+  const describedBy = [props.error ? errorId : null, props.describedBy].filter(Boolean).join(" ") || undefined;
+
   return (
-    <label className="estimate-input-label">
-      <span>{props.label}</span>
+    <div className={invalid ? "estimate-field has-error" : "estimate-field"}>
+      <label htmlFor={props.id}>
+        {props.label}
+        {props.optional ? <small>Optional</small> : null}
+      </label>
       <input
+        aria-describedby={describedBy}
+        aria-invalid={invalid ? true : undefined}
+        aria-required={props.required ? true : undefined}
         autoComplete={props.autoComplete}
-        required={props.required}
+        id={props.id}
+        inputMode={props.inputMode}
         type={props.type ?? "text"}
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
       />
-    </label>
+      {props.error ? <FieldError id={errorId}>{props.error}</FieldError> : null}
+    </div>
   );
 }
 
-function SelectField(props: {
+function CountField(props: {
+  id: string;
   label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
+  value: number;
+  max: number;
+  onChange: (value: number) => void;
+  invalid?: boolean;
+  describedBy?: string | undefined;
 }) {
-  return (
-    <label className="estimate-input-label">
-      <span>{props.label}</span>
-      <select value={props.value} onChange={(event) => props.onChange(event.target.value)}>
-        {props.children}
-      </select>
-    </label>
-  );
-}
+  const noun = props.label.toLowerCase();
 
-function Stepper(props: { label: string; value: number; onChange: (value: number) => void }) {
   return (
-    <div className="estimate-stepper">
-      <span>{props.label}</span>
-      <div>
-        <button type="button" aria-label={`Decrease ${props.label}`} onClick={() => props.onChange(clampCount(props.value - 1))}>-</button>
-        <strong>{props.value}</strong>
-        <button type="button" aria-label={`Increase ${props.label}`} onClick={() => props.onChange(clampCount(props.value + 1))}>+</button>
+    <div className={props.invalid ? "estimate-field has-error" : "estimate-field"}>
+      <label htmlFor={props.id}>{props.label}</label>
+      <div className="estimate-count-control">
+        <button type="button" aria-label={`Fewer ${noun}`} disabled={props.value <= 0} onClick={() => props.onChange(clampCount(props.value - 1, props.max))}>&minus;</button>
+        <input
+          aria-describedby={props.describedBy}
+          aria-invalid={props.invalid ? true : undefined}
+          autoComplete="off"
+          id={props.id}
+          inputMode="numeric"
+          value={String(props.value)}
+          onChange={(event) => props.onChange(clampCount(Number(event.target.value.replace(/\D/g, "").slice(0, 3)), props.max))}
+          onFocus={(event) => event.target.select()}
+        />
+        <button type="button" aria-label={`More ${noun}`} disabled={props.value >= props.max} onClick={() => props.onChange(clampCount(props.value + 1, props.max))}>+</button>
       </div>
     </div>
   );
 }
 
-function Toggle(props: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function Choice(props: {
+  type: "checkbox" | "radio";
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  name?: string;
+}) {
   return (
-    <label className={props.checked ? "estimate-toggle is-checked" : "estimate-toggle"}>
-      <input type="checkbox" checked={props.checked} onChange={(event) => props.onChange(event.target.checked)} />
-      <span aria-hidden="true" />
+    <label className={`estimate-choice is-${props.type}${props.checked ? " is-checked" : ""}`}>
+      <input checked={props.checked} name={props.name} type={props.type} onChange={(event) => props.onChange(event.target.checked)} />
+      <span className="estimate-choice-mark" aria-hidden="true" />
       <strong>{props.label}</strong>
     </label>
+  );
+}
+
+function PreferredTimelinePicker(props: {
+  startDate: string;
+  endDate: string;
+  onChange: (startDate: string, endDate: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = props.startDate
+    ? { from: dateFromInputValue(props.startDate), to: props.endDate ? dateFromInputValue(props.endDate) : undefined }
+    : undefined;
+  const today = dateFromInputValue(todayDateInputValue());
+
+  function selectRange(range: DateRange | undefined) {
+    props.onChange(
+      range?.from ? dateToInputValue(range.from) : "",
+      range?.to ? dateToInputValue(range.to) : ""
+    );
+  }
+
+  return (
+    <section className={open ? "estimate-form-section estimate-timeline is-open" : "estimate-form-section estimate-timeline"} aria-labelledby="estimate-timeline-title">
+      <div className="estimate-section-head">
+        <h2 id="estimate-timeline-title">Preferred timeline</h2>
+        <span>
+          Optional
+          {props.startDate ? <button type="button" onClick={() => props.onChange("", "")}>Clear dates</button> : null}
+        </span>
+      </div>
+
+      <button
+        aria-controls="preferred-timeline-calendar"
+        aria-expanded={open}
+        className="estimate-date-trigger"
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>
+          <small>Preferred dates</small>
+          <strong>{preferredTimelineText(props.startDate, props.endDate)}</strong>
+        </span>
+        <b>{open ? "Close" : props.startDate ? "Change" : "Choose"}</b>
+      </button>
+
+      {open ? (
+        <div className="estimate-calendar-panel" id="preferred-timeline-calendar">
+          <p>{selected?.from && !selected.to ? "Now choose an end date, or select Done for one day." : "Select a start date, then an optional end date."}</p>
+          <DayPicker
+            defaultMonth={selected?.from ?? today}
+            disabled={{ before: today }}
+            fixedWeeks
+            mode="range"
+            onSelect={selectRange}
+            resetOnSelect
+            selected={selected}
+            showOutsideDays
+          />
+          <div className="estimate-calendar-actions">
+            <button disabled={!props.startDate} type="button" onClick={() => props.onChange("", "")}>Clear</button>
+            <button type="button" onClick={() => setOpen(false)}>Done</button>
+          </div>
+        </div>
+      ) : null}
+
+      <p className="estimate-timeline-note">
+        These are preferred dates, not a confirmed appointment.
+      </p>
+    </section>
   );
 }
 
@@ -438,7 +678,7 @@ function PhotoPicker(props: {
 
   return (
     <div className="estimate-photo-picker">
-      <div className="estimate-photo-grid">
+      <div className={props.photos.length === 0 ? "estimate-photo-grid is-empty" : "estimate-photo-grid"}>
         {props.photos.map((photo, index) => (
           <figure className="estimate-photo-preview" key={`${photo.fileName}-${index}`}>
             <img alt={`Job photo ${index + 1}`} src={photo.previewUrl} />
@@ -450,12 +690,13 @@ function PhotoPicker(props: {
         {props.photos.length < 4 ? (
           <label className="estimate-photo-add">
             <input accept="image/jpeg,image/png,image/webp" multiple onChange={addPhotos} type="file" />
-            <strong>+</strong>
+            <strong aria-hidden="true">+</strong>
             <span>Add photos</span>
+            {props.photos.length === 0 ? <small>Up to 4 &middot; JPG, PNG, or WebP</small> : null}
           </label>
         ) : null}
       </div>
-      <p>Wide room photos help the contractor prepare a more accurate quote.</p>
+      <p>Clear, well-lit photos of each room or surface work best, plus close-ups of any damage. Avoid selfies or unrelated images.</p>
     </div>
   );
 }
@@ -500,10 +741,43 @@ function VideoPicker(props: {
         <label className="estimate-video-add">
           <input accept="video/mp4,video/quicktime,video/webm" onChange={addVideo} type="file" />
           <span aria-hidden="true">+</span>
-          <div><strong>Add a short video</strong><small>Up to 90 seconds and 60 MB</small></div>
+          <div><strong>Or add a short video</strong><small>Walk through the rooms. Up to 90 seconds and 60 MB.</small></div>
         </label>
       )}
     </div>
+  );
+}
+
+function ProviderHeader(props: { org: EstimateOrg | null }) {
+  const { org } = props;
+  const phone = org?.contactPhone?.trim() || null;
+  const website = org?.website?.trim() || null;
+  const websiteLink = website ? websiteHref(website) : null;
+  const facts = [
+    phone ? <a key="phone" href={`tel:${phone.replace(/[^\d+]/g, "")}`}>{phone}</a> : null,
+    website
+      ? websiteLink
+        ? <a key="website" href={websiteLink} rel="noopener noreferrer" target="_blank">{websiteLabel(website)}</a>
+        : <span key="website">{website}</span>
+      : null,
+    org?.serviceArea ? <span key="area">Serves {org.serviceArea}</span> : null
+  ].filter(Boolean);
+
+  return (
+    <header className="estimate-profile">
+      <div className="estimate-profile-top">
+        <BrandMark org={org} />
+        <div className="estimate-profile-name">
+          <h1>{org?.name ?? "Request a quote"}</h1>
+          <p>{org ? `${sentenceCase(org.trade)} quote request` : "Loading contractor details..."}</p>
+        </div>
+      </div>
+      {org?.about ? <p className="estimate-profile-about">{org.about}</p> : null}
+      <div className="estimate-profile-meta">
+        {facts.length > 0 ? <ul className="estimate-profile-facts">{facts.map((fact, index) => <li key={index}>{fact}</li>)}</ul> : null}
+        <span className="estimate-powered">Powered by QuoteVan</span>
+      </div>
+    </header>
   );
 }
 
@@ -513,7 +787,7 @@ function BrandMark(props: { org: EstimateOrg | null }) {
   }
 
   const initial = props.org?.name?.trim().charAt(0).toUpperCase() || "Q";
-  return <span className="estimate-brand-mark">{initial}</span>;
+  return <span aria-hidden="true" className="estimate-brand-mark">{initial}</span>;
 }
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -561,8 +835,24 @@ async function uploadRequestVideo(orgId: string, video: RequestVideo, company: s
   return upload;
 }
 
-function estimateContactLine(org: EstimateOrg) {
-  return [org.contactPhone, org.website].filter(Boolean).join(" - ") || "Powered by QuoteVan";
+function websiteHref(value: string) {
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`;
+
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function websiteLabel(value: string) {
+  return value.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+}
+
+function sentenceCase(value: string) {
+  const trimmed = value.trim();
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
 function emptyToNull(value: string) {
@@ -570,8 +860,33 @@ function emptyToNull(value: string) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function clampCount(value: number) {
-  return Math.max(0, Math.min(20, value));
+function todayDateInputValue() {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+}
+
+function dateFromInputValue(value: string) {
+  return new Date(`${value}T12:00:00`);
+}
+
+function dateToInputValue(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function preferredTimelineText(startDate: string, endDate: string) {
+  if (!startDate) return "Choose preferred dates";
+
+  const formatter = new Intl.DateTimeFormat("en-CA", { day: "numeric", month: "short", year: "numeric" });
+  const start = formatter.format(dateFromInputValue(startDate));
+  return endDate ? `${start} to ${formatter.format(dateFromInputValue(endDate))}` : start;
+}
+
+function clampCount(value: number, max: number) {
+  return Math.max(0, Math.min(max, value));
 }
 
 function submissionStorageKey(orgId: string) {

@@ -160,7 +160,7 @@ export default function RequestDetailScreen() {
         <View style={styles.hero}>
           <AppText variant="screenTitle">{request.customer.name}</AppText>
           <View style={styles.detailLine}><MapPin color={colors.ink3} size={16} /><AppText variant="body">{request.address}{request.city ? `, ${request.city}` : ""}</AppText></View>
-          <View style={styles.detailLine}><Clock3 color={colors.ink3} size={16} /><AppText variant="body">{timingLabel(request.timing)} · {formatDateTime(request.createdAt)}</AppText></View>
+          <View style={styles.detailLine}><Clock3 color={colors.ink3} size={16} /><AppText variant="body">{preferredTimelineLabel(request.preferredStartDate, request.preferredEndDate)} · {formatDateTime(request.createdAt)}</AppText></View>
         </View>
 
         <View style={styles.actions}>
@@ -342,11 +342,15 @@ function StatusBadge(props: { active: boolean; label: string }) {
   return <View style={[styles.statusBadge, props.active ? styles.statusBadgeActive : null]}><AppText style={props.active ? styles.statusBadgeTextActive : null} variant="statusPill">{props.label}</AppText></View>;
 }
 
-function timingLabel(timing: ApiWebsiteRequest["timing"]) {
-  if (timing === "asap") return "As soon as possible";
-  if (timing === "this_month") return "This month";
-  if (timing === "just_pricing") return "Comparing quotes";
-  return "Flexible timing";
+function preferredTimelineLabel(startDate: string | null, endDate: string | null) {
+  if (!startDate) return "No preferred dates";
+  const start = formatDateOnly(startDate);
+  return endDate ? `Preferred ${start} to ${formatDateOnly(endDate)}` : `Preferred ${start}`;
+}
+
+function formatDateOnly(value: string) {
+  return new Intl.DateTimeFormat("en-CA", { day: "numeric", month: "short", year: "numeric" })
+    .format(new Date(`${value}T12:00:00`));
 }
 
 function draftStatus(request: ApiWebsiteRequest) {
