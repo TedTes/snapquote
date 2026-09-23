@@ -146,7 +146,7 @@ export default function RequestDetailScreen() {
   }
 
   const roomCount = request.checklist.rooms.small + request.checklist.rooms.medium + request.checklist.rooms.large;
-  const statusLabel = request.status === "quote_sent" ? "Quote sent" : request.status === "contacted" ? "Contacted" : request.status === "new" ? "New" : "Opened";
+  const statusLabel = request.status === "quote_sent" ? "Quote sent" : request.status === "new" ? "New" : "Opened";
   const videos = request.media?.filter((item) => item.type === "video" && item.url) ?? [];
 
   return (
