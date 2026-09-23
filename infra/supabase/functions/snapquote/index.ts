@@ -46,6 +46,14 @@ import {
   photoSuitabilityJsonSchema,
   usablePhotoMediaIds
 } from "./photoAnalysis.ts";
+import {
+  aggregateSuggestionMetrics,
+  suggestionMetricsPeriodStart,
+  type AnalysisRequestMetricRow,
+  type SuggestionMetricRow
+} from "./suggestionMetrics.ts";
+
+const suggestionMetricsPeriodSchema = z.enum(["7d", "30d", "90d", "all"]);
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -659,6 +667,10 @@ Deno.serve(async (request) => {
 
     if (route.method === "GET" && route.path === "/v1/requests") {
       return json({ requests: await listWebsiteRequests(db, orgIdFromRequest(request)) });
+    }
+
+    if (route.method === "GET" && route.path === "/v1/insights/suggestions") {
+      return json(await getSuggestionMetrics(db, request));
     }
 
     if (route.method === "GET" && match(route.path, "/v1/requests/:id")) {
@@ -2818,6 +2830,39 @@ async function listWebsiteRequests(db: SupabaseClient, orgId: string) {
   }
 
   return Promise.all(data.map((row) => websiteRequestResponse(db, orgId, row)));
+}
+
+async function getSuggestionMetrics(db: SupabaseClient, request: Request) {
+  const orgId = orgIdFromRequest(request);
+  const period = parse(
+    suggestionMetricsPeriodSchema,
+    new URL(request.url).searchParams.get("period") ?? "30d"
+  );
+  const from = suggestionMetricsPeriodStart(period);
+  let suggestionsQuery = db
+    .from("snapquote_request_analysis_suggestions")
+    .select("id,request_id,suggestion_type,description,confidence,status,created_at,decided_at")
+    .eq("org_id", orgId);
+  let requestsQuery = db
+    .from("snapquote_website_estimate_requests")
+    .select("id,analysis_status,analysis_model,analysis_version,analysis_started_at,analysis_completed_at,created_at")
+    .eq("org_id", orgId)
+    .not("analysis_started_at", "is", null);
+
+  if (from !== null) {
+    suggestionsQuery = suggestionsQuery.or(`created_at.gte.${from},decided_at.gte.${from}`);
+    requestsQuery = requestsQuery.gte("analysis_started_at", from);
+  }
+
+  const [suggestionResult, requestResult] = await Promise.all([suggestionsQuery, requestsQuery]);
+  if (suggestionResult.error) throw suggestionResult.error;
+  if (requestResult.error) throw requestResult.error;
+
+  return aggregateSuggestionMetrics({
+    period,
+    suggestions: suggestionResult.data as SuggestionMetricRow[],
+    requests: requestResult.data as AnalysisRequestMetricRow[]
+  });
 }
 
 async function getWebsiteRequest(db: SupabaseClient, request: Request, requestId: string) {

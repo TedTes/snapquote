@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { router, useFocusEffect } from "expo-router";
 import {
+  BarChart3,
   Book,
   CalendarDays,
   ChevronRight,
@@ -328,6 +329,16 @@ Embed URL: ${embedUrl}`,
             last
             onPress={() => undefined}
             showChevron={false}
+          />
+        </SettingsSection>
+
+        <SettingsSection label="Insights">
+          <SettingsRow
+            detail="Acceptance, confidence, and analysis reliability"
+            icon={<BarChart3 color={colors.ink2} size={16} strokeWidth={2.1} />}
+            label="AI accuracy"
+            last
+            onPress={() => router.push("/settings/accuracy")}
           />
         </SettingsSection>
 

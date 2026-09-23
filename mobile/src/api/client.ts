@@ -113,6 +113,63 @@ export type ApiQuote = {
 
 export type ApiWebsiteRequestStatus = "new" | "opened" | "contacted" | "quote_sent" | "archived";
 export type ApiRequestAnalysisStatus = "not_requested" | "pending" | "processing" | "completed" | "failed" | "no_media";
+export type SuggestionMetricsPeriod = "7d" | "30d" | "90d" | "all";
+
+export type SuggestionMetrics = {
+  period: {
+    key: SuggestionMetricsPeriod;
+    from: string | null;
+    to: string;
+  };
+  totals: {
+    generated: number;
+    pending: number;
+    reviewed: number;
+    accepted: number;
+    rejected: number;
+    acceptanceRate: number | null;
+    attemptedAnalyses: number;
+    completedAnalyses: number;
+    failedAnalyses: number;
+    completionRate: number | null;
+    medianDecisionHours: number | null;
+  };
+  byType: Array<{
+    type: string;
+    generated: number;
+    reviewed: number;
+    accepted: number;
+    rejected: number;
+    acceptanceRate: number | null;
+  }>;
+  confidenceBands: Array<{
+    key: "low" | "medium" | "high";
+    label: string;
+    reviewed: number;
+    accepted: number;
+    rejected: number;
+    acceptanceRate: number | null;
+  }>;
+  trend: Array<{
+    key: string;
+    label: string;
+    accepted: number;
+    rejected: number;
+  }>;
+  topRejected: Array<{
+    description: string;
+    count: number;
+    averageConfidence: number;
+  }>;
+  models: Array<{
+    model: string;
+    version: string | null;
+    attempted: number;
+    completed: number;
+    failed: number;
+    completionRate: number | null;
+  }>;
+};
 
 export type ApiRequestMedia = {
   id: string;
@@ -495,6 +552,9 @@ export const snapquoteApi = {
     ),
 
   listRequests: () => request<{ requests: ApiWebsiteRequest[] }>("/v1/requests"),
+
+  getSuggestionMetrics: (period: SuggestionMetricsPeriod) =>
+    request<SuggestionMetrics>(`/v1/insights/suggestions?period=${period}`),
 
   getRequest: (id: string) => request<ApiWebsiteRequest>(`/v1/requests/${id}`),
 
