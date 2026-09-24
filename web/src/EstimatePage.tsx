@@ -129,23 +129,22 @@ const fieldIds: Record<FieldKey, string> = {
   address: "estimate-address"
 };
 
-const composerSteps = ["Location", "The job", "Photos", "Timing", "Contact", "Review"] as const;
+const composerSteps = ["The job", "Photos", "Timing", "Contact", "Review"] as const;
 const finalComposerStep = composerSteps.length - 1;
 const composerStepFields: Record<number, FieldKey[]> = {
-  0: ["address"],
-  1: ["scope"],
+  0: ["address", "scope"],
+  1: [],
   2: [],
-  3: [],
-  4: ["name", "contact", "email", "phone"],
-  5: fieldOrder
+  3: ["name", "contact", "email", "phone"],
+  4: fieldOrder
 };
 const fieldComposerStep: Record<FieldKey, number> = {
   address: 0,
-  scope: 1,
-  name: 4,
-  contact: 4,
-  email: 4,
-  phone: 4
+  scope: 0,
+  name: 3,
+  contact: 3,
+  email: 3,
+  phone: 3
 };
 
 const maxRooms = 20;
@@ -168,20 +167,16 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
+  const city = "";
   const [company, setCompany] = useState("");
   const [submitState, setSubmitState] = useState<"idle" | "submitting">("idle");
   const [activeStep, setActiveStep] = useState(0);
-  const [requestOpen, setRequestOpen] = useState(embed);
   const [showErrors, setShowErrors] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<RequestResponse | null>(() => readSubmissionReceipt(orgId));
   const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
   const composerHeadingRef = useRef<HTMLHeadingElement>(null);
-  const requestHeadingRef = useRef<HTMLHeadingElement>(null);
-  const requestSectionRef = useRef<HTMLElement>(null);
-  const pendingRequestScrollRef = useRef(false);
   const focusComposerHeadingRef = useRef(false);
   const pendingFieldFocusRef = useRef<FieldKey | null>(null);
 
@@ -194,19 +189,6 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
       confirmationHeadingRef.current?.focus();
     }
   }, [result]);
-
-  useEffect(() => {
-    if (!requestOpen || !pendingRequestScrollRef.current) return;
-    pendingRequestScrollRef.current = false;
-
-    window.requestAnimationFrame(() => {
-      requestSectionRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start"
-      });
-      requestHeadingRef.current?.focus({ preventScroll: true });
-    });
-  }, [requestOpen]);
 
   useEffect(() => {
     const pendingField = pendingFieldFocusRef.current;
@@ -252,19 +234,6 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   const summaryKeys = fieldOrder.filter((key) => visibleErrors[key]);
   const scopeDescribedBy = visibleErrors.scope ? "estimate-scope-error" : undefined;
   const contactDescribedBy = visibleErrors.contact ? "estimate-contact-error" : undefined;
-
-  function openRequestForm() {
-    if (requestOpen) {
-      requestSectionRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start"
-      });
-      return;
-    }
-
-    pendingRequestScrollRef.current = true;
-    setRequestOpen(true);
-  }
 
   function openComposerStep(step: number) {
     focusComposerHeadingRef.current = true;
@@ -370,10 +339,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   return (
     <main className={embed ? "estimate-page is-embed" : "estimate-page"}>
       <section className="estimate-shell" aria-label="Quote request">
-        <ProviderHeader
-          org={org}
-          onRequestQuote={result ? undefined : openRequestForm}
-        />
+        <ProviderHeader org={org} />
 
         {result ? (
           <section className="estimate-confirmation" aria-live="polite">
@@ -391,29 +357,23 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
           </section>
         ) : (
           <>
-            <ProviderProof org={org} />
-            {requestOpen ? (
-              <section className="estimate-request" ref={requestSectionRef} aria-labelledby="estimate-request-title">
-                <div className="estimate-request-intro">
-                  <p className="section-label">Request your quote</p>
-                  <h2 id="estimate-request-title" ref={requestHeadingRef} tabIndex={-1}>Tell {org?.name ?? "the provider"} about the job.</h2>
-                  <p>A rough idea is enough. They confirm the work and set the price after reviewing your request.</p>
-                </div>
-                <ProviderValueBand org={org} />
-                <div className="estimate-layout">
-              <aside className="estimate-next" aria-labelledby="estimate-next-title">
-                <p className="section-label">How it works</p>
-                <h2 id="estimate-next-title">A real quote, reviewed first.</h2>
-                <p>
-                  This request goes directly to {org?.name ?? "the provider"}. Nothing is automatically priced or sent to you.
-                </p>
-                <ol className="estimate-steps">
-                  <li><span className="estimate-step-mark" aria-hidden="true">1</span><span><strong>Send the job</strong><small>Add the scope, photos, and preferred dates.</small></span></li>
-                  <li><span className="estimate-step-mark" aria-hidden="true">2</span><span><strong>{org?.name ?? "The provider"} reviews it</strong><small>They confirm the work and set the price.</small></span></li>
-                  <li><span className="estimate-step-mark" aria-hidden="true">3</span><span><strong>Receive your quote</strong><small>They contact you using the details you provide.</small></span></li>
-                </ol>
-                <ProviderContact org={org} />
-              </aside>
+            <ProviderPortfolio org={org} />
+            <section className="estimate-request" aria-label="Quote request form">
+              <ProviderValueBand org={org} />
+              <div className="estimate-layout">
+                <aside className="estimate-next" aria-labelledby="estimate-next-title">
+                  <p className="section-label">How it works</p>
+                  <h2 id="estimate-next-title">A real quote, reviewed first.</h2>
+                  <p>
+                    This request goes directly to {org?.name ?? "the provider"}. Nothing is automatically priced or sent to you.
+                  </p>
+                  <ol className="estimate-steps">
+                    <li><span className="estimate-step-mark" aria-hidden="true">1</span><span><strong>Share the job</strong><small>Add the scope, photos, and preferred dates.</small></span></li>
+                    <li><span className="estimate-step-mark" aria-hidden="true">2</span><span><strong>{org?.name ?? "The provider"} reviews it</strong><small>They confirm the work and set the price.</small></span></li>
+                    <li><span className="estimate-step-mark" aria-hidden="true">3</span><span><strong>Receive your quote</strong><small>They contact you using the details you provide.</small></span></li>
+                  </ol>
+                  <ProviderContact org={org} />
+                </aside>
 
               <form className="estimate-form estimate-composer" noValidate onSubmit={submitRequest}>
                 <label className="estimate-hidden-field" aria-hidden="true">
@@ -421,62 +381,65 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                   <input autoComplete="off" tabIndex={-1} value={company} onChange={(event) => setCompany(event.target.value)} />
                 </label>
 
-                <div className="estimate-composer-progress">
-                  <div>
-                    <span>Step {activeStep + 1} of {composerSteps.length}</span>
-                    <strong>{composerSteps[activeStep]}</strong>
+                {activeStep > 0 ? (
+                  <div className="estimate-composer-progress">
+                    <div>
+                      <span>Step {activeStep + 1} of {composerSteps.length}</span>
+                      <strong>{composerSteps[activeStep]}</strong>
+                    </div>
+                    <div
+                      aria-label={`Request progress: step ${activeStep + 1} of ${composerSteps.length}`}
+                      aria-valuemax={composerSteps.length}
+                      aria-valuemin={1}
+                      aria-valuenow={activeStep + 1}
+                      className="estimate-composer-track"
+                      role="progressbar"
+                    >
+                      {composerSteps.map((step, index) => (
+                        <span className={index <= activeStep ? "is-complete" : ""} key={step} />
+                      ))}
+                    </div>
                   </div>
-                  <div
-                    aria-label={`Request progress: step ${activeStep + 1} of ${composerSteps.length}`}
-                    aria-valuemax={composerSteps.length}
-                    aria-valuemin={1}
-                    aria-valuenow={activeStep + 1}
-                    className="estimate-composer-track"
-                    role="progressbar"
-                  >
-                    {composerSteps.map((step, index) => (
-                      <span className={index <= activeStep ? "is-complete" : ""} key={step} />
-                    ))}
-                  </div>
-                </div>
+                ) : null}
 
                 <div className="estimate-composer-panel" key={activeStep}>
                   {activeStep === 0 ? (
-                    <section aria-labelledby="estimate-location-title">
-                      <p className="estimate-section-number">Job location</p>
+                    <section aria-labelledby="estimate-scope-title">
+                      <p className="estimate-section-number">The job &middot; what needs doing</p>
                       <div className="estimate-section-head">
-                        <h2 id="estimate-location-title" ref={composerHeadingRef} tabIndex={-1}>Where is the work?</h2>
+                        <h2 id="estimate-scope-title" ref={composerHeadingRef} tabIndex={-1}>Tell us about the work</h2>
                       </div>
-                      <p className="estimate-section-hint">This helps {org?.name ?? "the provider"} confirm the service area and prepare the quote.</p>
-                      <div className="estimate-field-grid address">
+                      <p className="estimate-section-hint">A rough idea is enough. {org?.name ?? "The provider"} confirms the details and the price.</p>
+
+                      <div className="estimate-field-grid">
                         <TextField
                           autoComplete="street-address"
                           error={visibleErrors.address}
                           id={fieldIds.address}
                           label="Job address"
+                          labelHidden
+                          placeholder="Job address"
                           required
                           value={address}
                           onChange={setAddress}
                         />
-                        <TextField autoComplete="address-level2" id="estimate-city" label="City" optional value={city} onChange={setCity} />
                       </div>
-                    </section>
-                  ) : null}
 
-                  {activeStep === 1 ? (
-                    <section aria-labelledby="estimate-scope-title">
-                      <p className="estimate-section-number">The job</p>
-                      <div className="estimate-section-head">
-                        <h2 id="estimate-scope-title" ref={composerHeadingRef} tabIndex={-1}>What needs doing?</h2>
-                      </div>
-                      <p className="estimate-section-hint">A rough description is enough. {org?.name ?? "The provider"} confirms the details and the price.</p>
+                      <fieldset className="estimate-fieldset">
+                        <legend>What needs painting?<small>Pick any</small></legend>
+                        <div className="estimate-choice-grid surfaces">
+                          <Choice type="checkbox" label="Walls" checked={surfaces.walls} onChange={(checked) => setSurfaces((current) => ({ ...current, walls: checked }))} />
+                          <Choice type="checkbox" label="Ceilings" checked={surfaces.ceilings} onChange={(checked) => setSurfaces((current) => ({ ...current, ceilings: checked }))} />
+                          <Choice type="checkbox" label="Trim" checked={surfaces.trim} onChange={(checked) => setSurfaces((current) => ({ ...current, trim: checked }))} />
+                        </div>
+                      </fieldset>
 
                       <div className="estimate-field-grid two counts">
                         <CountField
                           describedBy={scopeDescribedBy}
                           id={fieldIds.scope}
                           invalid={Boolean(visibleErrors.scope)}
-                          label="Rooms to paint"
+                          label="Rooms or areas"
                           max={maxRooms}
                           value={roomCount}
                           onChange={setRoomCount}
@@ -485,21 +448,12 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                           describedBy={scopeDescribedBy}
                           id="estimate-doors"
                           invalid={Boolean(visibleErrors.scope)}
-                          label="Doors to paint"
+                          label="Doors"
                           max={maxDoors}
                           value={doorCount}
                           onChange={setDoorCount}
                         />
                       </div>
-
-                      <fieldset className="estimate-fieldset">
-                        <legend>What needs painting?<small>Optional</small></legend>
-                        <div className="estimate-choice-grid surfaces">
-                          <Choice type="checkbox" label="Walls" checked={surfaces.walls} onChange={(checked) => setSurfaces((current) => ({ ...current, walls: checked }))} />
-                          <Choice type="checkbox" label="Ceilings" checked={surfaces.ceilings} onChange={(checked) => setSurfaces((current) => ({ ...current, ceilings: checked }))} />
-                          <Choice type="checkbox" label="Trim" checked={surfaces.trim} onChange={(checked) => setSurfaces((current) => ({ ...current, trim: checked }))} />
-                        </div>
-                      </fieldset>
 
                       <fieldset className="estimate-fieldset">
                         <legend>Who is providing the paint?<small>Optional</small></legend>
@@ -519,7 +473,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                     </section>
                   ) : null}
 
-                  {activeStep === 2 ? (
+                  {activeStep === 1 ? (
                     <section aria-labelledby="estimate-photos-title">
                       <p className="estimate-section-number">Photos and video</p>
                       <div className="estimate-section-head">
@@ -533,7 +487,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                     </section>
                   ) : null}
 
-                  {activeStep === 3 ? (
+                  {activeStep === 2 ? (
                     <section aria-labelledby="estimate-timeline-title">
                       <p className="estimate-section-number">Preferred timeline</p>
                       <div className="estimate-section-head">
@@ -552,7 +506,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                     </section>
                   ) : null}
 
-                  {activeStep === 4 ? (
+                  {activeStep === 3 ? (
                     <section aria-labelledby="estimate-contact-title">
                       <p className="estimate-section-number">Your contact</p>
                       <div className="estimate-section-head">
@@ -599,7 +553,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                     </section>
                   ) : null}
 
-                  {activeStep === 5 ? (
+                  {activeStep === 4 ? (
                     <section aria-labelledby="estimate-review-title">
                       <p className="estimate-section-number">Review</p>
                       <div className="estimate-section-head">
@@ -608,10 +562,10 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                       <p className="estimate-section-hint">Nothing is priced automatically. {org?.name ?? "The provider"} reviews this request first.</p>
                       <div className="estimate-review-summary">
                         <RequestReviewRow label="Location" value={[address, city].filter(Boolean).join(", ")} onEdit={() => openComposerStep(0)} />
-                        <RequestReviewRow label="Job" value={homeownerJobSummary(roomCount, doorCount, surfaces, paintChoice, notes)} onEdit={() => openComposerStep(1)} />
-                        <RequestReviewRow label="Media" value={requestMediaSummary(photos.length, Boolean(video))} onEdit={() => openComposerStep(2)} />
-                        <RequestReviewRow label="Timing" value={preferredTimelineText(preferredStartDate, preferredEndDate)} onEdit={() => openComposerStep(3)} />
-                        <RequestReviewRow label="Contact" value={[customerName, email || phone].filter(Boolean).join(" · ")} onEdit={() => openComposerStep(4)} />
+                        <RequestReviewRow label="Job" value={homeownerJobSummary(roomCount, doorCount, surfaces, paintChoice, notes)} onEdit={() => openComposerStep(0)} />
+                        <RequestReviewRow label="Media" value={requestMediaSummary(photos.length, Boolean(video))} onEdit={() => openComposerStep(1)} />
+                        <RequestReviewRow label="Timing" value={preferredTimelineText(preferredStartDate, preferredEndDate)} onEdit={() => openComposerStep(2)} />
+                        <RequestReviewRow label="Contact" value={[customerName, email || phone].filter(Boolean).join(" · ")} onEdit={() => openComposerStep(3)} />
                       </div>
                       {summaryKeys.length > 0 ? (
                         <div className="estimate-summary" role="alert">
@@ -634,7 +588,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                       <button className="estimate-composer-next" type="button" onClick={continueComposer}>Continue</button>
                     ) : (
                       <button className="estimate-submit" type="submit" disabled={submitState === "submitting"}>
-                        {submitState === "submitting" ? "Sending request..." : "Send quote request"}
+                        {submitState === "submitting" ? "Submitting..." : "Submit request"}
                       </button>
                     )}
                   </div>
@@ -646,10 +600,10 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
                     </p>
                   ) : null}
                 </div>
-              </form>
-                </div>
-              </section>
-            ) : null}
+                </form>
+              </div>
+            </section>
+            <ProviderReviews org={org} />
           </>
         )}
 
@@ -724,6 +678,8 @@ function TextField(props: {
   inputMode?: "email" | "tel";
   required?: boolean;
   optional?: boolean;
+  placeholder?: string;
+  labelHidden?: boolean;
   error?: string | undefined;
   /** Marks the input invalid when the message is shown elsewhere, such as under a pair of fields. */
   invalid?: boolean;
@@ -734,8 +690,8 @@ function TextField(props: {
   const describedBy = [props.error ? errorId : null, props.describedBy].filter(Boolean).join(" ") || undefined;
 
   return (
-    <div className={invalid ? "estimate-field has-error" : "estimate-field"}>
-      <label htmlFor={props.id}>
+    <div className={`${invalid ? "estimate-field has-error" : "estimate-field"}${props.labelHidden ? " has-hidden-label" : ""}`}>
+      <label className={props.labelHidden ? "estimate-sr-only" : undefined} htmlFor={props.id}>
         {props.label}
         {props.optional ? <small>Optional</small> : null}
       </label>
@@ -746,6 +702,7 @@ function TextField(props: {
         autoComplete={props.autoComplete}
         id={props.id}
         inputMode={props.inputMode}
+        placeholder={props.placeholder}
         type={props.type ?? "text"}
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
@@ -1091,32 +1048,15 @@ function VideoPicker(props: {
   );
 }
 
-function ProviderHeader(props: { org: EstimateOrg | null; onRequestQuote?: () => void }) {
+function ProviderHeader(props: { org: EstimateOrg | null }) {
   const { org } = props;
   const phone = org?.contactPhone?.trim() || null;
   const website = org?.website?.trim() || null;
   const websiteLink = website ? websiteHref(website) : null;
-  const coverPhoto = org?.portfolio?.[0] ?? null;
   const reviewCount = org?.reviews?.count ?? 0;
-  const portfolioCount = org?.portfolio?.length ?? 0;
-  const profileFacts = [
-    org?.yearsInBusiness !== null && org?.yearsInBusiness !== undefined
-      ? { value: `${org.yearsInBusiness}`, label: org.yearsInBusiness === 1 ? "Year in business" : "Years in business" }
-      : null,
-    reviewCount > 0
-      ? { value: `${reviewCount}`, label: reviewCount === 1 ? "Verified review" : "Verified reviews" }
-      : null,
-    portfolioCount > 0
-      ? { value: `${portfolioCount}`, label: portfolioCount === 1 ? "Work photo" : "Work photos" }
-      : null,
-    { value: "Direct", label: "Provider review" }
-  ].filter((fact): fact is { value: string; label: string } => fact !== null);
 
   return (
     <header className="estimate-profile">
-      <div className={coverPhoto ? "estimate-profile-cover has-image" : "estimate-profile-cover"}>
-        {coverPhoto ? <img alt="" src={coverPhoto.imageUrl} /> : null}
-      </div>
       <div className="estimate-profile-inner">
         <div className="estimate-profile-top">
           <div className="estimate-profile-brand">
@@ -1131,8 +1071,7 @@ function ProviderHeader(props: { org: EstimateOrg | null; onRequestQuote?: () =>
                       ? `${org.reviews.averageRating.toFixed(1)} rating · ${org.reviews.count} ${org.reviews.count === 1 ? "review" : "reviews"}`
                       : "New on QuoteVan"}
                   </span>
-                  {org.serviceArea ? <span>Serving {org.serviceArea}</span> : null}
-                  {org.yearsInBusiness !== null && org.yearsInBusiness !== undefined ? <span>{yearsInBusinessLabel(org.yearsInBusiness)}</span> : null}
+                  {org.serviceArea ? <span>{org.serviceArea}</span> : null}
                 </div>
               ) : null}
             </div>
@@ -1144,77 +1083,65 @@ function ProviderHeader(props: { org: EstimateOrg | null; onRequestQuote?: () =>
               : <span>{website}</span> : null}
           </nav>
         </div>
-        <div className="estimate-profile-copy">
-          <p className="section-label">Local service provider</p>
-          <h2>Work worth seeing. A quote reviewed by the people doing it.</h2>
-          <p>{org?.profileBio || "Add the job details and useful photos. The provider reviews the work before preparing your quote."}</p>
-        </div>
-        {props.onRequestQuote ? (
-          <button className="estimate-profile-request" disabled={!org} type="button" onClick={props.onRequestQuote}>
-            <span>Request a free quote</span>
-            <span aria-hidden="true">&rarr;</span>
-          </button>
-        ) : null}
         {org ? (
-          <dl className="estimate-profile-facts">
-            {profileFacts.map((fact) => (
-              <div key={fact.label}>
-                <dt>{fact.value}</dt>
-                <dd>{fact.label}</dd>
-              </div>
-            ))}
-          </dl>
+          <>
+            <div className="estimate-profile-badges" aria-label="Provider details">
+              {reviewCount > 0 ? <span>Verified reviews</span> : null}
+              {org.yearsInBusiness !== null && org.yearsInBusiness !== undefined ? <span>{yearsInBusinessLabel(org.yearsInBusiness)}</span> : null}
+              {org.serviceArea ? <span>{org.serviceArea}</span> : null}
+            </div>
+            <p className="estimate-profile-bio">{org.profileBio || "Share the job details and useful photos for a provider-reviewed quote."}</p>
+          </>
         ) : null}
       </div>
     </header>
   );
 }
 
-function ProviderProof(props: { org: EstimateOrg | null }) {
+function ProviderPortfolio(props: { org: EstimateOrg | null }) {
   const portfolio = props.org?.portfolio ?? [];
-  const reviews = props.org?.reviews;
-  const reviewHighlights = reviews?.highlights.filter((review) => review.body.trim().length > 0) ?? [];
-
-  if (portfolio.length === 0 && reviewHighlights.length === 0) return null;
+  if (portfolio.length === 0) return null;
 
   return (
-    <section className="estimate-proof" aria-label="Provider work and customer reviews">
-      {portfolio.length > 0 ? (
-        <div className="estimate-portfolio">
-          <div className="estimate-proof-heading">
-            <p className="section-label">Completed work</p>
-            <span>{portfolio.length} {portfolio.length === 1 ? "project photo" : "project photos"}</span>
-          </div>
-          <div className="estimate-portfolio-track">
-            {portfolio.map((item, index) => (
-              <figure key={item.id}>
-                <img alt={item.caption || `Completed project by ${props.org?.name ?? "the provider"}, photo ${index + 1}`} loading="lazy" src={item.imageUrl} />
-                {item.caption ? <figcaption>{item.caption}</figcaption> : null}
-              </figure>
-            ))}
-          </div>
-        </div>
-      ) : null}
+    <section className="estimate-proof estimate-portfolio" aria-label="Completed work">
+      <div className="estimate-proof-heading">
+        <p className="section-label">Completed work</p>
+        <span>{portfolio.length} {portfolio.length === 1 ? "project photo" : "project photos"}</span>
+      </div>
+      <div className="estimate-portfolio-track">
+        {portfolio.map((item, index) => (
+          <figure key={item.id}>
+            <img alt={item.caption || `Completed project by ${props.org?.name ?? "the provider"}, photo ${index + 1}`} loading="lazy" src={item.imageUrl} />
+            {item.caption ? <figcaption>{item.caption}</figcaption> : null}
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-      {reviewHighlights.length > 0 ? (
-        <div className="estimate-reviews">
-          <div className="estimate-proof-heading">
-            <p className="section-label">Verified customer reviews</p>
-            {reviews?.averageRating !== null && reviews?.averageRating !== undefined
-              ? <strong>{reviews.averageRating.toFixed(1)} / 5</strong>
-              : null}
-          </div>
-          <div className="estimate-review-list">
-            {reviewHighlights.map((review) => (
-              <blockquote key={review.id}>
-                <div aria-label={`${review.rating} out of 5 stars`}>{starRating(review.rating)}</div>
-                <p>{review.body}</p>
-                <footer>{review.reviewerName} <span>Verified quote</span></footer>
-              </blockquote>
-            ))}
-          </div>
-        </div>
-      ) : null}
+function ProviderReviews(props: { org: EstimateOrg | null }) {
+  const reviews = props.org?.reviews;
+  const reviewHighlights = reviews?.highlights.filter((review) => review.body.trim().length > 0) ?? [];
+  if (reviewHighlights.length === 0) return null;
+
+  return (
+    <section className="estimate-proof estimate-reviews" aria-label="Verified customer reviews">
+      <div className="estimate-proof-heading">
+        <p className="section-label">Verified customer reviews</p>
+        {reviews?.averageRating !== null && reviews?.averageRating !== undefined
+          ? <strong>{reviews.averageRating.toFixed(1)} / 5</strong>
+          : null}
+      </div>
+      <div className="estimate-review-list">
+        {reviewHighlights.map((review) => (
+          <blockquote key={review.id}>
+            <div aria-label={`${review.rating} out of 5 stars`}>{starRating(review.rating)}</div>
+            <p>{review.body}</p>
+            <footer>{review.reviewerName} <span>Verified quote</span></footer>
+          </blockquote>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1226,7 +1153,7 @@ function ProviderValueBand(props: { org: EstimateOrg | null }) {
     <section className="estimate-values" aria-label={`Quote request reviewed by ${providerName}`}>
       <div className="estimate-values-inner">
         <span className="estimate-value-mark" aria-hidden="true">&#10003;</span>
-        <p><strong>Reviewed by {providerName} before pricing</strong><span>Photos and job details go directly into their quote workflow.</span></p>
+        <p><strong>Reviewed directly by {providerName} before pricing</strong></p>
       </div>
     </section>
   );
