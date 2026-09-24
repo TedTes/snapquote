@@ -8,6 +8,7 @@ import {
   CreditCard,
   FileText,
   Globe,
+  Image,
   Lock,
   Mail,
   MessageSquare,
@@ -308,6 +309,12 @@ Embed URL: ${embedUrl}`,
             icon={<Book color={colors.ink2} size={16} strokeWidth={2.1} />}
             label="Book strength"
             onPress={() => router.push("/price-book")}
+          />
+          <SettingsRow
+            detail="Bio, service area, and completed-work photos"
+            icon={<Image color={colors.ink2} size={16} strokeWidth={2.1} />}
+            label="Public profile"
+            onPress={() => router.push("/settings/public-profile")}
           />
           <SettingsRow
             detail="Share or embed your quote request form"

@@ -183,13 +183,25 @@ const orgSettingsSchema = z.object({
   defaultDepositPercent: z.number().min(0).max(100).optional(),
   contactPhone: z.string().trim().max(80).nullable().optional(),
   website: z.string().trim().max(240).nullable().optional(),
-  logoUrl: z.string().trim().url().max(1000).nullable().optional()
+  logoUrl: z.string().trim().url().max(1000).nullable().optional(),
+  profileBio: z.string().trim().max(500).nullable().optional(),
+  serviceArea: z.string().trim().max(160).nullable().optional(),
+  yearsInBusiness: z.number().int().min(0).max(150).nullable().optional()
 });
 
 const avatarUploadSchema = z.object({
   fileName: z.string().trim().min(1).max(180),
   contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
   base64: z.string().min(1).max(8_000_000)
+});
+
+const portfolioUploadSchema = avatarUploadSchema.extend({
+  caption: z.string().trim().max(160).default("")
+});
+
+const reviewSubmissionSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  body: z.string().trim().max(1200).default("")
 });
 
 const pushDeviceSchema = z.object({
@@ -288,6 +300,17 @@ const createQuoteSchema = z.object({
   }
 });
 
+const homeownerJobSchema = z.object({
+  roomCount: z.number().int().min(0).max(20),
+  surfaces: z.object({
+    walls: z.boolean(),
+    ceilings: z.boolean(),
+    trim: z.boolean()
+  }),
+  doorCount: z.number().int().min(0).max(50),
+  paintSupply: z.enum(["customer", "contractor"]).nullable()
+});
+
 const websiteEstimateSchema = z.object({
   orgId: z.string().uuid(),
   source: z.enum(["website_widget", "website_page"]).default("website_widget"),
@@ -298,6 +321,7 @@ const websiteEstimateSchema = z.object({
   }),
   address: z.string().trim().min(1).max(400),
   city: z.string().trim().max(120).optional(),
+  job: homeownerJobSchema.optional(),
   checklist: checklistSchema.default(defaultChecklist),
   notes: z.string().trim().max(5000).default(""),
   timing: z.enum(["asap", "this_month", "flexible", "just_pricing"]).default("flexible"),
@@ -329,11 +353,15 @@ const websiteEstimateSchema = z.object({
     });
   }
 
-  if (!checklistHasEstimateScope(input.checklist)) {
+  const hasScope = input.job
+    ? input.job.roomCount > 0 || input.job.doorCount > 0 || input.notes.trim().length > 0
+    : checklistHasEstimateScope(input.checklist);
+
+  if (!hasScope) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ["checklist"],
-      message: "Add at least one room, surface, or door"
+      path: [input.job ? "job" : "checklist"],
+      message: "Add a room or door count, or describe the job"
     });
   }
 
@@ -601,6 +629,18 @@ Deno.serve(async (request) => {
       return json(await uploadAvatar(db, request));
     }
 
+    if (route.method === "GET" && route.path === "/v1/profile/portfolio") {
+      return json({ items: await listPortfolioItems(db, orgIdFromRequest(request)) });
+    }
+
+    if (route.method === "POST" && route.path === "/v1/profile/portfolio") {
+      return json(await uploadPortfolioItem(db, request), 201);
+    }
+
+    if (route.method === "DELETE" && match(route.path, "/v1/profile/portfolio/:id")) {
+      return json(await deletePortfolioItem(db, request, params(route.path, "/v1/profile/portfolio/:id").id));
+    }
+
     if (route.method === "POST" && route.path === "/v1/billing/checkout") {
       return json(await createBillingCheckout(db, request));
     }
@@ -761,6 +801,10 @@ Deno.serve(async (request) => {
       return json(await reviseQuote(db, request, params(route.path, "/v1/quotes/:id/revise").id), 201);
     }
 
+    if (route.method === "POST" && match(route.path, "/v1/quotes/:id/review-invitation")) {
+      return json(await createReviewInvitation(db, request, params(route.path, "/v1/quotes/:id/review-invitation").id), 201);
+    }
+
     if (route.method === "GET" && match(route.path, "/public/estimate-orgs/:orgId")) {
       const orgId = params(route.path, "/public/estimate-orgs/:orgId").orgId;
       enforceRateLimit(request, ["public_estimate_org", orgId, requestClientKey(request)], 60, 60_000);
@@ -807,6 +851,18 @@ Deno.serve(async (request) => {
       const token = params(route.path, "/public/quotes/:token/pay/confirm").token;
       enforceRateLimit(request, ["public_quote_pay_confirm", token, requestClientKey(request)], 30, 10 * 60_000);
       return json(await confirmPublicQuotePayment(db, request, token));
+    }
+
+    if (route.method === "GET" && match(route.path, "/public/reviews/:token")) {
+      const token = params(route.path, "/public/reviews/:token").token;
+      enforceRateLimit(request, ["public_review_view", token, requestClientKey(request)], 60, 60_000);
+      return json(await viewPublicReview(db, token));
+    }
+
+    if (route.method === "POST" && match(route.path, "/public/reviews/:token")) {
+      const token = params(route.path, "/public/reviews/:token").token;
+      enforceRateLimit(request, ["public_review_submit", token, requestClientKey(request)], 8, 10 * 60_000);
+      return json(await submitPublicReview(db, request, token));
     }
 
     return json({ error: "not_found", message: "Route not found" }, 404);
@@ -1206,6 +1262,9 @@ async function updateMe(db: SupabaseClient, request: Request) {
   if (input.contactPhone !== undefined) patch.contact_phone = input.contactPhone;
   if (input.website !== undefined) patch.website = input.website;
   if (input.logoUrl !== undefined) patch.logo_url = input.logoUrl;
+  if (input.profileBio !== undefined) patch.profile_bio = input.profileBio;
+  if (input.serviceArea !== undefined) patch.service_area = input.serviceArea;
+  if (input.yearsInBusiness !== undefined) patch.years_in_business = input.yearsInBusiness;
 
   if (Object.keys(patch).length > 0) {
     await single(db.from("snapquote_orgs").update(patch).eq("id", orgId).select("*"));
@@ -1239,6 +1298,89 @@ async function uploadAvatar(db: SupabaseClient, request: Request) {
   }).eq("id", orgId).select("*"));
 
   return { org: orgResponse(org) };
+}
+
+async function listPortfolioItems(db: SupabaseClient, orgId: string, publishedOnly = false) {
+  let query = db.from("snapquote_portfolio_items")
+    .select("*")
+    .eq("org_id", orgId);
+
+  if (publishedOnly) {
+    query = query.eq("published", true);
+  }
+
+  const { data, error } = await query
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(portfolioItemResponse);
+}
+
+async function uploadPortfolioItem(db: SupabaseClient, request: Request) {
+  const orgId = orgIdFromRequest(request);
+  const input = parse(portfolioUploadSchema, await request.json());
+  const { count, error: countError } = await db.from("snapquote_portfolio_items")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId);
+  if (countError) throw countError;
+
+  if ((count ?? 0) >= 6) {
+    throw new HttpError(409, "A public profile can show up to 6 work photos.");
+  }
+
+  const bucket = "snapquote-provider-portfolio";
+  const extension = extensionForContentType(input.contentType);
+  const objectPath = `${orgId}/${crypto.randomUUID()}.${extension}`;
+  const bytes = Uint8Array.from(atob(input.base64), (char) => char.charCodeAt(0));
+  const { error: bucketError } = await db.storage.createBucket(bucket, {
+    public: true,
+    fileSizeLimit: 8_000_000,
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"]
+  });
+
+  if (bucketError && !bucketError.message.toLowerCase().includes("already exists")) {
+    throw bucketError;
+  }
+
+  must(await db.storage.from(bucket).upload(objectPath, bytes, {
+    contentType: input.contentType,
+    upsert: false
+  }));
+
+  const { data } = db.storage.from(bucket).getPublicUrl(objectPath);
+  const row = await single(db.from("snapquote_portfolio_items").insert({
+    org_id: orgId,
+    storage_bucket: bucket,
+    storage_path: objectPath,
+    image_url: data.publicUrl,
+    caption: input.caption,
+    position: count ?? 0,
+    published: true
+  }).select("*"));
+
+  return { item: portfolioItemResponse(row) };
+}
+
+async function deletePortfolioItem(db: SupabaseClient, request: Request, itemId: string) {
+  const orgId = orgIdFromRequest(request);
+  const row = await single(
+    db.from("snapquote_portfolio_items").select("*").eq("id", itemId).eq("org_id", orgId)
+  );
+
+  must(await db.storage.from(String(row.storage_bucket)).remove([String(row.storage_path)]));
+  must(await db.from("snapquote_portfolio_items").delete().eq("id", itemId).eq("org_id", orgId));
+  return { id: itemId, deleted: true };
+}
+
+function portfolioItemResponse(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    imageUrl: row.image_url,
+    caption: stringOrNull(row.caption) ?? "",
+    position: Number(row.position ?? 0),
+    published: Boolean(row.published),
+    createdAt: row.created_at
+  };
 }
 
 async function billingPortal(db: SupabaseClient, request: Request) {
@@ -2446,13 +2588,116 @@ async function createQuote(db: SupabaseClient, request: Request) {
 
 async function publicEstimateOrg(db: SupabaseClient, orgId: string) {
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+  const [portfolio, reviewsResult] = await Promise.all([
+    listPortfolioItems(db, orgId, true),
+    db.from("snapquote_provider_reviews")
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("published", true)
+      .not("submitted_at", "is", null)
+      .order("submitted_at", { ascending: false })
+  ]);
+  if (reviewsResult.error) throw reviewsResult.error;
+  const reviews = reviewsResult.data ?? [];
+  const ratings = reviews.map((review) => Number(review.rating)).filter((rating) => Number.isFinite(rating));
+  const averageRating = ratings.length > 0
+    ? Math.round((ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length) * 10) / 10
+    : null;
 
   return {
-    org: publicEstimateOrgResponse(org),
+    org: publicEstimateOrgResponse(org, {
+      portfolio,
+      reviews: {
+        averageRating,
+        count: ratings.length,
+        highlights: reviews.slice(0, 3).map(publicReviewHighlightResponse)
+      }
+    }),
     defaults: {
       checklist: defaultChecklist,
       currency: orgCurrency(org)
     }
+  };
+}
+
+async function createReviewInvitation(db: SupabaseClient, request: Request, quoteId: string) {
+  const orgId = orgIdFromRequest(request);
+  const quote = await single(
+    db.from("snapquote_quotes").select("*").eq("id", quoteId).eq("org_id", orgId)
+  ) as QuoteRow;
+
+  if (quote.status !== "accepted") {
+    throw new HttpError(409, "A review can be requested after the customer accepts the quote.");
+  }
+
+  const customer = await single(db.from("snapquote_customers").select("*").eq("id", quote.customer_id));
+  let review = await maybeSingle(db.from("snapquote_provider_reviews").select("*").eq("quote_id", quoteId));
+
+  if (!review) {
+    review = await single(db.from("snapquote_provider_reviews").insert({
+      org_id: orgId,
+      quote_id: quoteId,
+      token: publicToken(),
+      reviewer_name: publicReviewerName(String(customer.name)),
+      body: "",
+      published: true
+    }).select("*"));
+  }
+
+  return reviewInvitationResponse(review);
+}
+
+async function viewPublicReview(db: SupabaseClient, token: string) {
+  const review = await single(db.from("snapquote_provider_reviews").select("*").eq("token", token));
+  const org = await single(db.from("snapquote_orgs").select("*").eq("id", review.org_id));
+
+  return {
+    token,
+    submitted: review.submitted_at !== null,
+    reviewerName: publicReviewerName(String(review.reviewer_name)),
+    rating: review.rating === null ? null : Number(review.rating),
+    org: {
+      id: org.id,
+      name: org.name,
+      logoUrl: org.logo_url
+    }
+  };
+}
+
+async function submitPublicReview(db: SupabaseClient, request: Request, token: string) {
+  const input = parse(reviewSubmissionSchema, await request.json());
+  const review = await single(db.from("snapquote_provider_reviews").select("*").eq("token", token));
+
+  if (review.submitted_at !== null) {
+    throw new HttpError(409, "This review has already been submitted.");
+  }
+
+  await single(db.from("snapquote_provider_reviews").update({
+    rating: input.rating,
+    body: input.body,
+    submitted_at: new Date().toISOString(),
+    published: true
+  }).eq("id", review.id).is("submitted_at", null).select("*"));
+
+  return { submitted: true };
+}
+
+function reviewInvitationResponse(row: Record<string, unknown>) {
+  const token = String(row.token);
+  return {
+    id: row.id,
+    url: publicReviewUrl(token),
+    submitted: row.submitted_at !== null
+  };
+}
+
+function publicReviewHighlightResponse(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    reviewerName: publicReviewerName(String(row.reviewer_name)),
+    rating: Number(row.rating),
+    body: stringOrNull(row.body) ?? "",
+    submittedAt: row.submitted_at
   };
 }
 
@@ -2500,9 +2745,9 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
   enforceRateLimit(request, ["public_estimate", input.orgId, clientKey], 8, 10 * 60_000);
 
   const org = await single(db.from("snapquote_orgs").select("*").eq("id", input.orgId));
-  const checklist = input.checklist as PainterChecklist;
+  const checklist = input.job ? checklistFromHomeownerJob(input.job) : input.checklist as PainterChecklist;
   const priceBookItems = await listPriceBook(db, input.orgId);
-  const transcript = websiteEstimateTranscript(input);
+  const transcript = websiteEstimateTranscript(input, checklist);
   const extractionResult = await extractScopeForInput({
     transcript,
     typedNotes: "",
@@ -2527,6 +2772,7 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
   const validUntil = addDays(new Date(), Number(org.quote_valid_days));
   const scopeNotes = uniqueStrings([
     "Source: public quote request page.",
+    ...(input.job ? ["Room size, preparation, and coat count require provider confirmation."] : []),
     ...draft.scopeNotes
   ]);
   const scopeSummary = extractionResult.extraction.scope_summary || buildScopeSummary(input.customer.name, checklist, scopeNotes);
@@ -2630,7 +2876,10 @@ async function createWebsiteEstimate(db: SupabaseClient, request: Request) {
 
   return {
     requestId: estimateRequest.id,
-    org: publicEstimateOrgResponse(org),
+    org: publicEstimateOrgResponse(org, {
+      portfolio: [],
+      reviews: { averageRating: null, count: 0, highlights: [] }
+    }),
     status: "received",
     message: "Your request was sent. The contractor will review it before sending a quote."
   };
@@ -3428,7 +3677,23 @@ function responseStringArray(value: unknown) {
     : [];
 }
 
-function publicEstimateOrgResponse(row: Record<string, unknown>) {
+function publicReviewerName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? "Customer";
+  return `${parts[0]} ${parts.at(-1)?.charAt(0).toUpperCase()}.`;
+}
+
+function publicEstimateOrgResponse(
+  row: Record<string, unknown>,
+  proof: {
+    portfolio: ReturnType<typeof portfolioItemResponse>[];
+    reviews: {
+      averageRating: number | null;
+      count: number;
+      highlights: ReturnType<typeof publicReviewHighlightResponse>[];
+    };
+  }
+) {
   return {
     id: row.id,
     name: row.name,
@@ -3436,7 +3701,12 @@ function publicEstimateOrgResponse(row: Record<string, unknown>) {
     logoUrl: row.logo_url,
     contactPhone: row.contact_phone,
     website: row.website,
-    currency: orgCurrency(row)
+    currency: orgCurrency(row),
+    profileBio: stringOrNull(row.profile_bio),
+    serviceArea: stringOrNull(row.service_area),
+    yearsInBusiness: typeof row.years_in_business === "number" ? row.years_in_business : null,
+    portfolio: proof.portfolio,
+    reviews: proof.reviews
   };
 }
 
@@ -3484,8 +3754,37 @@ function roundEstimateCents(value: number, direction: "down" | "up") {
   return Math.max(0, rounded);
 }
 
-function websiteEstimateTranscript(input: z.infer<typeof websiteEstimateSchema>) {
-  const checklist = input.checklist;
+function checklistFromHomeownerJob(job: z.infer<typeof homeownerJobSchema>): PainterChecklist {
+  return {
+    rooms: { small: 0, medium: job.roomCount, large: 0 },
+    surfaces: job.surfaces,
+    doorCount: job.doorCount,
+    prepLevel: "normal",
+    coatCount: 2,
+    customerSuppliesPaint: job.paintSupply === "customer"
+  };
+}
+
+function websiteEstimateTranscript(input: z.infer<typeof websiteEstimateSchema>, checklist: PainterChecklist) {
+  if (input.job) {
+    const surfaces = [
+      input.job.surfaces.walls ? "walls" : null,
+      input.job.surfaces.ceilings ? "ceilings" : null,
+      input.job.surfaces.trim ? "trim" : null
+    ].filter(Boolean);
+
+    return [
+      `Website request for ${input.customer.name}.`,
+      `Address: ${input.address}${input.city ? `, ${input.city}` : ""}.`,
+      input.job.roomCount > 0 ? `Rooms: ${input.job.roomCount}. Room sizes were not provided.` : null,
+      surfaces.length > 0 ? `Surfaces: ${surfaces.join(", ")}.` : null,
+      input.job.doorCount > 0 ? `Doors: ${input.job.doorCount}.` : null,
+      input.job.paintSupply === "customer" ? "Customer has paint." : null,
+      input.job.paintSupply === "contractor" ? "Provider should supply paint." : null,
+      input.notes ? `Customer notes: ${input.notes}` : null
+    ].filter(Boolean).join("\n");
+  }
+
   const rooms = [
     checklist.rooms.small > 0 ? `${checklist.rooms.small} small ${pluralWord(checklist.rooms.small, "room")}` : null,
     checklist.rooms.medium > 0 ? `${checklist.rooms.medium} medium ${pluralWord(checklist.rooms.medium, "room")}` : null,
@@ -3502,8 +3801,8 @@ function websiteEstimateTranscript(input: z.infer<typeof websiteEstimateSchema>)
     `Address: ${input.address}${input.city ? `, ${input.city}` : ""}.`,
     rooms.length > 0 ? `Rooms: ${rooms.join(", ")}.` : null,
     surfaces.length > 0 ? `Surfaces: ${surfaces.join(", ")}.` : null,
-    `Prep level: ${input.checklist.prepLevel}.`,
-    `Coats: ${input.checklist.coatCount}.`,
+    `Prep level: ${checklist.prepLevel}.`,
+    `Coats: ${checklist.coatCount}.`,
     checklist.doorCount > 0 ? `Doors: ${checklist.doorCount}.` : null,
     checklist.customerSuppliesPaint ? "Customer supplies paint." : "Contractor supplies paint and materials.",
     input.notes ? `Customer notes: ${input.notes}` : null
@@ -5367,6 +5666,16 @@ function publicQuoteUrl(token: string) {
   return `${baseUrl.replace(/\/$/, "")}/q/${token}`;
 }
 
+function publicReviewUrl(token: string) {
+  const baseUrl = envFirst("QUOTEVAN_PUBLIC_BASE_URL", "SNAPQUOTE_PUBLIC_BASE_URL");
+
+  if (!baseUrl) {
+    return `/review/${token}`;
+  }
+
+  return `${baseUrl.replace(/\/$/, "")}/review/${token}`;
+}
+
 function stripeConnectUrl(configuredUrl: string | undefined, fallbackPath: string) {
   const url = configuredUrl ?? webBaseUrl(fallbackPath);
 
@@ -5879,6 +6188,9 @@ function orgResponse(row: Record<string, unknown>) {
     logoUrl: row.logo_url,
     contactPhone: row.contact_phone,
     website: row.website,
+    profileBio: stringOrNull(row.profile_bio),
+    serviceArea: stringOrNull(row.service_area),
+    yearsInBusiness: typeof row.years_in_business === "number" ? row.years_in_business : null,
     defaultTaxRate: Number(row.default_tax_rate),
     defaultTerms: row.default_terms,
     quoteValidDays: row.quote_valid_days,

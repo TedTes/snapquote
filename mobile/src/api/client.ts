@@ -268,6 +268,9 @@ export type MeResponse = {
     logoUrl: string | null;
     contactPhone: string | null;
     website: string | null;
+    profileBio: string | null;
+    serviceArea: string | null;
+    yearsInBusiness: number | null;
     defaultTaxRate: number;
     defaultTerms: string;
     quoteValidDays: number;
@@ -302,6 +305,15 @@ export type MeResponse = {
       freeSendsRemaining: number | null;
     };
   };
+};
+
+export type PublicPortfolioItem = {
+  id: string;
+  imageUrl: string;
+  caption: string;
+  position: number;
+  published: boolean;
+  createdAt: string;
 };
 
 export type AuthSession = {
@@ -412,6 +424,9 @@ export const snapquoteApi = {
     contactPhone?: string | null | undefined;
     website?: string | null | undefined;
     logoUrl?: string | null | undefined;
+    profileBio?: string | null | undefined;
+    serviceArea?: string | null | undefined;
+    yearsInBusiness?: number | null | undefined;
   }) =>
     request<MeResponse>("/v1/me", {
       method: "PATCH",
@@ -428,6 +443,23 @@ export const snapquoteApi = {
     request<{ org: MeResponse["org"] }>("/v1/profile/avatar", {
       method: "POST",
       body: input
+    }),
+
+  listPortfolio: () => request<{ items: PublicPortfolioItem[] }>("/v1/profile/portfolio"),
+
+  uploadPortfolioItem: (input: {
+    fileName: string;
+    contentType: "image/jpeg" | "image/png" | "image/webp";
+    base64: string;
+    caption?: string | undefined;
+  }) => request<{ item: PublicPortfolioItem }>("/v1/profile/portfolio", {
+    method: "POST",
+    body: input
+  }),
+
+  deletePortfolioItem: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/v1/profile/portfolio/${id}`, {
+      method: "DELETE"
     }),
 
   billingCheckout: () =>
@@ -684,6 +716,11 @@ export const snapquoteApi = {
 
   reviseQuote: (id: string) =>
     request<{ quote: ApiQuote; supersededQuote: ApiQuote; revisedAt: string }>(`/v1/quotes/${id}/revise`, {
+      method: "POST"
+    }),
+
+  createReviewInvitation: (id: string) =>
+    request<{ id: string; url: string; submitted: boolean }>(`/v1/quotes/${id}/review-invitation`, {
       method: "POST"
     }),
 

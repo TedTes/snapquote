@@ -13,7 +13,8 @@ import {
   Pencil,
   Phone,
   Plus,
-  Send
+  Send,
+  Star
 } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
@@ -22,7 +23,7 @@ import Animated from "react-native-reanimated";
 import { AnimatedCard } from "../../shared-ui/AnimatedCard";
 import { Banner, EmptyState, Screen, SwatchTab } from "../../shared-ui/base";
 import { fadeEnter, useMotionEnabled } from "../../shared-ui/motion";
-import { apiBaseUrl, snapquoteApi, userFacingErrorMessage } from "../../api/client";
+import { apiBaseUrl, publicWebBaseUrl, snapquoteApi, userFacingErrorMessage } from "../../api/client";
 import { colors, fontStyles, radius, spacing, typography } from "../../shared-ui/theme";
 import { describeQuantity, formatDateTime, formatMoney, formatShortDate } from "../../utils/format";
 import {
@@ -372,6 +373,7 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
   const [quoteAction, setQuoteAction] = useState<"revise" | "duplicate" | null>(null);
   const [archivingQuote, setArchivingQuote] = useState(false);
+  const [requestingReview, setRequestingReview] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const status = getQuoteStatus(quote, props.events);
@@ -523,6 +525,32 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
     void Share.share({ message: publicUrl, url: publicUrl });
   }
 
+  async function requestCustomerReview() {
+    if (requestingReview) return;
+    setRequestingReview(true);
+
+    try {
+      const invitation = await snapquoteApi.createReviewInvitation(quote.id);
+
+      if (invitation.submitted) {
+        Alert.alert("Review received", "This customer has already submitted their review.");
+        return;
+      }
+
+      const reviewUrl = invitation.url.startsWith("http")
+        ? invitation.url
+        : `${publicWebBaseUrl}${invitation.url.startsWith("/") ? "" : "/"}${invitation.url}`;
+      await Share.share({
+        message: `Thanks for choosing us. When the work is complete, you can leave a verified review here: ${reviewUrl}`,
+        url: reviewUrl
+      });
+    } catch (error) {
+      Alert.alert("Could not create review link", userFacingErrorMessage(error));
+    } finally {
+      setRequestingReview(false);
+    }
+  }
+
   function closeQuoteDetail() {
     router.replace("/quotes");
   }
@@ -628,6 +656,21 @@ function QuoteDetail(props: { quote: QuoteRecord; customer: Customer | null; cus
             <ContactAction icon="mail" label="Email" onPress={emailCustomer} />
             <ContactAction icon="link" label="Copy link" onPress={sharePublicLink} />
           </View>
+
+          {status === "accepted" ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={requestingReview}
+              onPress={() => void requestCustomerReview()}
+              style={[styles.reviewAction, requestingReview ? styles.reviewActionDisabled : null]}
+            >
+              <Star color={colors.green} size={18} strokeWidth={2.2} />
+              <View style={styles.reviewActionCopy}>
+                <Text style={styles.reviewActionTitle}>{requestingReview ? "Preparing review link..." : "Request a customer review"}</Text>
+                <Text style={styles.reviewActionText}>Share this after the work is complete.</Text>
+              </View>
+            </Pressable>
+          ) : null}
 
           <Text style={styles.detailMut}>
             Sent quotes are locked. Revise creates a new draft and marks this one Superseded.
@@ -1629,6 +1672,34 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 12,
     ...fontStyles.semibold,
+  },
+  reviewAction: {
+    alignItems: "center",
+    backgroundColor: colors.greenBg,
+    borderColor: colors.greenBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 11,
+    minHeight: 64,
+    paddingHorizontal: 15
+  },
+  reviewActionDisabled: {
+    opacity: 0.6
+  },
+  reviewActionCopy: {
+    flex: 1,
+    gap: 2
+  },
+  reviewActionTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    ...fontStyles.bold
+  },
+  reviewActionText: {
+    color: colors.ink2,
+    fontSize: 11,
+    ...fontStyles.regular
   },
   detailMut: {
     color: colors.ink3,

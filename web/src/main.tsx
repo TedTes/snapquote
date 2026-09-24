@@ -5,9 +5,15 @@ import { EstimatePage } from "./EstimatePage";
 import { LegalPage } from "./LegalPage";
 import { LandingPage } from "./marketing/LandingPage";
 import { QuotePage } from "./QuotePage";
+import { ReviewPage } from "./ReviewPage";
 import "./styles.css";
 
 function Root() {
+  const reviewToken = reviewTokenFromPath();
+  if (reviewToken !== null) {
+    return <ReviewPage token={reviewToken} />;
+  }
+
   const token = quoteTokenFromPath();
   if (token !== null) {
     return <QuotePage token={token} />;
@@ -47,6 +53,11 @@ function Root() {
   }
 
   return <LandingPage />;
+}
+
+function reviewTokenFromPath(): string | null {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  return parts[0] === "review" ? parts[1] ?? "" : null;
 }
 
 /** Returns the token for a `/q/:token` path, or null if the path isn't a quote link. */
