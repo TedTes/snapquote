@@ -26,6 +26,7 @@ type EstimateOrg = {
   profileBio?: string | null;
   serviceArea?: string | null;
   yearsInBusiness?: number | null;
+  profileServices?: string[];
   portfolio?: Array<{
     id: string;
     imageUrl: string;
@@ -347,6 +348,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
 
           <div className="estimate-provider-proof">
             <ProviderAbout org={org} />
+            <ProviderServices org={org} />
             <ProviderPortfolio org={org} />
             <ProviderReviews org={org} />
           </div>
@@ -1053,6 +1055,23 @@ function ProviderAbout(props: { org: EstimateOrg | null }) {
   );
 }
 
+function ProviderServices(props: { org: EstimateOrg | null }) {
+  const services = props.org?.profileServices?.filter(Boolean) ?? [];
+  const hasPublishedProof = (props.org?.portfolio?.length ?? 0) > 0 || (props.org?.reviews?.count ?? 0) > 0;
+  if (!props.org || services.length === 0 || !hasPublishedProof) return null;
+
+  return (
+    <section className="estimate-proof estimate-services" aria-labelledby="estimate-services-title">
+      <div className="estimate-proof-heading">
+        <h2 id="estimate-services-title">Services</h2>
+      </div>
+      <ul className="estimate-service-list">
+        {services.map((service) => <li key={service}>{service}</li>)}
+      </ul>
+    </section>
+  );
+}
+
 function ProviderPortfolio(props: { org: EstimateOrg | null }) {
   const { org } = props;
   if (!org) return null;
@@ -1090,7 +1109,8 @@ function ProviderPortfolio(props: { org: EstimateOrg | null }) {
               <h3>Services</h3>
             </div>
             <ul className="estimate-preview-tags">
-              <li>{sentenceCase(org.trade)}</li>
+              {(org.profileServices?.length ? org.profileServices : [sentenceCase(org.trade)])
+                .map((service) => <li key={service}>{service}</li>)}
             </ul>
           </article>
 

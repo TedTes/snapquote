@@ -1088,6 +1088,25 @@ h2 {
   line-height: 1.6;
 }
 
+.estimate-service-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.estimate-service-list li {
+  padding: 7px 10px;
+  border: 1px solid #d9d4c9;
+  border-radius: 7px;
+  background: #fbfaf6;
+  color: #3f3c36;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .estimate-proof-empty {
   margin: 14px 0 0;
   color: #646058;
