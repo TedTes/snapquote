@@ -271,6 +271,7 @@ export type MeResponse = {
     profileBio: string | null;
     serviceArea: string | null;
     yearsInBusiness: number | null;
+    profileServices?: string[] | undefined;
     defaultTaxRate: number;
     defaultTerms: string;
     quoteValidDays: number;
@@ -427,6 +428,7 @@ export const snapquoteApi = {
     profileBio?: string | null | undefined;
     serviceArea?: string | null | undefined;
     yearsInBusiness?: number | null | undefined;
+    profileServices?: string[] | undefined;
   }) =>
     request<MeResponse>("/v1/me", {
       method: "PATCH",
@@ -445,6 +447,10 @@ export const snapquoteApi = {
       body: input
     }),
 
+  deleteAvatar: () => request<{ org: MeResponse["org"] }>("/v1/profile/avatar", {
+    method: "DELETE"
+  }),
+
   listPortfolio: () => request<{ items: PublicPortfolioItem[] }>("/v1/profile/portfolio"),
 
   uploadPortfolioItem: (input: {
@@ -456,6 +462,18 @@ export const snapquoteApi = {
     method: "POST",
     body: input
   }),
+
+  updatePortfolioItem: (id: string, input: { caption?: string | undefined; published?: boolean | undefined }) =>
+    request<{ item: PublicPortfolioItem }>(`/v1/profile/portfolio/${id}`, {
+      method: "PATCH",
+      body: input
+    }),
+
+  reorderPortfolioItems: (ids: string[]) =>
+    request<{ items: PublicPortfolioItem[] }>("/v1/profile/portfolio/order", {
+      method: "PATCH",
+      body: { ids }
+    }),
 
   deletePortfolioItem: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/v1/profile/portfolio/${id}`, {
