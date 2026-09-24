@@ -186,7 +186,8 @@ const orgSettingsSchema = z.object({
   logoUrl: z.string().trim().url().max(1000).nullable().optional(),
   profileBio: z.string().trim().max(500).nullable().optional(),
   serviceArea: z.string().trim().max(160).nullable().optional(),
-  yearsInBusiness: z.number().int().min(0).max(150).nullable().optional()
+  yearsInBusiness: z.number().int().min(0).max(150).nullable().optional(),
+  profileServices: z.array(z.string().trim().min(1).max(80)).max(12).optional()
 });
 
 const avatarUploadSchema = z.object({
@@ -197,6 +198,15 @@ const avatarUploadSchema = z.object({
 
 const portfolioUploadSchema = avatarUploadSchema.extend({
   caption: z.string().trim().max(160).default("")
+});
+
+const portfolioItemPatchSchema = z.object({
+  caption: z.string().trim().max(160).optional(),
+  published: z.boolean().optional()
+}).refine((input) => Object.keys(input).length > 0, "Add a portfolio change.");
+
+const portfolioOrderSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(6)
 });
 
 const reviewSubmissionSchema = z.object({
@@ -629,12 +639,24 @@ Deno.serve(async (request) => {
       return json(await uploadAvatar(db, request));
     }
 
+    if (route.method === "DELETE" && route.path === "/v1/profile/avatar") {
+      return json(await deleteAvatar(db, request));
+    }
+
     if (route.method === "GET" && route.path === "/v1/profile/portfolio") {
       return json({ items: await listPortfolioItems(db, orgIdFromRequest(request)) });
     }
 
     if (route.method === "POST" && route.path === "/v1/profile/portfolio") {
       return json(await uploadPortfolioItem(db, request), 201);
+    }
+
+    if (route.method === "PATCH" && route.path === "/v1/profile/portfolio/order") {
+      return json({ items: await reorderPortfolioItems(db, request) });
+    }
+
+    if (route.method === "PATCH" && match(route.path, "/v1/profile/portfolio/:id")) {
+      return json(await updatePortfolioItem(db, request, params(route.path, "/v1/profile/portfolio/:id").id));
     }
 
     if (route.method === "DELETE" && match(route.path, "/v1/profile/portfolio/:id")) {
@@ -1265,6 +1287,7 @@ async function updateMe(db: SupabaseClient, request: Request) {
   if (input.profileBio !== undefined) patch.profile_bio = input.profileBio;
   if (input.serviceArea !== undefined) patch.service_area = input.serviceArea;
   if (input.yearsInBusiness !== undefined) patch.years_in_business = input.yearsInBusiness;
+  if (input.profileServices !== undefined) patch.profile_services = uniqueProfileServices(input.profileServices);
 
   if (Object.keys(patch).length > 0) {
     await single(db.from("snapquote_orgs").update(patch).eq("id", orgId).select("*"));
@@ -1297,6 +1320,20 @@ async function uploadAvatar(db: SupabaseClient, request: Request) {
     logo_url: `${data.publicUrl}?v=${Date.now()}`
   }).eq("id", orgId).select("*"));
 
+  return { org: orgResponse(org) };
+}
+
+async function deleteAvatar(db: SupabaseClient, request: Request) {
+  const orgId = orgIdFromRequest(request);
+  const bucket = "snapquote-avatars";
+  const paths = ["jpg", "png", "webp"].map((extension) => `${orgId}/business-logo.${extension}`);
+  const { error } = await db.storage.from(bucket).remove(paths);
+
+  if (error && !error.message.toLowerCase().includes("not found")) {
+    throw error;
+  }
+
+  const org = await single(db.from("snapquote_orgs").update({ logo_url: null }).eq("id", orgId).select("*"));
   return { org: orgResponse(org) };
 }
 
@@ -1361,6 +1398,50 @@ async function uploadPortfolioItem(db: SupabaseClient, request: Request) {
   return { item: portfolioItemResponse(row) };
 }
 
+async function updatePortfolioItem(db: SupabaseClient, request: Request, itemId: string) {
+  const orgId = orgIdFromRequest(request);
+  const input = parse(portfolioItemPatchSchema, await request.json());
+  const patch: Record<string, unknown> = {};
+
+  if (input.caption !== undefined) patch.caption = input.caption;
+  if (input.published !== undefined) patch.published = input.published;
+
+  const row = await single(
+    db.from("snapquote_portfolio_items")
+      .update(patch)
+      .eq("id", itemId)
+      .eq("org_id", orgId)
+      .select("*")
+  );
+
+  return { item: portfolioItemResponse(row) };
+}
+
+async function reorderPortfolioItems(db: SupabaseClient, request: Request) {
+  const orgId = orgIdFromRequest(request);
+  const input = parse(portfolioOrderSchema, await request.json());
+  const uniqueIds = [...new Set(input.ids)];
+  const current = await listPortfolioItems(db, orgId);
+
+  if (uniqueIds.length !== input.ids.length || current.length !== uniqueIds.length) {
+    throw new HttpError(409, "Refresh the portfolio before reordering it.");
+  }
+
+  const currentIds = new Set(current.map((item) => String(item.id)));
+  if (uniqueIds.some((id) => !currentIds.has(id))) {
+    throw new HttpError(403, "A portfolio item does not belong to this profile.");
+  }
+
+  await Promise.all(uniqueIds.map(async (id, position) => {
+    must(await db.from("snapquote_portfolio_items")
+      .update({ position })
+      .eq("id", id)
+      .eq("org_id", orgId));
+  }));
+
+  return listPortfolioItems(db, orgId);
+}
+
 async function deletePortfolioItem(db: SupabaseClient, request: Request, itemId: string) {
   const orgId = orgIdFromRequest(request);
   const row = await single(
@@ -1381,6 +1462,10 @@ function portfolioItemResponse(row: Record<string, unknown>) {
     published: Boolean(row.published),
     createdAt: row.created_at
   };
+}
+
+function uniqueProfileServices(services: string[]) {
+  return [...new Set(services.map((service) => service.trim()).filter(Boolean))];
 }
 
 async function billingPortal(db: SupabaseClient, request: Request) {
@@ -3705,6 +3790,7 @@ function publicEstimateOrgResponse(
     profileBio: stringOrNull(row.profile_bio),
     serviceArea: stringOrNull(row.service_area),
     yearsInBusiness: typeof row.years_in_business === "number" ? row.years_in_business : null,
+    profileServices: responseStringArray(row.profile_services),
     portfolio: proof.portfolio,
     reviews: proof.reviews
   };
@@ -6191,6 +6277,7 @@ function orgResponse(row: Record<string, unknown>) {
     profileBio: stringOrNull(row.profile_bio),
     serviceArea: stringOrNull(row.service_area),
     yearsInBusiness: typeof row.years_in_business === "number" ? row.years_in_business : null,
+    profileServices: responseStringArray(row.profile_services),
     defaultTaxRate: Number(row.default_tax_rate),
     defaultTerms: row.default_terms,
     quoteValidDays: row.quote_valid_days,

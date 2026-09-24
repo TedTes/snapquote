@@ -60,6 +60,7 @@ export const orgProfileSchema = z.object({
   profileBio: z.string().trim().max(500).nullable(),
   serviceArea: z.string().trim().max(160).nullable(),
   yearsInBusiness: z.number().int().min(0).max(150).nullable(),
+  profileServices: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
   defaultTaxRate: z.number().min(0).max(1),
   defaultTerms: z.string().trim().max(4000),
   quoteValidDays: z.number().int().min(1).max(365),
