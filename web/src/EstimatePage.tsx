@@ -361,20 +361,6 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
             <section className="estimate-request" aria-label="Quote request form">
               <ProviderValueBand org={org} />
               <div className="estimate-layout">
-                <aside className="estimate-next" aria-labelledby="estimate-next-title">
-                  <p className="section-label">How it works</p>
-                  <h2 id="estimate-next-title">A real quote, reviewed first.</h2>
-                  <p>
-                    This request goes directly to {org?.name ?? "the provider"}. Nothing is automatically priced or sent to you.
-                  </p>
-                  <ol className="estimate-steps">
-                    <li><span className="estimate-step-mark" aria-hidden="true">1</span><span><strong>Share the job</strong><small>Add the scope, photos, and preferred dates.</small></span></li>
-                    <li><span className="estimate-step-mark" aria-hidden="true">2</span><span><strong>{org?.name ?? "The provider"} reviews it</strong><small>They confirm the work and set the price.</small></span></li>
-                    <li><span className="estimate-step-mark" aria-hidden="true">3</span><span><strong>Receive your quote</strong><small>They contact you using the details you provide.</small></span></li>
-                  </ol>
-                  <ProviderContact org={org} />
-                </aside>
-
               <form className="estimate-form estimate-composer" noValidate onSubmit={submitRequest}>
                 <label className="estimate-hidden-field" aria-hidden="true">
                   Company
@@ -1086,11 +1072,13 @@ function ProviderHeader(props: { org: EstimateOrg | null }) {
         {org ? (
           <>
             <div className="estimate-profile-badges" aria-label="Provider details">
+              <span>Provider-reviewed quotes</span>
+              <span>{sentenceCase(org.trade)}</span>
               {reviewCount > 0 ? <span>Verified reviews</span> : null}
               {org.yearsInBusiness !== null && org.yearsInBusiness !== undefined ? <span>{yearsInBusinessLabel(org.yearsInBusiness)}</span> : null}
               {org.serviceArea ? <span>{org.serviceArea}</span> : null}
             </div>
-            <p className="estimate-profile-bio">{org.profileBio || "Share the job details and useful photos for a provider-reviewed quote."}</p>
+            <p className="estimate-profile-bio">{org.profileBio || `${sentenceCase(org.trade)} requests are reviewed directly before a quote is prepared.`}</p>
           </>
         ) : null}
       </div>
@@ -1100,21 +1088,27 @@ function ProviderHeader(props: { org: EstimateOrg | null }) {
 
 function ProviderPortfolio(props: { org: EstimateOrg | null }) {
   const portfolio = props.org?.portfolio ?? [];
-  if (portfolio.length === 0) return null;
 
   return (
     <section className="estimate-proof estimate-portfolio" aria-label="Completed work">
       <div className="estimate-proof-heading">
-        <p className="section-label">Completed work</p>
-        <span>{portfolio.length} {portfolio.length === 1 ? "project photo" : "project photos"}</span>
+        <p className="section-label">Recent work</p>
+        <span>{portfolio.length > 0 ? `${portfolio.length} ${portfolio.length === 1 ? "photo" : "photos"}` : "Portfolio coming soon"}</span>
       </div>
       <div className="estimate-portfolio-track">
-        {portfolio.map((item, index) => (
-          <figure key={item.id}>
-            <img alt={item.caption || `Completed project by ${props.org?.name ?? "the provider"}, photo ${index + 1}`} loading="lazy" src={item.imageUrl} />
-            {item.caption ? <figcaption>{item.caption}</figcaption> : null}
-          </figure>
-        ))}
+        {portfolio.length > 0
+          ? portfolio.map((item, index) => (
+            <figure key={item.id}>
+              <img alt={item.caption || `Completed project by ${props.org?.name ?? "the provider"}, photo ${index + 1}`} loading="lazy" src={item.imageUrl} />
+              {item.caption ? <figcaption>{item.caption}</figcaption> : null}
+            </figure>
+          ))
+          : ["Work photo", "Project photo", "Finished work"].map((label) => (
+            <div className="estimate-portfolio-empty" key={label}>
+              <span aria-hidden="true">+</span>
+              <small>{label}</small>
+            </div>
+          ))}
       </div>
     </section>
   );
@@ -1156,23 +1150,6 @@ function ProviderValueBand(props: { org: EstimateOrg | null }) {
         <p><strong>Reviewed directly by {providerName} before pricing</strong></p>
       </div>
     </section>
-  );
-}
-
-function ProviderContact(props: { org: EstimateOrg | null }) {
-  const phone = props.org?.contactPhone?.trim() || null;
-  const website = props.org?.website?.trim() || null;
-  const websiteLink = website ? websiteHref(website) : null;
-  if (!phone && !websiteLink) return null;
-
-  return (
-    <div className="estimate-direct">
-      <strong>Prefer a direct conversation?</strong>
-      <div>
-        {phone ? <a href={phoneHref(phone)}>Call {phone}</a> : null}
-        {websiteLink ? <a href={websiteLink} rel="noopener noreferrer" target="_blank">Visit website</a> : null}
-      </div>
-    </div>
   );
 }
 

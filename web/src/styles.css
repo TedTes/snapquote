@@ -845,9 +845,8 @@ h2 {
   background: transparent;
 }
 
-.estimate-shell,
-.estimate-unavailable {
-  width: min(100%, 1100px);
+.estimate-shell {
+  width: min(100%, 600px);
   margin: 0 auto;
   overflow: hidden;
   border: 1px solid #ded9cd;
@@ -857,6 +856,8 @@ h2 {
 
 .estimate-unavailable {
   width: min(calc(100% - 32px), 560px);
+  margin-right: auto;
+  margin-left: auto;
   margin-top: 48px;
   border: 1px solid #ded9cd;
   border-radius: 8px;
@@ -874,9 +875,9 @@ h2 {
 }
 
 .estimate-profile-inner {
-  width: min(100%, 1036px);
+  width: 100%;
   margin: 0 auto;
-  padding: 24px 0 22px;
+  padding: 22px 24px 20px;
 }
 
 .estimate-profile-top {
@@ -1023,9 +1024,9 @@ h2 {
 
 /* Real provider proof. Empty galleries and reviews are omitted rather than simulated. */
 .estimate-proof {
-  width: min(100%, 1036px);
+  width: 100%;
   margin: 0 auto;
-  padding: 22px 0 24px;
+  padding: 18px 24px 20px;
 }
 
 .estimate-reviews {
@@ -1057,19 +1058,48 @@ h2 {
 }
 
 .estimate-portfolio-track {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  overflow-x: auto;
+  padding-bottom: 2px;
   gap: 10px;
+  scroll-snap-type: x mandatory;
 }
 
 .estimate-portfolio figure {
   position: relative;
-  min-width: 0;
+  width: 164px;
+  flex: 0 0 164px;
   margin: 0;
   overflow: hidden;
   aspect-ratio: 4 / 3;
   border-radius: 6px;
   background: #ebe8e0;
+  scroll-snap-align: start;
+}
+
+.estimate-portfolio-empty {
+  display: grid;
+  width: 164px;
+  flex: 0 0 164px;
+  aspect-ratio: 4 / 3;
+  place-content: center;
+  gap: 8px;
+  border: 1px solid #ded9cd;
+  border-radius: 6px;
+  background: #f1efe9;
+  color: #8c877d;
+  text-align: center;
+  scroll-snap-align: start;
+}
+
+.estimate-portfolio-empty span {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.estimate-portfolio-empty small {
+  font-size: 10px;
+  font-weight: 800;
 }
 
 .estimate-portfolio img {
@@ -1150,11 +1180,11 @@ h2 {
 
 .estimate-values-inner {
   display: flex;
-  width: min(100%, 1036px);
+  width: 100%;
   margin: 0 auto;
   align-items: center;
   gap: 12px;
-  padding: 15px 0;
+  padding: 14px 24px;
 }
 
 .estimate-value-mark {
@@ -1191,12 +1221,12 @@ h2 {
 /* Layout */
 .estimate-layout {
   display: grid;
-  width: min(100%, 1036px);
+  width: 100%;
   margin: 0 auto;
-  padding: 12px 0 64px;
-  grid-template-areas: "form guide";
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 58px;
+  padding: 0 24px 54px;
+  grid-template-areas: "form";
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: start;
 }
 
