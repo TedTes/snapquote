@@ -177,6 +177,12 @@ const onboardingSchema = z.object({
 
 const orgSettingsSchema = z.object({
   businessName: z.string().trim().max(120).optional(),
+  publicSlug: z.string()
+    .trim()
+    .min(3)
+    .max(40)
+    .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/)
+    .optional(),
   defaultTaxRate: z.number().min(0).max(1).optional(),
   defaultTerms: z.string().trim().max(4000).optional(),
   quoteValidDays: z.number().int().min(1).max(365).optional(),
@@ -828,9 +834,9 @@ Deno.serve(async (request) => {
     }
 
     if (route.method === "GET" && match(route.path, "/public/estimate-orgs/:orgId")) {
-      const orgId = params(route.path, "/public/estimate-orgs/:orgId").orgId;
-      enforceRateLimit(request, ["public_estimate_org", orgId, requestClientKey(request)], 60, 60_000);
-      return json(await publicEstimateOrg(db, orgId));
+      const orgReference = params(route.path, "/public/estimate-orgs/:orgId").orgId;
+      enforceRateLimit(request, ["public_estimate_org", orgReference, requestClientKey(request)], 60, 60_000);
+      return json(await publicEstimateOrg(db, orgReference));
     }
 
     if (route.method === "POST" && route.path === "/public/estimates") {
@@ -838,9 +844,9 @@ Deno.serve(async (request) => {
     }
 
     if (route.method === "GET" && match(route.path, "/public/request-orgs/:orgId")) {
-      const orgId = params(route.path, "/public/request-orgs/:orgId").orgId;
-      enforceRateLimit(request, ["public_request_org", orgId, requestClientKey(request)], 60, 60_000);
-      return json(await publicEstimateOrg(db, orgId));
+      const orgReference = params(route.path, "/public/request-orgs/:orgId").orgId;
+      enforceRateLimit(request, ["public_request_org", orgReference, requestClientKey(request)], 60, 60_000);
+      return json(await publicEstimateOrg(db, orgReference));
     }
 
     if (route.method === "POST" && route.path === "/public/request-uploads") {
@@ -1277,6 +1283,15 @@ async function updateMe(db: SupabaseClient, request: Request) {
   const patch: Record<string, unknown> = {};
 
   if (input.businessName !== undefined) patch.name = input.businessName;
+  if (input.publicSlug !== undefined) {
+    const existingOrg = await maybeSingle(
+      db.from("snapquote_orgs").select("id").eq("public_slug", input.publicSlug).neq("id", orgId)
+    );
+    if (existingOrg) {
+      throw new HttpError(409, "That public link name is already taken.");
+    }
+    patch.public_slug = input.publicSlug;
+  }
   if (input.defaultTaxRate !== undefined) patch.default_tax_rate = input.defaultTaxRate;
   if (input.defaultTerms !== undefined) patch.default_terms = input.defaultTerms;
   if (input.quoteValidDays !== undefined) patch.quote_valid_days = input.quoteValidDays;
@@ -1290,7 +1305,14 @@ async function updateMe(db: SupabaseClient, request: Request) {
   if (input.profileServices !== undefined) patch.profile_services = uniqueProfileServices(input.profileServices);
 
   if (Object.keys(patch).length > 0) {
-    await single(db.from("snapquote_orgs").update(patch).eq("id", orgId).select("*"));
+    try {
+      await single(db.from("snapquote_orgs").update(patch).eq("id", orgId).select("*"));
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new HttpError(409, "That public link name is already taken.");
+      }
+      throw error;
+    }
   }
 
   return getMe(db, request);
@@ -2671,8 +2693,9 @@ async function createQuote(db: SupabaseClient, request: Request) {
   return getQuoteResponse(db, orgId, quote.id);
 }
 
-async function publicEstimateOrg(db: SupabaseClient, orgId: string) {
-  const org = await single(db.from("snapquote_orgs").select("*").eq("id", orgId));
+async function publicEstimateOrg(db: SupabaseClient, orgReference: string) {
+  const org = await publicOrgFromReference(db, orgReference);
+  const orgId = String(org.id);
   const [portfolio, reviewsResult] = await Promise.all([
     listPortfolioItems(db, orgId, true),
     db.from("snapquote_provider_reviews")
@@ -3783,6 +3806,7 @@ function publicEstimateOrgResponse(
     id: row.id,
     name: row.name,
     trade: row.trade,
+    publicSlug: stringOrNull(row.public_slug),
     logoUrl: row.logo_url,
     contactPhone: row.contact_phone,
     website: row.website,
@@ -6271,6 +6295,7 @@ function orgResponse(row: Record<string, unknown>) {
     id: row.id,
     name: row.name,
     trade: row.trade,
+    publicSlug: stringOrNull(row.public_slug),
     logoUrl: row.logo_url,
     contactPhone: row.contact_phone,
     website: row.website,
@@ -6287,6 +6312,24 @@ function orgResponse(row: Record<string, unknown>) {
     defaultDepositPercent: Number(row.default_deposit_percent ?? 50),
     paymentsConnected: Boolean(row.stripe_charges_enabled && row.stripe_payouts_enabled && row.stripe_account_id)
   };
+}
+
+async function publicOrgFromReference(db: SupabaseClient, reference: string) {
+  if (z.string().uuid().safeParse(reference).success) {
+    const org = await maybeSingle(db.from("snapquote_orgs").select("*").eq("id", reference));
+    if (org) return org as Record<string, unknown>;
+  }
+
+  return await single(
+    db.from("snapquote_orgs").select("*").eq("public_slug", reference.toLowerCase())
+  ) as Record<string, unknown>;
+}
+
+function isUniqueViolation(error: unknown) {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { code?: unknown }).code === "23505";
 }
 
 function extensionForContentType(contentType: "image/jpeg" | "image/png" | "image/webp") {

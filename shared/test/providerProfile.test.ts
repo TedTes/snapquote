@@ -19,6 +19,7 @@ describe("provider profile schema", () => {
     });
 
     expect(profile.profileServices).toEqual([]);
+    expect(profile.publicSlug).toBeNull();
   });
 
   it("accepts a focused service list and rejects oversized lists", () => {
@@ -29,5 +30,12 @@ describe("provider profile schema", () => {
     expect(updateOrgProfileSchema.safeParse({
       profileServices: Array.from({ length: 13 }, (_, index) => `Service ${index + 1}`)
     }).success).toBe(false);
+  });
+
+  it("accepts URL-safe public handles", () => {
+    expect(updateOrgProfileSchema.parse({ publicSlug: "bright-coat-painting" }).publicSlug)
+      .toBe("bright-coat-painting");
+    expect(updateOrgProfileSchema.safeParse({ publicSlug: "Bright Coat" }).success).toBe(false);
+    expect(updateOrgProfileSchema.safeParse({ publicSlug: "-painting" }).success).toBe(false);
   });
 });

@@ -52,10 +52,17 @@ export const healthResponseSchema = z.object({
   timestamp: z.string().datetime()
 });
 
+export const publicSlugSchema = z.string()
+  .trim()
+  .min(3)
+  .max(40)
+  .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/);
+
 export const orgProfileSchema = z.object({
   id: idSchema,
   name: z.string().trim().max(120),
   trade: tradeIdSchema,
+  publicSlug: publicSlugSchema.nullable().default(null),
   logoUrl: z.string().url().nullable(),
   profileBio: z.string().trim().max(500).nullable(),
   serviceArea: z.string().trim().max(160).nullable(),
