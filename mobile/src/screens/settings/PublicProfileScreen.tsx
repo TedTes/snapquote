@@ -84,6 +84,7 @@ export default function PublicProfileScreen() {
   const [loadingPhotos, setLoadingPhotos] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [portfolioBusyId, setPortfolioBusyId] = useState<string | null>(null);
@@ -127,6 +128,13 @@ export default function PublicProfileScreen() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!linkCopied) return;
+
+    const timeout = setTimeout(() => setLinkCopied(false), 2_000);
+    return () => clearTimeout(timeout);
+  }, [linkCopied]);
 
   useEffect(() => navigation.addListener("beforeRemove", (event) => {
     if (!dirty || allowRemoveRef.current) return;
@@ -429,7 +437,7 @@ export default function PublicProfileScreen() {
   async function copyPublicPage() {
     if (!publicPageUrl) return;
     await Clipboard.setStringAsync(publicPageUrl);
-    setSaveMessage("Public link copied");
+    setLinkCopied(true);
   }
 
   async function sharePublicPage() {
@@ -469,7 +477,12 @@ export default function PublicProfileScreen() {
 
         <View style={styles.actionRow}>
           <ActionButton icon={<ExternalLink color={colors.ink2} size={16} />} label="Preview" onPress={openPublicPage} />
-          <ActionButton icon={<Copy color={colors.ink2} size={16} />} label="Copy link" onPress={() => void copyPublicPage()} />
+          <ActionButton
+            icon={linkCopied ? <Check color={colors.green} size={16} strokeWidth={2.6} /> : <Copy color={colors.ink2} size={16} />}
+            label={linkCopied ? "Copied" : "Copy link"}
+            onPress={() => void copyPublicPage()}
+            success={linkCopied}
+          />
           <ActionButton icon={<Share2 color={colors.ink2} size={16} />} label="Share" onPress={() => void sharePublicPage()} />
         </View>
 
@@ -637,11 +650,16 @@ export default function PublicProfileScreen() {
   );
 }
 
-function ActionButton(props: { icon: ReactNode; label: string; onPress: () => void }) {
+function ActionButton(props: { icon: ReactNode; label: string; onPress: () => void; success?: boolean | undefined }) {
   return (
-    <Pressable accessibilityRole="button" onPress={props.onPress} style={styles.actionButton}>
+    <Pressable
+      accessibilityLabel={props.label}
+      accessibilityRole="button"
+      onPress={props.onPress}
+      style={[styles.actionButton, props.success ? styles.actionButtonSuccess : null]}
+    >
       {props.icon}
-      <Text style={styles.actionButtonText}>{props.label}</Text>
+      <Text style={[styles.actionButtonText, props.success ? styles.actionButtonTextSuccess : null]}>{props.label}</Text>
     </Pressable>
   );
 }
@@ -803,6 +821,8 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: "row", gap: 8 },
   actionButton: { alignItems: "center", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.sm, borderWidth: 1, flex: 1, flexDirection: "row", gap: 7, justifyContent: "center", minHeight: 44, paddingHorizontal: 8 },
   actionButtonText: { color: colors.ink2, fontSize: 12, ...fontStyles.bold },
+  actionButtonSuccess: { backgroundColor: colors.greenBg, borderColor: colors.greenBorder },
+  actionButtonTextSuccess: { color: colors.green },
   section: { gap: 14 },
   sectionHead: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   sectionLabel: { color: colors.ink2, fontSize: 11, ...fontStyles.bold, letterSpacing: 1.4, textTransform: "uppercase" },
