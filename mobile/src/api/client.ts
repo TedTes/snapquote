@@ -265,6 +265,7 @@ export type MeResponse = {
     id: string;
     name: string;
     trade: TradeId;
+    publicSlug?: string | null | undefined;
     logoUrl: string | null;
     contactPhone: string | null;
     website: string | null;
@@ -418,6 +419,7 @@ export const snapquoteApi = {
 
   updateMe: (input: {
     businessName?: string | undefined;
+    publicSlug?: string | undefined;
     defaultTaxRate?: number | undefined;
     defaultTerms?: string | undefined;
     quoteValidDays?: number | undefined;

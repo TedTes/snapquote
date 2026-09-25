@@ -46,6 +46,7 @@ type ImagePickerModule = typeof import("expo-image-picker");
 
 type ProfileDraft = {
   businessName: string;
+  publicSlug: string;
   phone: string;
   website: string;
   bio: string;
@@ -70,6 +71,7 @@ export default function PublicProfileScreen() {
   const updateOrgSettings = useQuoteStore((state) => state.updateOrgSettings);
   const initialDraft = profileDraft(me);
   const [businessName, setBusinessName] = useState(initialDraft.businessName);
+  const [publicSlug, setPublicSlug] = useState(initialDraft.publicSlug);
   const [phone, setPhone] = useState(initialDraft.phone);
   const [website, setWebsite] = useState(initialDraft.website);
   const [bio, setBio] = useState(initialDraft.bio);
@@ -89,16 +91,17 @@ export default function PublicProfileScreen() {
   const allowRemoveRef = useRef(false);
   const currentDraft = useMemo(() => ({
     businessName,
+    publicSlug,
     phone,
     website,
     bio,
     serviceArea,
     years,
     services
-  }), [bio, businessName, phone, serviceArea, services, website, years]);
+  }), [bio, businessName, phone, publicSlug, serviceArea, services, website, years]);
   const dirty = profileSnapshot(currentDraft) !== baseline;
   const publicPageUrl = me?.org.id
-    ? `${publicWebBaseUrl}/request/${encodeURIComponent(me.org.id)}`
+    ? `${publicWebBaseUrl}/request/${encodeURIComponent(me.org.publicSlug || me.org.id)}`
     : null;
   const completion = profileCompletion({
     draft: currentDraft,
@@ -151,6 +154,12 @@ export default function PublicProfileScreen() {
       return;
     }
 
+    const normalizedPublicSlug = publicSlug.trim().toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/.test(normalizedPublicSlug)) {
+      Alert.alert("Check public link name", "Use 3 to 40 lowercase letters, numbers, or hyphens. Start and end with a letter or number.");
+      return;
+    }
+
     const parsedYears = years.trim().length === 0 ? null : Number.parseInt(years, 10);
     if (parsedYears !== null && (!Number.isInteger(parsedYears) || parsedYears < 0 || parsedYears > 150)) {
       Alert.alert("Check years in business", "Enter a whole number from 0 to 150, or leave it blank.");
@@ -165,6 +174,7 @@ export default function PublicProfileScreen() {
 
     const normalizedDraft: ProfileDraft = {
       businessName: name,
+      publicSlug: normalizedPublicSlug,
       phone: phone.trim(),
       website: normalizedWebsite ?? "",
       bio: bio.trim(),
@@ -179,6 +189,7 @@ export default function PublicProfileScreen() {
     try {
       const response = await snapquoteApi.updateMe({
         businessName: normalizedDraft.businessName,
+        publicSlug: normalizedDraft.publicSlug,
         contactPhone: emptyToNull(normalizedDraft.phone),
         website: emptyToNull(normalizedDraft.website),
         profileBio: emptyToNull(normalizedDraft.bio),
@@ -200,6 +211,7 @@ export default function PublicProfileScreen() {
 
   function applyDraft(draft: ProfileDraft) {
     setBusinessName(draft.businessName);
+    setPublicSlug(draft.publicSlug);
     setPhone(draft.phone);
     setWebsite(draft.website);
     setBio(draft.bio);
@@ -478,6 +490,16 @@ export default function PublicProfileScreen() {
             </View>
           </View>
           <Field label="Business name" maxLength={120} onChangeText={setBusinessName} placeholder="Business name" value={businessName} />
+          <Field
+            autoCapitalize="none"
+            autoCorrect={false}
+            helper={`${publicWebBaseUrl.replace(/^https?:\/\//, "")}/request/${publicSlug || "your-name"}`}
+            label="Public link name"
+            maxLength={40}
+            onChangeText={(value) => setPublicSlug(sanitizePublicSlug(value))}
+            placeholder="a2zpainting"
+            value={publicSlug}
+          />
           <Field editable={false} label="Trade" maxLength={80} onChangeText={() => undefined} value={sentenceCase(me?.org.trade ?? "painting")} />
         </View>
 
@@ -638,7 +660,9 @@ function Field(props: {
   onChangeText: (value: string) => void;
   maxLength: number;
   autoCapitalize?: "none" | "sentences" | undefined;
+  autoCorrect?: boolean | undefined;
   editable?: boolean | undefined;
+  helper?: string | undefined;
   keyboardType?: "default" | "number-pad" | "phone-pad" | "url" | undefined;
   multiline?: boolean | undefined;
   placeholder?: string | undefined;
@@ -648,6 +672,7 @@ function Field(props: {
       <Text style={styles.label}>{props.label}</Text>
       <TextInput
         autoCapitalize={props.autoCapitalize}
+        autoCorrect={props.autoCorrect}
         editable={props.editable ?? true}
         keyboardType={props.keyboardType ?? "default"}
         maxLength={props.maxLength}
@@ -659,6 +684,7 @@ function Field(props: {
         textAlignVertical={props.multiline ? "top" : "center"}
         value={props.value}
       />
+      {props.helper ? <Text style={styles.fieldHelper}>{props.helper}</Text> : null}
     </View>
   );
 }
@@ -666,6 +692,7 @@ function Field(props: {
 function profileDraft(me: MeResponse | null): ProfileDraft {
   return {
     businessName: me?.org.name ?? "",
+    publicSlug: me?.org.publicSlug ?? slugFromBusinessName(me?.org.name ?? ""),
     phone: me?.org.contactPhone ?? "",
     website: me?.org.website ?? "",
     bio: me?.org.profileBio ?? "",
@@ -678,6 +705,7 @@ function profileDraft(me: MeResponse | null): ProfileDraft {
 function profileSnapshot(draft: ProfileDraft) {
   return JSON.stringify({
     businessName: draft.businessName.trim(),
+    publicSlug: draft.publicSlug.trim(),
     phone: draft.phone.trim(),
     website: draft.website.trim(),
     bio: draft.bio.trim(),
@@ -690,6 +718,7 @@ function profileSnapshot(draft: ProfileDraft) {
 function profileCompletion(input: { draft: ProfileDraft; hasLogo: boolean; hasPublishedWork: boolean }) {
   const checks = [
     input.draft.businessName.trim().length > 0,
+    input.draft.publicSlug.trim().length > 0,
     input.hasLogo,
     input.draft.bio.trim().length > 0,
     input.draft.serviceArea.trim().length > 0,
@@ -703,6 +732,25 @@ function profileCompletion(input: { draft: ProfileDraft; hasLogo: boolean; hasPu
 
 function uniqueServices(services: string[]) {
   return [...new Set(services.map((service) => service.trim()).filter(Boolean))];
+}
+
+function sanitizePublicSlug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, 40);
+}
+
+function slugFromBusinessName(value: string) {
+  const slug = value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
+  return slug.length >= 3 ? slug : "";
 }
 
 function normalizeWebsite(value: string) {
@@ -766,6 +814,7 @@ const styles = StyleSheet.create({
   removeText: { color: colors.red, fontSize: 12, ...fontStyles.bold },
   field: { gap: 7 },
   label: { color: colors.ink2, fontSize: 12, ...fontStyles.bold },
+  fieldHelper: { color: colors.ink3, fontSize: 11, ...fontStyles.regular, lineHeight: 16 },
   input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.sm, borderWidth: 1, color: colors.ink, fontSize: 15, ...fontStyles.regular, minHeight: 50, paddingHorizontal: 14 },
   inputMultiline: { minHeight: 112, paddingTop: 13 },
   inputDisabled: { backgroundColor: colors.surfaceMuted, color: colors.ink3 },

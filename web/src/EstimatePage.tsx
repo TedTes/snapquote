@@ -19,6 +19,7 @@ type EstimateOrg = {
   id: string;
   name: string;
   trade: string;
+  publicSlug?: string | null;
   logoUrl: string | null;
   contactPhone: string | null;
   website: string | null;
@@ -228,6 +229,7 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
   }, [orgId]);
 
   const org = orgState.kind === "ready" ? orgState.org : null;
+  const resolvedOrgId = org?.id ?? orgId;
   const errors = validateRequest({ roomCount, doorCount, notes, name: customerName, email, phone, address });
   const visibleErrors: FieldErrors = showErrors ? errors : {};
   const scopeDescribedBy = visibleErrors.scope ? "estimate-scope-error" : undefined;
@@ -279,11 +281,11 @@ export function EstimatePage(props: { orgId: string; embed?: boolean }) {
     setSubmitError(null);
 
     try {
-      const uploadedVideo = video ? await uploadRequestVideo(orgId, video, company) : null;
+      const uploadedVideo = video ? await uploadRequestVideo(resolvedOrgId, video, company) : null;
       const response = await api<RequestResponse>("/public/requests", {
         method: "POST",
         body: JSON.stringify({
-          orgId,
+          orgId: resolvedOrgId,
           source: embed ? "website_widget" : "website_page",
           customer: {
             name: customerName,
